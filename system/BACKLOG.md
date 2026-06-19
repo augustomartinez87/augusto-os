@@ -9,6 +9,8 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | ID | P | Descripción | Estado |
 |----|---|-------------|--------|
 | S-000 | ✅ | Aislamiento de prod: DB no-prod + guard anti-prod en el loop | done 2026-06-19 |
+| S-000b | ✅ | Dev DB de Spensiv = Neon; secreto gitignored; esquema materializado | done 2026-06-19 |
+| S-000c | 3 | Seed data de prueba para Spensiv en Neon (no hay seed script — datos vacíos) | pending |
 | S-001 | 1 | Fase 1b: Code Reviewer — rol independiente que revisa diff antes de commit | pending |
 | S-002 | 2 | Fase 2: Gating por OPERATOR_STATE (SLEEP/OFFICE/PRODUCT) | pending |
 | S-003 | 3 | Fase 3: Multi-target routing (spensiv vs argos por feature) | pending |

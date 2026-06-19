@@ -1,3 +1,7 @@
+# Secrets
+orchestrator/.env
+.env
+
 # System state
 orchestrator/node_modules/
 orchestrator/dist/

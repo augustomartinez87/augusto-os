@@ -8,8 +8,8 @@
       "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
       "testCmd": "vitest run",
       "qaBaseUrl": "http://localhost:3000",
-      "devDatabaseUrl": "postgresql://postgres:postgres@localhost:5432/spensiv_test",
-      "devDirectUrl": "postgresql://postgres:postgres@localhost:5432/spensiv_test",
+      "devDatabaseUrl": "${SPENSIV_DEV_DATABASE_URL}",
+      "devDirectUrl": "${SPENSIV_DEV_DATABASE_URL}",
       "_devSetupNote": "Opciones: (A) Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16; cd spensiv && npx prisma db push. (B) Supabase branch: $0.01344/h — crear en dashboard.supabase.com/project/jymdblurkpadupdqzfzo/branches y reemplazar URLs aquí.",
       "prodDbPatterns": [
         "jymdblurkpadupdqzfzo",

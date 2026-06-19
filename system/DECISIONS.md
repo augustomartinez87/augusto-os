@@ -4,6 +4,20 @@ Formato: fecha · decisión · contexto · alternativas descartadas
 
 ---
 
+## 2026-06-19 — Dev DB de Spensiv = Neon (spensiv-dev)
+
+**Decisión:** La base de datos de desarrollo para el loop de Spensiv es una base Neon (`ep-old-union-aiylgeew.c-4.us-east-1.aws.neon.tech/neondb`). El secreto vive en `orchestrator/.env` como `SPENSIV_DEV_DATABASE_URL`, gitignored. El campo `devDatabaseUrl` de `targets.json` referencia `${SPENSIV_DEV_DATABASE_URL}` — nunca el valor crudo. El orquestador arranca con `tsx --env-file=.env` para expandir la referencia antes de correr el guard.
+
+**Esquema:** Materializado con `prisma db push` desde `spensiv/prisma/schema.prisma` contra la URL directa de Neon (no la pooled). Sincronizado el 2026-06-19.
+
+**Guard:** `prodDbPatterns` de spensiv contiene `jymdblurkpadupdqzfzo` (matchea cualquier URL de la DB de prod Supabase, incluyendo `db.jymdblurkpadupdqzfzo.supabase.co`). La URL de Neon (`neon.tech`) no matchea ningún patrón de prod.
+
+**Contexto:** Neon elegido sobre Supabase branch ($0.01344/h) y Docker local (requiere instalación). Neon tiene tier gratuito suficiente para desarrollo headless.
+
+**El .env de Spensiv quedó intacto**, apuntando a prod, sin tocar. El loop overridea solo en memoria vía execa.
+
+---
+
 ## 2026-06-19 — Aislamiento de prod: DB no-prod + guard anti-prod
 
 **Decisión:** El loop inyecta `DATABASE_URL`/`DIRECT_URL` apuntando a una DB no-prod en el env de TODOS los procesos hijo (executor, planner, verifier, QA). El `.env` de Spensiv sigue apuntando a prod para uso manual de Augusto — el loop overridea solo en memoria (opción `env:` de execa, sin tocar archivos).

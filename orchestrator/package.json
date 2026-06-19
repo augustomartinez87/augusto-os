@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx --watch src/index.ts",
-    "approve": "tsx src/index.ts --approve"
+    "start": "tsx --env-file=.env src/index.ts",
+    "dev": "tsx --env-file=.env --watch src/index.ts",
+    "approve": "tsx --env-file=.env src/index.ts --approve"
   },
   "dependencies": {
     "execa": "^9.3.0",
