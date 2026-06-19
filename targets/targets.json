@@ -6,17 +6,29 @@
       "stack": "next+trpc+prisma",
       "verifyCmd": "npx tsc --noEmit",
       "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
-      "testCmd": "npx jest --passWithNoTests",
-      "qaBaseUrl": "http://localhost:3000"
+      "testCmd": "vitest run",
+      "qaBaseUrl": "http://localhost:3000",
+      "devDatabaseUrl": "postgresql://postgres:postgres@localhost:5432/spensiv_test",
+      "devDirectUrl": "postgresql://postgres:postgres@localhost:5432/spensiv_test",
+      "_devSetupNote": "Opciones: (A) Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16; cd spensiv && npx prisma db push. (B) Supabase branch: $0.01344/h — crear en dashboard.supabase.com/project/jymdblurkpadupdqzfzo/branches y reemplazar URLs aquí.",
+      "prodDbPatterns": [
+        "jymdblurkpadupdqzfzo",
+        "aws-0-us-west-2.pooler.supabase.com"
+      ]
     },
     "argos": {
       "path": "<COMPLETAR>",
-      "description": "App Argos — definir path local",
+      "description": "App Argos — Supabase project wwzocpcolgdzkvcigchj",
       "stack": "react+vite+supabase",
       "verifyCmd": "npx tsc --noEmit",
       "lintCmd": "<COMPLETAR>",
       "testCmd": "<COMPLETAR>",
-      "qaBaseUrl": "http://localhost:5173"
+      "qaBaseUrl": "http://localhost:5173",
+      "devDatabaseUrl": "<COMPLETAR>",
+      "devDirectUrl": "<COMPLETAR>",
+      "prodDbPatterns": [
+        "wwzocpcolgdzkvcigchj"
+      ]
     }
   }
 }

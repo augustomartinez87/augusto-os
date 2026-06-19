@@ -3,6 +3,7 @@ import { mkdirSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { log } from './limits.js'
+import { getDbEnvOverride } from './db-guard.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -26,6 +27,11 @@ export async function runQA(featureId: string, stepId: number, baseUrl: string, 
   mkdirSync(artifactDir, { recursive: true })
 
   const errors: string[] = []
+  // Inject dev DB env so any server-side requests during QA don't hit prod
+  const dbEnv = getDbEnvOverride()
+  process.env.DATABASE_URL = dbEnv.DATABASE_URL
+  process.env.DIRECT_URL = dbEnv.DIRECT_URL
+
   const browser = await chromium.launch({ headless: true })
 
   try {

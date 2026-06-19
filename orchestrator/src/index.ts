@@ -15,6 +15,7 @@ import { commitStep, createFeatureBranch, createPR } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
+import { assertNoProdDb } from './db-guard.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -78,6 +79,7 @@ async function main() {
       const target = targetMatch?.[1]?.trim() ?? 'spensiv'
       setActiveTarget(target)
       log(`[main] Resumiendo feature ${state.featureId} — target: ${target}`)
+      assertNoProdDb()
     }
   }
 
@@ -102,6 +104,9 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
   // set active target before any repo operations
   setActiveTarget(target)
   log(`[main] Feature ${featureId} — target: ${target}`)
+
+  // guard: abort if dev DB not configured or points to prod
+  assertNoProdDb()
 
   const branch = await createFeatureBranch(featureId, title)
   const planSteps = await planFeature(spec)

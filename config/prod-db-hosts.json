@@ -1,0 +1,4 @@
+{
+  "_comment": "Patrones globales de hosts de prod. Agregar aquí si hay múltiples targets con el mismo proveedor.",
+  "patterns": []
+}

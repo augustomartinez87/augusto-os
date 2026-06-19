@@ -1,6 +1,7 @@
 import { execa } from 'execa'
 import { log } from './limits.js'
 import { getRepoRoot } from './targets.js'
+import { getDbEnvOverride } from './db-guard.js'
 
 export interface VerifyResult {
   ok: boolean
@@ -8,7 +9,12 @@ export interface VerifyResult {
 }
 
 async function run(cmd: string, args: string[]): Promise<{ ok: boolean; output: string }> {
-  const result = await execa(cmd, args, { cwd: getRepoRoot(), reject: false, all: true })
+  const result = await execa(cmd, args, {
+    cwd: getRepoRoot(),
+    reject: false,
+    all: true,
+    env: { ...process.env, ...getDbEnvOverride() },
+  })
   return { ok: result.exitCode === 0, output: result.all ?? '' }
 }
 

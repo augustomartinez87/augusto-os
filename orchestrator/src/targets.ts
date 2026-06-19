@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TARGETS_JSON = path.join(__dirname, '..', '..', 'targets', 'targets.json')
 
-interface Target {
+export interface Target {
   path: string
   description: string
   stack: string
@@ -13,6 +13,9 @@ interface Target {
   lintCmd: string
   testCmd: string
   qaBaseUrl: string
+  devDatabaseUrl?: string
+  devDirectUrl?: string
+  prodDbPatterns?: string[]
 }
 
 interface TargetsFile {
@@ -45,5 +48,7 @@ export function getRepoRoot(): string {
 export function getTargetConfig(): Target {
   if (!activeTarget) throw new Error('No hay target activo — llamá setActiveTarget() primero')
   const file: TargetsFile = JSON.parse(readFileSync(TARGETS_JSON, 'utf-8'))
-  return file.targets[activeTarget]
+  const target = file.targets[activeTarget]
+  if (!target) throw new Error(`Target "${activeTarget}" ya no existe en targets.json`)
+  return target
 }

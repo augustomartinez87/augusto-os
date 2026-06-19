@@ -4,6 +4,7 @@ import path from 'path'
 import { z } from 'zod'
 import { log } from './limits.js'
 import { getRepoRoot } from './targets.js'
+import { getDbEnvOverride } from './db-guard.js'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -54,6 +55,7 @@ ${featureMd}`
     cwd: getRepoRoot(),
     reject: false,
     stdin: 'ignore',
+    env: { ...process.env, ...getDbEnvOverride() },
   })
 
   if (result.exitCode !== 0) {

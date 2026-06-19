@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { log, isUsageLimitError, isContextWindowError, handleUsageLimit, exponentialBackoff } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot } from './targets.js'
+import { getDbEnvOverride } from './db-guard.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGS_DIR = path.join(__dirname, '..', 'logs')
@@ -88,6 +89,7 @@ export async function executeStep(
     reject: false,
     all: true,
     stdin: 'ignore',
+    env: { ...process.env, ...getDbEnvOverride() },
   })
 
   const output = result.all ?? result.stdout ?? ''
