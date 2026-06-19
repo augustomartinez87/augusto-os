@@ -1,0 +1,8 @@
+node_modules/
+dist/
+STATE.json
+state.db
+blocked.log
+orchestrator.log
+qa-artifacts/
+logs/

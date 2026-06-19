@@ -1,0 +1,8 @@
+# System state
+orchestrator/node_modules/
+orchestrator/dist/
+orchestrator/STATE.json
+orchestrator/blocked.log
+orchestrator/orchestrator.log
+orchestrator/qa-artifacts/
+orchestrator/logs/

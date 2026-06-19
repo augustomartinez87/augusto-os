@@ -1,0 +1,10 @@
+mode: PRODUCT        # PRODUCT | OFFICE | SLEEP
+available_for_questions: true
+response_style: normal   # normal | short
+
+# PRODUCT: el sistema puede hacer preguntas abiertas
+# OFFICE:  solo preguntas Sí/No o A/B/C
+# SLEEP:   no bloquea, registra pendientes y sigue (loops nocturnos)
+#
+# Fase 1: el loop lee este archivo y loguea el modo al iniciar.
+# El gating por modo (cuándo interrumpir, cuándo seguir solo) se implementa en Fase 2.

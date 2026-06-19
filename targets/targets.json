@@ -1,0 +1,22 @@
+{
+  "targets": {
+    "spensiv": {
+      "path": "C:/Users/Augusto/Downloads/Proyectos/spensiv",
+      "description": "App finanzas personales + préstamos + capa AP",
+      "stack": "next+trpc+prisma",
+      "verifyCmd": "npx tsc --noEmit",
+      "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
+      "testCmd": "npx jest --passWithNoTests",
+      "qaBaseUrl": "http://localhost:3000"
+    },
+    "argos": {
+      "path": "<COMPLETAR>",
+      "description": "App Argos — definir path local",
+      "stack": "react+vite+supabase",
+      "verifyCmd": "npx tsc --noEmit",
+      "lintCmd": "<COMPLETAR>",
+      "testCmd": "<COMPLETAR>",
+      "qaBaseUrl": "http://localhost:5173"
+    }
+  }
+}
