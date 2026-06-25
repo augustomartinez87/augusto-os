@@ -28,6 +28,52 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0013 · 2026-06-25 · Documentos del préstamo (mutuo firmado + pagaré) NO bloqueantes
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** Las fotos del mutuo firmado y del pagaré se registran en Kredy vía `LoanAttachment` (types `mutual`/`pagare`) y se muestran como **pendientes** mientras falten, pero NO bloquean pre-aprobar, aprobar ni activar el préstamo. Reusa el flujo de upload existente de `transfer_receipt`.
+
+**Contexto:** Augusto quiere registro de los documentos físicos firmados sin frenar el ciclo del préstamo. "Tienen que estar, pero no obligatorio para activar; ahí debería aparecer pendiente."
+
+**Consecuencias:** El cumplimiento documental queda como métrica informativa (futuro- recordatorios, o eventualmente subir a score del préstamo). Spec- F-0007 / SP-011.
+
+---
+
+## ADR-0012 · 2026-06-25 · Pagaré generado pre-llenado (uno por el total, sin protesto)
+
+**Estado:** aceptada (revisa una decisión previa del mismo día de "solo guía", cambiada al confirmar la validez legal)
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El pagaré se GENERA pre-llenado- un solo pagaré por el TOTAL del préstamo (no por cuota), en A4, con cláusula **"sin protesto"**, monto total a devolver (= `Loan.totalAmount`) en números y letras, vencimiento, lugar de pago y beneficiario (el acreedor). El deudor completa a mano firma, aclaración y DNI (firma ológrafa); se acompaña con una guía de lo manuscrito. NO muestra capital ni TNA. El mutuo también se genera (template único versionado, descarga read-only).
+
+**Contexto:** La decisión inicial fue "solo guía" por duda sobre la validez de un pagaré no-talonario. Al verificar el **Dto-Ley 5965/63** se confirmó que un pagaré impreso en A4 es válido si tiene los requisitos esenciales y firma ológrafa — el talonario no es requisito. Eso habilita generarlo pre-llenado, ganando estandarización y menos error del AP. El "sin protesto" replica el del talonario de librería (dispensa el protesto notarial).
+
+**Alternativas descartadas:** Solo guía sin generar (más trabajo y error para el AP); múltiples pagarés por cuota (Augusto eligió uno por el total); autocompletar la firma (inválido- debe ser manuscrita).
+
+**Consecuencias:** El mutuo YA existe (`lib/contract-generator.ts`, .docx, 10 cláusulas). Hallazgo- hoy el pagaré y la cláusula SÉPTIMA usan el CAPITAL, no el total → F-0006 los corrige a total a devolver. Riesgo legal a validar con abogado- la SÉPTIMA permite accionar por pagaré O contrato (no ambos), así que el pagaré debe ser por el total para no perder los intereses por la vía ejecutiva. El impuesto de sellos es fiscal por jurisdicción, fuera de la feature. Spec- F-0006 / SP-010.
+
+---
+
+## ADR-0011 · 2026-06-25 · Política de originación por vínculo (conocido / referido / desconocido)
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** La pre-aprobación aplica un límite de originación según el vínculo del prestatario con el AP, vía un gate `checkRelationshipLimit` análogo al de exposición por deudor- **conocido/amigo → 500.000**, **referido (`amigo_de_amigo`) → 200.000 y exige referente/aval registrado** (`Person.referrer`), **desconocido → 0 (bloqueado)**. Respeta `enforcementMode` (hard rechaza / soft flaggea). Sin migración- reusa `Person.relationship`/`referrer`.
+
+**Contexto:** Una conocida del AP preguntó por un tercero desconocido para el AP y para Augusto (caso "referido"). Se necesitaba política antes de seguir originando. El referido tiene cadena de responsabilidad (quien lo refiere), distinto de un desconocido total.
+
+**Alternativas descartadas:** Bloquear al referido igual que a un desconocido (pierde negocio con riesgo acotado); permitirlo sin registrar aval (sin cobertura de responsabilidad).
+
+**Consecuencias:** Límites como defaults configurables (patrón `minApScore` de F-0002), ajustables sin migración. Caso de hoy- tratar como referido, hasta 200k, con la conocida como referente. Spec- F-0005 / SP-009. Follow-up- UI de tier/referente (SP-012).
+
+---
+
 ## ADR-0010 · 2026-06-20 · Argos en el loop sin dev DB (targets no-Prisma)
 
 **Estado:** aceptada

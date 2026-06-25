@@ -6,6 +6,7 @@ import { log, isUsageLimitError, isContextWindowError, handleUsageLimit, exponen
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
+import { parseAdrBlocks, type AdrDraft } from './adr.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGS_DIR = path.join(__dirname, '..', 'logs')
@@ -18,6 +19,7 @@ export interface ExecutorResult {
   output: string
   usageLimit: boolean
   contextFull: boolean
+  adrBlocks: AdrDraft[]
 }
 
 function buildPrompt(step: Step, featureId: string, priorError?: string): string {
@@ -35,7 +37,19 @@ RESTRICCIONES ABSOLUTAS:
 - Columnas en camelCase sin @map en Prisma.
 - Para conocer modelos y campos del schema, leé prisma/schema.prisma del repo. NUNCA consultes la DB en vivo (DATABASE_URL apunta a producción directamente).
 
-Implementá el cambio mínimo necesario. Al terminar verificá que typecheque con npx tsc --noEmit.`
+Implementá el cambio mínimo necesario. Al terminar verificá que typecheque con npx tsc --noEmit.
+
+ADR: Si durante este step tomaste una **decisión de diseño no trivial** (elegiste entre enfoques, introdujiste o rompiste una convención, o **asumiste algo que el spec no especifica** y que cambiaría el resultado si fuera distinto), emití al final de tu respuesta un bloque con el siguiente formato exacto:
+===ADR===
+target: <nombre del target, ej: kredy>
+origen: <Instrucción de Augusto | Supuesto del agente>
+titulo: <título corto>
+decision: <qué se decidió, 1-2 frases>
+contexto: <por qué surgió>
+alternativas: <qué se descartó, o "ninguna">
+consecuencias: <qué queda abierto, o "ninguna">
+===END ADR===
+Clasificá origen: "Instrucción de Augusto" si la decisión deriva del spec del feature o de una orden explícita; "Supuesto del agente" si la elegiste por criterio propio. Steps mecánicos (rename, fix de typecheck, cambios obvios) NO generan ADR — en ese caso no emitas ningún bloque.`
 
   if (priorError) {
     return `${base}
@@ -104,28 +118,28 @@ export async function executeStep(
 
   if (isUsageLimitError(output) || result.exitCode === 429) {
     log('[executor] Usage limit detectado')
-    return { ok: false, sessionId, output, usageLimit: true, contextFull: false }
+    return { ok: false, sessionId, output, usageLimit: true, contextFull: false, adrBlocks: [] }
   }
 
   if (isContextWindowError(output)) {
     log('[executor] Context window lleno — arrancar sesión fresca')
-    return { ok: false, sessionId: null, output, usageLimit: false, contextFull: true }
+    return { ok: false, sessionId: null, output, usageLimit: false, contextFull: true, adrBlocks: [] }
   }
 
   if (result.exitCode !== 0) {
     log(`[executor] claude salió con código ${result.exitCode} — ver log completo: ${logPath}`)
     printLastLines(output)
-    return { ok: false, sessionId, output, usageLimit: false, contextFull: false }
+    return { ok: false, sessionId, output, usageLimit: false, contextFull: false, adrBlocks: [] }
   }
 
-  return { ok: true, sessionId, output, usageLimit: false, contextFull: false }
+  return { ok: true, sessionId, output, usageLimit: false, contextFull: false, adrBlocks: parseAdrBlocks(output) }
 }
 
 export async function executeStepWithRetry(
   step: Step,
   state: OrchestratorState,
   onVerifyFail: (errors: string) => string,
-): Promise<{ ok: boolean; sessionId: string | null; finalError?: string }> {
+): Promise<{ ok: boolean; sessionId: string | null; finalError?: string; adrBlocks: AdrDraft[] }> {
   let priorError: string | undefined
   let sessionId = step.sessionId
 
@@ -146,7 +160,7 @@ export async function executeStepWithRetry(
     }
 
     if (result.ok) {
-      return { ok: true, sessionId }
+      return { ok: true, sessionId, adrBlocks: result.adrBlocks }
     }
 
     if (result.contextFull) {
@@ -155,5 +169,5 @@ export async function executeStepWithRetry(
     }
   }
 
-  return { ok: false, sessionId, finalError: priorError }
+  return { ok: false, sessionId, finalError: priorError, adrBlocks: [] }
 }

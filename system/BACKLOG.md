@@ -16,10 +16,10 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | S-003 | 3 | Fase 3: Multi-target routing (spensiv vs argos por feature) | pending |
 | S-004 | 4 | Fase 4: Loops nocturnos (refactor/docs/tests sin input humano) | pending |
 | S-005 | 5 | Fase 5: Product Analyst (backlog desde métricas de uso real) | pending |
-| S-006 | 2 | Celu Fase 1: bot de Telegram — notifica gates y permite aprobar/idear desde el celu (reemplaza `npm run approve`) | pending |
+| S-006 | 2 | Celu Fase 1: bot de Telegram — notifica gates y permite aprobar/idear desde el celu (reemplaza `npm run approve`). Prompt listo- `system/prompts/S-006-telegram-gate.md` | backlog |
 | S-007 | 3 | Celu Fase 2: dashboard web mobile-first (control plane Supabase) — ver roadmap/backlog/WIP por proyecto, logs en vivo, findings de loops nocturnos, cola de ideas, aprobar decisiones. Runner local pollea; no corre el loop en la nube | pending |
 | S-008 | 1 | **Architect agent** — el "chat como Claude" dentro de augusto-os: recibís una idea, te hace el intake (FEATURE-INTAKE.md), refina, escribe el `features/F-XXXX.md` y lo suma al backlog/roadmap. Lee `system/` para continuidad. Es lo que saca la fricción "yo de intermediario". Núcleo del chat del dashboard (S-007) | pending |
-| S-009 | 1 | **ADR auto-log** — el loop escribe en DECISIONS.md cada decisión de diseño con su Origen (Instrucción de Augusto / Supuesto del agente). Spec en `system/CONVENTIONS.md` §2. Toca planner.ts/executor.ts + helper `appendAdr()`. Hace la memoria portable entre modelos (Claude→Llama) | pending |
+| S-009 | ✅ | **ADR auto-log** — el loop escribe en DECISIONS.md cada decisión de diseño con su Origen. Helper `appendAdr()` + `parseAdrBlocks` + prompt del executor + idempotencia. 13 tests verdes | done 2026-06-25 (Claude Code) |
 | S-010 | 1 | **Migrar Kredy prod: Supabase → Neon** — unificar todo lo Prisma en Neon (prod + dev). Runbook en `system/MIGRATION-kredy-to-neon.md`. Toca dinero real → ejecuta Augusto con OK explícito | waiting |
 
 ## Kredy [kredy]  (préstamos/crédito — ex "Spensiv", renombrado 2026-06-20)
@@ -34,6 +34,10 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | SP-006 | 3 | Refinanciación Fase 3: router refinanceLoan + Prisma RefinancingRequest | pending |
 | SP-007 | 4 | Refinanciación Fase 4: webhook Stripe / flujo de pago | pending |
 | SP-008 | ✅ | AP Score como gate en pre-aprobación | done 2026-06-20 (F-0002, mergeado a main) |
+| SP-009 | 1 | **Gate de límite por vínculo** (conocido 500k / referido 200k+aval / desconocido 0) en preApprove. Spec `features/F-0005.md`. Sin migración (reusa Person.relationship/referrer) | backlog |
+| SP-010 | 1 | **Mutuo + pagaré generados** — PDF del mutuo y del pagaré (uno por el total, "sin protesto", A4, monto en números y letras) desde inputs, templates únicos versionados + guía de lo manuscrito. Spec `features/F-0006.md`. Contenido legal del mutuo lo aprueba Augusto | backlog |
+| SP-011 | 2 | **Documentos pendientes del préstamo** — fotos de mutuo firmado + pagaré vía LoanAttachment, badge "pendiente" NO bloqueante. Spec `features/F-0007.md` | backlog |
+| SP-012 | 3 | UI para que el AP elija/edite el tier de vínculo y el referente (follow-up de SP-009) | pending |
 
 ## Spensiv (tracker finanzas personales) [spensiv]
 

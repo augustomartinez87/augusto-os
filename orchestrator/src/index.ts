@@ -16,6 +16,7 @@ import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
+import { appendAdr, readAdrMeta } from './adr.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -191,6 +192,15 @@ async function runLoop(state: OrchestratorState) {
 
       // 3. Cierre
       archiveState(state.featureId)
+      const allAdrIds = state.steps.flatMap(s => s.adrIds ?? [])
+      if (allAdrIds.length) {
+        const metas = readAdrMeta(allAdrIds)
+        log(`[adr] ADRs generados en esta feature:`)
+        for (const { idStr, titulo, origen } of metas) {
+          const flag = origen.includes('Supuesto') ? ' ← REVISAR' : ''
+          log(`  ${idStr} — ${titulo} [${origen}]${flag}`)
+        }
+      }
       log(`[main] ${state.featureId} RELEASED (push hecho). STATE.json archivado como STATE.${state.featureId}.archived.json`)
       break
     }
@@ -227,6 +237,8 @@ async function runLoop(state: OrchestratorState) {
       continue
     }
 
+    let pendingAdrBlocks = execResult.adrBlocks
+
     const verify = await runVerifier()
     if (!verify.ok) {
       log(`[main] Verifier falló en step ${step.id} — reintentando con el error`)
@@ -245,6 +257,7 @@ async function runLoop(state: OrchestratorState) {
         await runLoop(state)
         return
       }
+      pendingAdrBlocks = fix.adrBlocks
       const verify2 = await runVerifier()
       if (!verify2.ok) {
         markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
@@ -278,7 +291,18 @@ async function runLoop(state: OrchestratorState) {
     }
 
     const sha = await commitStep(step.id, step.desc)
-    markStepStatus(state, step.id, 'done', { commit: sha, sessionId: execResult.sessionId })
+
+    // Write ADRs emitted by the executor (idempotent: skip if already saved in STATE)
+    const adrIds: number[] = []
+    if (pendingAdrBlocks.length && !(step.adrIds?.length)) {
+      for (const block of pendingAdrBlocks) {
+        const id = appendAdr(block, state.featureId, step.id)
+        adrIds.push(id)
+        log(`[adr] ADR-${String(id).padStart(4, '0')} registrado (origen: ${block.origen})`)
+      }
+    }
+
+    markStepStatus(state, step.id, 'done', { commit: sha, sessionId: execResult.sessionId, adrIds })
     log(`[main] Step ${step.id} completado y commiteado (${sha.slice(0, 8)})`)
   }
 }
@@ -287,7 +311,19 @@ function buildPRBody(state: OrchestratorState): string {
   const stepList = state.steps
     .map(s => `- [x] Step ${s.id}: ${s.desc} (${s.commit?.slice(0, 8) ?? 'N/A'})`)
     .join('\n')
-  return `## Feature ${state.featureId}\n\nImplementado automáticamente por el orquestador Tier 1.\n\n### Pasos\n${stepList}\n\n### QA\nScreenshots en \`orchestrator/qa-artifacts/${state.featureId}/\`\n\n> Revisar con Claude in Chrome para validación de UX.`
+
+  const allAdrIds = state.steps.flatMap(s => s.adrIds ?? [])
+  let adrSection = ''
+  if (allAdrIds.length) {
+    const metas = readAdrMeta(allAdrIds)
+    const lines = metas.map(({ idStr, titulo, origen }) => {
+      const badge = origen.includes('Supuesto') ? ' **⚠ REVISAR**' : ''
+      return `- ${idStr} — ${titulo} [${origen}]${badge}`
+    })
+    adrSection = `\n\n### Decisiones (ADR)\n${lines.join('\n')}`
+  }
+
+  return `## Feature ${state.featureId}\n\nImplementado automáticamente por el orquestador Tier 1.\n\n### Pasos\n${stepList}${adrSection}\n\n### QA\nScreenshots en \`orchestrator/qa-artifacts/${state.featureId}/\`\n\n> Revisar con Claude in Chrome para validación de UX.`
 }
 
 main().catch(err => {

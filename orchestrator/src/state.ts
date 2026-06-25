@@ -17,6 +17,7 @@ export const StepSchema = z.object({
   retries: z.number().default(0),
   ui: z.boolean().default(false),
   error: z.string().nullable().optional(),
+  adrIds: z.array(z.number()).default([]),
 })
 
 export const StateSchema = z.object({
@@ -52,7 +53,7 @@ export function saveState(state: OrchestratorState): void {
   writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), 'utf-8')
 }
 
-export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status'>[]): OrchestratorState {
+export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds'>[]): OrchestratorState {
   const now = new Date().toISOString()
   const state: OrchestratorState = {
     featureId,
@@ -64,6 +65,7 @@ export function initState(featureId: string, branch: string, steps: Omit<Step, '
       commit: null,
       sessionId: null,
       retries: 0,
+      adrIds: [],
     })),
     pausedUntil: null,
     needsHumanApproval: null,
