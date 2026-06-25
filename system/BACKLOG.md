@@ -19,6 +19,8 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | S-006 | 2 | Celu Fase 1: bot de Telegram — notifica gates y permite aprobar/idear desde el celu (reemplaza `npm run approve`) | pending |
 | S-007 | 3 | Celu Fase 2: dashboard web mobile-first (control plane Supabase) — ver roadmap/backlog/WIP por proyecto, logs en vivo, findings de loops nocturnos, cola de ideas, aprobar decisiones. Runner local pollea; no corre el loop en la nube | pending |
 | S-008 | 1 | **Architect agent** — el "chat como Claude" dentro de augusto-os: recibís una idea, te hace el intake (FEATURE-INTAKE.md), refina, escribe el `features/F-XXXX.md` y lo suma al backlog/roadmap. Lee `system/` para continuidad. Es lo que saca la fricción "yo de intermediario". Núcleo del chat del dashboard (S-007) | pending |
+| S-009 | 1 | **ADR auto-log** — el loop escribe en DECISIONS.md cada decisión de diseño con su Origen (Instrucción de Augusto / Supuesto del agente). Spec en `system/CONVENTIONS.md` §2. Toca planner.ts/executor.ts + helper `appendAdr()`. Hace la memoria portable entre modelos (Claude→Llama) | pending |
+| S-010 | 1 | **Migrar Kredy prod: Supabase → Neon** — unificar todo lo Prisma en Neon (prod + dev). Runbook en `system/MIGRATION-kredy-to-neon.md`. Toca dinero real → ejecuta Augusto con OK explícito | waiting |
 
 ## Kredy [kredy]  (préstamos/crédito — ex "Spensiv", renombrado 2026-06-20)
 
