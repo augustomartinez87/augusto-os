@@ -5,13 +5,13 @@ import { fileURLToPath } from 'url'
 import { parse as parseYaml } from 'yaml'
 import {
   loadState, saveState, initState, markStepStatus,
-  getNextPendingStep, type OrchestratorState,
+  getNextPendingStep, archiveState, type OrchestratorState,
 } from './state.js'
 import { planFeature, loadFeatureSpec } from './planner.js'
 import { executeStepWithRetry } from './executor.js'
-import { runVerifier } from './verifier.js'
+import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
-import { commitStep, createFeatureBranch, createPR } from './git.js'
+import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
@@ -139,14 +139,59 @@ async function runLoop(state: OrchestratorState) {
   while (true) {
     const step = getNextPendingStep(state)
     if (!step) {
-      log(`[main] Feature ${state.featureId} COMPLETO.`)
-      const prBody = buildPRBody(state)
-      appendProgress(state.featureId, prBody)
-      await createPR(
-        state.featureId,
-        `Feature ${state.featureId} implementado por orquestador`,
-        prBody,
-      )
+      log(`[main] Feature ${state.featureId}: steps COMPLETOS.`)
+
+      // 1. Merge a main (local, una sola vez)
+      if (!state.merged) {
+        const merged = await mergeIntoMain(state.branch)
+        state.merged = merged
+        saveState(state)
+        if (!merged) {
+          log(`[main] Merge automático no aplicado (posible conflicto). Branch ${state.branch} intacta — resolvé y re-corré.`)
+          break
+        }
+        appendProgress(state.featureId, buildPRBody(state))
+      }
+
+      // 2. Fase de release: verificaciones → OK humano → push (Vercel deploya solo)
+      if (!state.pushed) {
+        if (state.awaitingPushApproval) {
+          // Volvimos tras el OK humano (npm run approve limpió el gate)
+          state.awaitingPushApproval = false
+          saveState(state)
+          log('[main] OK recibido — pusheando main (Vercel deploya prod automáticamente)...')
+          const ok = await pushMain()
+          if (!ok) {
+            log('[main] Push falló. main local quedó mergeada; revisá credenciales/remoto y reintentá con `npm start ' + state.featureId + '`.')
+            break
+          }
+          state.pushed = true
+          saveState(state)
+        } else {
+          const checks = await runReleaseChecks()
+          if (!checks.ok) {
+            log(`[main] RELEASE BLOQUEADO — verificaciones fallaron:\n${checks.errors.slice(0, 2000)}`)
+            log(`[main] Arreglá y re-corré \`npm start ${state.featureId}\` para reintentar el release.`)
+            break
+          }
+          state.awaitingPushApproval = true
+          saveState(state)
+          setHumanGate(
+            state,
+            `RELEASE listo para PUSH+DEPLOY a prod de "${state.featureId}".\n` +
+            `Verificaciones OK: typecheck + lint + tests + build.\n` +
+            `${checks.tnaNote}\n` +
+            `Aprobá en otra terminal con:  npm run approve   → eso pushea main y Vercel deploya prod.\n` +
+            `Si NO querés deployar, no apruebes (Ctrl+C); la branch ya está mergeada en main local.`,
+          )
+          await runLoop(state)
+          return
+        }
+      }
+
+      // 3. Cierre
+      archiveState(state.featureId)
+      log(`[main] ${state.featureId} RELEASED (push hecho). STATE.json archivado como STATE.${state.featureId}.archived.json`)
       break
     }
 

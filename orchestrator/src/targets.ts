@@ -13,6 +13,7 @@ export interface Target {
   lintCmd: string
   testCmd: string
   qaBaseUrl: string
+  dbModel?: 'prisma' | 'none'   // 'none' = app sin Prisma (ej. Supabase-client): el loop no exige dev DB ni inyecta DATABASE_URL
   devDatabaseUrl?: string
   devDirectUrl?: string
   prodDbPatterns?: string[]

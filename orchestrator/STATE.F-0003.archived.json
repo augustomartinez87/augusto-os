@@ -1,0 +1,94 @@
+{
+  "featureId": "F-0003",
+  "branch": "feat/F-0003-rebrand-kredy-copy-de-pr-stamos-cr-dito-",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Reescribir el bloque metadata/viewport de app/layout.tsx: title y openGraph.title con copy de Kredy (préstamos/crédito/cuotas) sin 'cashflow'/'tarjetas'/'gastos'; openGraph.siteName = 'Kredy'; description sobre préstamos/crédito/cuotas; metadataBase = new URL('https://kredy-ap.vercel.app'). No tocar themeColor ni lógica.",
+      "status": "done",
+      "commit": "e95806ce739e6bb429c6e6a892633bb26fda4f77",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 2,
+      "desc": "Grep en app/ por 'Spensiv', 'cashflow', 'tu motor de', 'tarjetas', 'gastos' para inventariar todas las ocurrencias user-facing y de metadata; producir la lista de archivos/líneas a modificar sin editar todavía.",
+      "status": "done",
+      "commit": "e95806ce739e6bb429c6e6a892633bb26fda4f77",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 3,
+      "desc": "Reemplazar los strings user-facing 'Spensiv'/'cashflow' por copy de Kredy en app/ap/page.tsx, verificando que el header del Portal AP muestre Kredy y que AP_APP_NAME ('Portal AP') quede intacto. Solo strings, no lógica.",
+      "status": "done",
+      "commit": "02d3117b5f3b0acd1a6e9f6e7d9542fef815a86b",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 4,
+      "desc": "Reemplazar los strings user-facing 'Spensiv'/'cashflow' por copy de Kredy en app/dashboard/ap/page.tsx. Solo strings de UI.",
+      "status": "done",
+      "commit": "9942a2855898f04f2d28be1c71a1271972f746ca",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 5,
+      "desc": "Reemplazar los strings user-facing 'Spensiv'/'cashflow' por copy de Kredy en vistas de prestatario: app/share/[personId]/page.tsx, app/simular (y/o app/l) según existan. Verificar que NO se introduzca TNA/tasa/TEA en ninguna vista de prestatario.",
+      "status": "done",
+      "commit": "3e2b97eb718ef3e2a514e1de21ad3374fa0f8641",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 6,
+      "desc": "Reemplazar los strings 'Spensiv'/'cashflow' por copy de Kredy en app/dashboard/simulator/page.tsx (vista del simulador). Solo strings de UI, sin exponer TNA/tasa.",
+      "status": "done",
+      "commit": "3a7e86abcf5a5f0da18bda668edf389c2a82ffe8",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 7,
+      "desc": "Reemplazar referencias 'Spensiv'/'cashflow' en strings no visuales de app/api/cron/ap-reconcile/route.ts (logs/mensajes) por lenguaje de Kredy. Solo strings, no lógica.",
+      "status": "done",
+      "commit": "eab67ab6e0951238841aefbb20e1e50ea1033edc",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 8,
+      "desc": "Detectar app/icon.*, app/favicon.ico y app/manifest.ts; si existen y referencian 'Spensiv', actualizar name/short_name/description a Kredy. Si no existen o no tienen marca vieja, no-op documentado.",
+      "status": "done",
+      "commit": "eab67ab6e0951238841aefbb20e1e50ea1033edc",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 9,
+      "desc": "Ejecutar typecheck y lint del proyecto y corregir cualquier error introducido por los reemplazos de copy.",
+      "status": "done",
+      "commit": "eab67ab6e0951238841aefbb20e1e50ea1033edc",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-20T19:12:32.143Z",
+  "updatedAt": "2026-06-20T19:27:49.641Z",
+  "merged": true,
+  "awaitingPushApproval": false,
+  "pushed": true
+}

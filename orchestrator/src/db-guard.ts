@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PROD_HOSTS_PATH = path.join(__dirname, '..', '..', 'config', 'prod-db-hosts.json')
 
 interface TargetWithDb {
+  dbModel?: 'prisma' | 'none'
   devDatabaseUrl?: string
   devDirectUrl?: string
   prodDbPatterns?: string[]
@@ -20,9 +21,11 @@ interface ProdHostsConfig {
 export interface DbEnvOverride {
   DATABASE_URL: string
   DIRECT_URL: string
+  [key: string]: string
 }
 
 let _cached: DbEnvOverride | null = null
+let _initialized = false
 
 function loadGlobalProdPatterns(): string[] {
   if (!existsSync(PROD_HOSTS_PATH)) return []
@@ -50,9 +53,18 @@ function extractHost(url: string): string {
  * does NOT point to production. Throws with a clear message if either check fails.
  * Returns the env override to inject into child processes.
  */
-export function assertNoProdDb(): DbEnvOverride {
+export function assertNoProdDb(): void {
   const targetName = getActiveTargetName()
   const target = getTargetConfig() as unknown as TargetWithDb & { path: string }
+
+  // 0. Targets sin Prisma (ej. Supabase-client): no hay DATABASE_URL que inyectar ni dev DB que exigir.
+  const dbModel = target.dbModel ?? 'prisma'
+  if (dbModel === 'none') {
+    _cached = null
+    _initialized = true
+    log(`[guard] target "${targetName}" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL`)
+    return
+  }
 
   const devUrl = target.devDatabaseUrl
   const devDirectUrl = target.devDirectUrl
@@ -90,17 +102,19 @@ export function assertNoProdDb(): DbEnvOverride {
   }
 
   _cached = override
+  _initialized = true
   log(`[guard] DB no-prod verificada para "${targetName}" — host: ${extractHost(devUrl)}`)
-  return override
 }
 
 /**
  * Returns the cached DB env override. Must be called after assertNoProdDb().
  * All child processes (executor, verifier, QA) must include this in their env.
+ * Para targets sin Prisma (dbModel=none) devuelve {} — no se inyecta nada.
  */
-export function getDbEnvOverride(): DbEnvOverride {
-  if (!_cached) {
+export function getDbEnvOverride(): Record<string, string> {
+  if (!_initialized) {
     throw new Error('[guard] getDbEnvOverride() llamado antes de assertNoProdDb(). Bug en el loop.')
   }
+  if (!_cached) return {}
   return _cached
 }

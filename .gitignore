@@ -1,6 +1,8 @@
 # Secrets
 orchestrator/.env
 .env
+orchestrator/.env.bak-rename
+*.bak-rename
 
 # System state
 orchestrator/node_modules/

@@ -4,6 +4,54 @@ Formato: fecha · decisión · contexto · alternativas descartadas
 
 ---
 
+## 2026-06-20 — Argos en el loop sin dev DB (targets no-Prisma)
+
+**Decisión:** Argos (`portfolio-tracker`, React/Vite/Supabase-client) entra al loop con `dbModel: "none"` en targets.json. El guard exime a targets no-Prisma de exigir `devDatabaseUrl` y no inyecta `DATABASE_URL`. Razón: su verificación (tsc + lint + test + `vite build`) no toca la DB; Supabase se accede por `VITE_SUPABASE_URL` en runtime, no por Prisma. Se descartó crear un Supabase branch dev (~USD 10/mes) hasta que haga falta QA visual con datos (AR-004).
+
+**Cambios de engine:** `Target.dbModel` ('prisma'|'none', default 'prisma'); `assertNoProdDb` retorna void y cortocircuita en dbModel=none; `getDbEnvOverride` retorna `{}` si no hay override; `qa.ts` solo setea DATABASE_URL/DIRECT_URL si existen; `verifier` (por-step y release) tolera la falta de script `lint` ("missing script" → omitir).
+
+**Riesgo residual:** el executor podría, en teoría, tocar la Supabase prod de Argos (no hay aislamiento de DB). Mitigación: features de Argos deben ser UI/lógica; gates de no-SQL-destructivo siguen activos; no se le pasa service key al loop. Pendiente AR-003: afinar el prompt del executor por dbModel.
+
+---
+
+## 2026-06-20 — Fase de release autónoma (merge + verificación + gate de OK + push/deploy)
+
+**Decisión:** el orquestador lleva un feature hasta prod, no solo hasta una branch. Al terminar los steps:
+1. **Merge automático** de la feature branch → `main` (local, `--no-ff`, sin push). Si hay conflicto, aborta y deja la branch intacta.
+2. **Battery de verificación completa** (`runReleaseChecks`): typecheck + lint + tests + `npm run build` (build de prod) + escaneo informativo de fuga de TNA/tasa en vistas de prestatario. Hard-fail en typecheck/lint/tests/build; el TNA-check es informativo y se muestra en el pedido de OK.
+3. Si pasa todo → **gate humano**: el loop pausa y pide `npm run approve`. Si falla algo, NO molesta a Augusto: muestra el error y frena.
+4. Con el OK → **push a `main`**. Como Vercel está conectado por Git, el push dispara el deploy a prod (no se usa `vercel` CLI).
+
+**Por qué:** Augusto pidió que el orquestador delegue push+deploy, pidiéndole OK solo después de verificar todo lo posible. Honra el gate de prod del `CLAUDE.md` (deploy requiere aprobación explícita) vía `npm run approve`, pero saca el trabajo manual de git.
+
+**Implementación:** flags nuevos en `STATE.json` (`merged`, `awaitingPushApproval`, `pushed`); `mergeIntoMain`/`pushMain` en git.ts; `runReleaseChecks` en verifier.ts; máquina de estados en el bloque de cierre de index.ts. `STATE.json` se archiva recién tras el push. El gate reusa el mecanismo existente (`npm run approve` en otra terminal mientras el `npm start` sigue corriendo y polleando).
+
+**Límite explícito:** push/deploy son las ÚNICAS acciones de prod; siempre detrás del OK humano. El merge local no toca prod, por eso es automático.
+
+---
+
+## 2026-06-20 — Rename: identidad Kredy vs Spensiv + config del orquestador
+
+**Decisión (naming canónico):**
+- **Kredy** = app de préstamos/crédito + capa AP. Repo originalmente "spensiv" (carpeta `spensiv/`). Target del orquestador = **`kredy`**.
+- **Spensiv** = app de finanzas personales (cashflow/tarjetas/gastos). Repo `spensiv-tracker` (carpeta `spensiv-tracker/`). Target del orquestador = **`spensiv`**.
+- El branding "Spensiv - tu motor de cashflow" le corresponde al TRACKER, no a Kredy.
+
+**Vercel (checklist C):** Augusto renombró el project a **`kredy-ap`** y **reenvía** los links `/l`. El subdominio `kredy.vercel.app` ya estaba tomado por otro team (los `.vercel.app` son globales), así que la URL de prod quedó en **`https://kredy-ap.vercel.app`** (Valid Configuration). El nombre comercial sigue siendo "Kredy"; `-ap` es solo limitación técnica. `metadataBase` de Kredy = `https://kredy-ap.vercel.app` (F-0003). No se compra dominio propio.
+
+**Cambios aplicados hoy en augusto-os (config, no destructivo):**
+- `targets/targets.json`: key `spensiv` → `kredy` (mismo path `spensiv/` hasta el rename de carpetas, checklist F); agregado target `spensiv` → `spensiv-tracker`. Argos intacto.
+- `orchestrator/.env`: `SPENSIV_DEV_DATABASE_URL` (Neon ep-old-union = kredy-dev) renombrado a `KREDY_DEV_DATABASE_URL`; agregado `SPENSIV_DEV_DATABASE_URL=<COMPLETAR>` para el sandbox dev del tracker (todavía inexistente). Backup en `.env.bak-rename`.
+- `config/prod-db-hosts.json`: patrón global `ep-floral-mud` (prod del tracker) para que el guard nunca la use como dev. Patrón específico, NO `neon.tech` genérico (eso bloquearía también el sandbox kredy-dev, también en Neon).
+- `orchestrator/src/executor.ts` y `planner.ts`: prompts target-aware — antes hardcodeaban "Spensiv (Next.js/tRPC/Prisma)"; ahora usan `getActiveTargetName()` + `stack` del target.
+- `features/F-0001.md` y `F-0002.md`: `target: spensiv` → `target: kredy` (eran features de Kredy; sin el fix, resumir habría apuntado al tracker).
+
+**Pendiente del split:** el sandbox `kredy-dev` (ep-old-union) todavía tiene tablas del tracker viejas → `cd spensiv && npx prisma db push`. El tracker no tiene sandbox dev: el guard aborta su loop hasta crear uno y setear `SPENSIV_DEV_DATABASE_URL`.
+
+**Nota:** el `CLAUDE.md` global describe Spensiv como "finanzas personales + préstamos reales", conflando ambos productos. Conviene separarlo (Kredy = préstamos; Spensiv = finanzas personales) — no se editó automáticamente por ser config personal de Augusto.
+
+---
+
 ## 2026-06-19 — Dev DB de Spensiv = Neon (spensiv-dev)
 
 **Decisión:** La base de datos de desarrollo para el loop de Spensiv es una base Neon (`ep-old-union-aiylgeew.c-4.us-east-1.aws.neon.tech/neondb`). El secreto vive en `orchestrator/.env` como `SPENSIV_DEV_DATABASE_URL`, gitignored. El campo `devDatabaseUrl` de `targets.json` referencia `${SPENSIV_DEV_DATABASE_URL}` — nunca el valor crudo. El orquestador arranca con `tsx --env-file=.env` para expandir la referencia antes de correr el guard.

@@ -35,6 +35,11 @@ export async function stageAll(): Promise<void> {
 
 export async function commitStep(stepId: number, desc: string): Promise<string> {
   await stageAll()
+  if (!(await hasUncommittedChanges())) {
+    const headSha = (await git(['rev-parse', 'HEAD'])).trim()
+    log(`[git] Step ${stepId}: sin cambios para commitear (no-op) — se mantiene HEAD ${headSha.slice(0, 8)}`)
+    return headSha
+  }
   const msg = `feat(orchestrator): step ${stepId} — ${desc.slice(0, 60)}\n\n[orchestrator auto-commit]`
   await git(['commit', '-m', msg])
   const sha = await git(['rev-parse', 'HEAD'])
@@ -45,6 +50,44 @@ export async function commitStep(stepId: number, desc: string): Promise<string> 
 export async function hasUncommittedChanges(): Promise<boolean> {
   const status = await git(['status', '--porcelain'])
   return status.trim().length > 0
+}
+
+/**
+ * Mergea la feature branch a main de forma LOCAL (--no-ff), sin push.
+ * El push a main y el deploy quedan como acción manual de Augusto (gates de prod).
+ * Devuelve true si mergeó, false si no pudo (ej. conflicto) — el caller decide.
+ */
+export async function mergeIntoMain(branch: string, baseBranch = 'main'): Promise<boolean> {
+  const checkout = await execa('git', ['checkout', baseBranch], { cwd: getRepoRoot(), reject: false })
+  if (checkout.exitCode !== 0) {
+    log(`[git] No se pudo cambiar a ${baseBranch}: ${checkout.stderr}`)
+    return false
+  }
+  const merge = await execa('git', ['merge', '--no-ff', branch, '-m', `merge: ${branch} (orquestador, sin review humano)`], {
+    cwd: getRepoRoot(), reject: false,
+  })
+  if (merge.exitCode !== 0) {
+    log(`[git] Merge de ${branch} → ${baseBranch} FALLÓ (posible conflicto). Abortando merge y dejando la branch intacta.`)
+    await execa('git', ['merge', '--abort'], { cwd: getRepoRoot(), reject: false })
+    await execa('git', ['checkout', branch], { cwd: getRepoRoot(), reject: false })
+    return false
+  }
+  log(`[git] Merge OK: ${branch} → ${baseBranch} (local, sin push). Push a ${baseBranch} y deploy = manual.`)
+  return true
+}
+
+/**
+ * Push de main al remoto. Con la integración Git↔Vercel, esto dispara el deploy a prod.
+ * Acción de prod → solo se llama DESPUÉS del OK humano y de pasar todas las verificaciones.
+ */
+export async function pushMain(baseBranch = 'main'): Promise<boolean> {
+  const res = await execa('git', ['push', 'origin', baseBranch], { cwd: getRepoRoot(), reject: false })
+  if (res.exitCode !== 0) {
+    log(`[git] push a ${baseBranch} FALLÓ: ${res.stderr}`)
+    return false
+  }
+  log(`[git] push a ${baseBranch} OK → Vercel deploya prod automáticamente`)
+  return true
 }
 
 export async function createPR(featureId: string, title: string, body: string): Promise<void> {

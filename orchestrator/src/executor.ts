@@ -4,7 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { log, isUsageLimitError, isContextWindowError, handleUsageLimit, exponentialBackoff } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
-import { getRepoRoot } from './targets.js'
+import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -21,7 +21,9 @@ export interface ExecutorResult {
 }
 
 function buildPrompt(step: Step, featureId: string, priorError?: string): string {
-  const base = `Sos un agente de código implementando el step ${step.id} del feature ${featureId} en el repo Spensiv (Next.js/tRPC/Prisma/Tailwind).
+  const targetName = getActiveTargetName()
+  const stack = getTargetConfig().stack
+  const base = `Sos un agente de código implementando el step ${step.id} del feature ${featureId} en el repo "${targetName}" (stack: ${stack}).
 
 TAREA: ${step.desc}
 

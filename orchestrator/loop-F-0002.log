@@ -1,0 +1,50 @@
+[2026-06-20T02:26:17.146Z] [system] Modo operativo: PRODUCT
+[2026-06-20T02:26:17.149Z] [main] Feature F-0002 — target: spensiv
+[2026-06-20T02:26:17.151Z] [guard] DB no-prod verificada para "spensiv" — host: ep-old-union-aiylgeew.c-4.us-east-1.aws.neon.tech
+[2026-06-20T02:26:17.329Z] [git] Branch creado: feat/F-0002-ap-score-como-gate-de-pre-aprobaci-n
+[2026-06-20T02:26:17.330Z] [planner] Invocando Opus para descomponer feature...
+[2026-06-20T02:26:35.364Z] [main] Feature F-0002: 4 pasos planificados
+[2026-06-20T02:26:35.365Z] 
+[main] === Step 1/4: En server/services/ap-score.service.ts, extender el tipo ScoreConfig agregando el campo `minApScore: number` y añadirlo a DEFAULT_CONFIG con valor 40 (alineado con el rojo del badge). Asegurar que loadScoreConfig preserve/parseé el campo desde el JSON persistido y aplique el default 40 cuando falte, sin migración de schema. Typecheck y lint. ===
+[2026-06-20T02:26:35.367Z] [executor] Iniciando sesión nueva para step 1: En server/services/ap-score.service.ts, extender el tipo ScoreConfig agregando el campo `minApScore: number` y añadirlo a DEFAULT_CONFIG con valor 40 (alineado con el rojo del badge). Asegurar que loadScoreConfig preserve/parseé el campo desde el JSON persistido y aplique el default 40 cuando falte, sin migración de schema. Typecheck y lint.
+[2026-06-20T02:28:04.770Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0002-step1.log
+[2026-06-20T02:28:04.771Z] [verifier] Corriendo typecheck...
+[2026-06-20T02:28:08.815Z] [verifier] Corriendo lint...
+[2026-06-20T02:28:12.545Z] [verifier] Corriendo tests...
+[2026-06-20T02:28:14.841Z] [verifier] OK: typecheck + lint + tests
+[2026-06-20T02:28:15.152Z] [git] Commit f4395d2f: step 1
+[2026-06-20T02:28:15.153Z] [main] Step 1 completado y commiteado (f4395d2f)
+[2026-06-20T02:28:15.154Z] 
+[main] === Step 2/4: En server/routers/ap.ts, dentro de preApprove (~línea 340), cargar la config de score (loadScoreConfig) y obtener el score del AP con getLatestApScore(db, agentId). Guardar el umbral (config.minApScore) y el score en variables para el gate del siguiente paso, sin alterar todavía el flujo de decisión. Typecheck y lint. ===
+[2026-06-20T02:28:15.155Z] [executor] Iniciando sesión nueva para step 2: En server/routers/ap.ts, dentro de preApprove (~línea 340), cargar la config de score (loadScoreConfig) y obtener el score del AP con getLatestApScore(db, agentId). Guardar el umbral (config.minApScore) y el score en variables para el gate del siguiente paso, sin alterar todavía el flujo de decisión. Typecheck y lint.
+[2026-06-20T02:29:13.018Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0002-step2.log
+[2026-06-20T02:29:13.018Z] [verifier] Corriendo typecheck...
+[2026-06-20T02:29:16.490Z] [verifier] Corriendo lint...
+[2026-06-20T02:29:19.688Z] [verifier] Corriendo tests...
+[2026-06-20T02:29:21.537Z] [verifier] OK: typecheck + lint + tests
+[2026-06-20T02:29:21.793Z] [git] Commit f731faaf: step 2
+[2026-06-20T02:29:21.794Z] [main] Step 2 completado y commiteado (f731faaf)
+[2026-06-20T02:29:21.794Z] 
+[main] === Step 3/4: En preApprove, agregar el gate de score análogo a checkDebtorLimit: si score != null && score < minApScore, respetar enforcementMode — 'hard' rechaza la pre-aprobación con un error claro (sin exponer TNA ni tasas en el mensaje), 'soft' marca requiresManualReview = true. Si getLatestApScore devuelve null, no bloquear ni penalizar (AP nuevo); documentar este comportamiento con un comentario inline. Typecheck y lint. ===
+[2026-06-20T02:29:21.795Z] [executor] Iniciando sesión nueva para step 3: En preApprove, agregar el gate de score análogo a checkDebtorLimit: si score != null && score < minApScore, respetar enforcementMode — 'hard' rechaza la pre-aprobación con un error claro (sin exponer TNA ni tasas en el mensaje), 'soft' marca requiresManualReview = true. Si getLatestApScore devuelve null, no bloquear ni penalizar (AP nuevo); documentar este comportamiento con un comentario inline. Typecheck y lint.
+[2026-06-20T02:30:52.594Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0002-step3.log
+[2026-06-20T02:30:52.594Z] [verifier] Corriendo typecheck...
+[2026-06-20T02:30:55.930Z] [verifier] Corriendo lint...
+[2026-06-20T02:30:58.956Z] [verifier] Corriendo tests...
+[2026-06-20T02:31:00.729Z] [verifier] OK: typecheck + lint + tests
+[2026-06-20T02:31:00.977Z] [git] Commit bebb4304: step 3
+[2026-06-20T02:31:00.978Z] [main] Step 3 completado y commiteado (bebb4304)
+[2026-06-20T02:31:00.978Z] 
+[main] === Step 4/4: Agregar un test del gate (junto a los tests existentes de ap/preApprove) cubriendo: score bajo + hard → bloquea con error; score bajo + soft → requiresManualReview = true; score null → pasa sin bloquear; score por encima del umbral → pasa. Mockear getLatestApScore y la config según corresponda. Tests, typecheck y lint pasan. ===
+[2026-06-20T02:31:00.979Z] [executor] Iniciando sesión nueva para step 4: Agregar un test del gate (junto a los tests existentes de ap/preApprove) cubriendo: score bajo + hard → bloquea con error; score bajo + soft → requiresManualReview = true; score null → pasa sin bloquear; score por encima del umbral → pasa. Mockear getLatestApScore y la config según corresponda. Tests, typecheck y lint pasan.
+[2026-06-20T02:33:20.402Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0002-step4.log
+[2026-06-20T02:33:20.403Z] [verifier] Corriendo typecheck...
+[2026-06-20T02:33:23.642Z] [verifier] Corriendo lint...
+[2026-06-20T02:33:26.547Z] [verifier] Corriendo tests...
+[2026-06-20T02:33:28.222Z] [verifier] OK: typecheck + lint + tests
+[2026-06-20T02:33:28.452Z] [git] Commit d8636768: step 4
+[2026-06-20T02:33:28.453Z] [main] Step 4 completado y commiteado (d8636768)
+[2026-06-20T02:33:28.453Z] [main] Feature F-0002 COMPLETO.
+[2026-06-20T02:33:28.454Z] [system] PROGRESS.md actualizado
+[2026-06-20T02:33:28.527Z] [git] No se pudo crear PR: 'gh' is not recognized as an internal or external command,
+operable program or batch file.

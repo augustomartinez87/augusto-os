@@ -27,10 +27,11 @@ export async function runQA(featureId: string, stepId: number, baseUrl: string, 
   mkdirSync(artifactDir, { recursive: true })
 
   const errors: string[] = []
-  // Inject dev DB env so any server-side requests during QA don't hit prod
+  // Inject dev DB env so any server-side requests during QA don't hit prod.
+  // Para targets sin Prisma (dbModel=none) el override es {} → no se setea nada.
   const dbEnv = getDbEnvOverride()
-  process.env.DATABASE_URL = dbEnv.DATABASE_URL
-  process.env.DIRECT_URL = dbEnv.DIRECT_URL
+  if (dbEnv.DATABASE_URL) process.env.DATABASE_URL = dbEnv.DATABASE_URL
+  if (dbEnv.DIRECT_URL) process.env.DIRECT_URL = dbEnv.DIRECT_URL
 
   const browser = await chromium.launch({ headless: true })
 

@@ -1,0 +1,46 @@
+{
+  "featureId": "F-0002",
+  "branch": "feat/F-0002-ap-score-como-gate-de-pre-aprobaci-n",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "En server/services/ap-score.service.ts, extender el tipo ScoreConfig agregando el campo `minApScore: number` y añadirlo a DEFAULT_CONFIG con valor 40 (alineado con el rojo del badge). Asegurar que loadScoreConfig preserve/parseé el campo desde el JSON persistido y aplique el default 40 cuando falte, sin migración de schema. Typecheck y lint.",
+      "ui": false,
+      "status": "done",
+      "commit": "f4395d2f96383fdf7a45ec9bce5b708871d7111e",
+      "sessionId": null,
+      "retries": 0
+    },
+    {
+      "id": 2,
+      "desc": "En server/routers/ap.ts, dentro de preApprove (~línea 340), cargar la config de score (loadScoreConfig) y obtener el score del AP con getLatestApScore(db, agentId). Guardar el umbral (config.minApScore) y el score en variables para el gate del siguiente paso, sin alterar todavía el flujo de decisión. Typecheck y lint.",
+      "ui": false,
+      "status": "done",
+      "commit": "f731faafc291e9ee5fb31a130aeaf71c43b476b9",
+      "sessionId": null,
+      "retries": 0
+    },
+    {
+      "id": 3,
+      "desc": "En preApprove, agregar el gate de score análogo a checkDebtorLimit: si score != null && score < minApScore, respetar enforcementMode — 'hard' rechaza la pre-aprobación con un error claro (sin exponer TNA ni tasas en el mensaje), 'soft' marca requiresManualReview = true. Si getLatestApScore devuelve null, no bloquear ni penalizar (AP nuevo); documentar este comportamiento con un comentario inline. Typecheck y lint.",
+      "ui": false,
+      "status": "done",
+      "commit": "bebb43043a0069e99e09467ce41e48b5feb17e4d",
+      "sessionId": null,
+      "retries": 0
+    },
+    {
+      "id": 4,
+      "desc": "Agregar un test del gate (junto a los tests existentes de ap/preApprove) cubriendo: score bajo + hard → bloquea con error; score bajo + soft → requiresManualReview = true; score null → pasa sin bloquear; score por encima del umbral → pasa. Mockear getLatestApScore y la config según corresponda. Tests, typecheck y lint pasan.",
+      "ui": false,
+      "status": "done",
+      "commit": "d863676884034aa9c8270c283b35574411dc8d1f",
+      "sessionId": null,
+      "retries": 0
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-20T02:26:35.364Z",
+  "updatedAt": "2026-06-20T02:33:28.452Z"
+}

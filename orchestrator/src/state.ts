@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs'
 import { z } from 'zod'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -27,6 +27,10 @@ export const StateSchema = z.object({
   needsHumanApproval: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // ── Fase de release (post-merge) ──
+  merged: z.boolean().default(false),            // branch ya mergeada a main (local)
+  awaitingPushApproval: z.boolean().default(false), // verificaciones OK, esperando OK humano para push+deploy
+  pushed: z.boolean().default(false),            // push a main hecho → Vercel deploya solo
 })
 
 export type Step = z.infer<typeof StepSchema>
@@ -65,6 +69,9 @@ export function initState(featureId: string, branch: string, steps: Omit<Step, '
     needsHumanApproval: null,
     createdAt: now,
     updatedAt: now,
+    merged: false,
+    awaitingPushApproval: false,
+    pushed: false,
   }
   saveState(state)
   return state
@@ -79,4 +86,14 @@ export function markStepStatus(state: OrchestratorState, stepId: number, status:
 
 export function getNextPendingStep(state: OrchestratorState): Step | null {
   return state.steps.find(s => s.status !== 'done') ?? null
+}
+
+/**
+ * Al completar un feature, archiva STATE.json a STATE.<featureId>.archived.json
+ * para que el próximo `npm start <otroFeature>` arranque limpio en vez de resumir el viejo.
+ */
+export function archiveState(featureId: string): void {
+  if (!existsSync(STATE_PATH)) return
+  const archived = path.join(__dirname, '..', `STATE.${featureId}.archived.json`)
+  renameSync(STATE_PATH, archived)
 }

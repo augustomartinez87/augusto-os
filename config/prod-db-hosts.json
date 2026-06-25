@@ -1,4 +1,4 @@
 {
-  "_comment": "Patrones globales de hosts de prod. Agregar aquí si hay múltiples targets con el mismo proveedor.",
-  "patterns": []
+  "_comment": "Patrones globales de hosts de prod. Agregar aquí si hay múltiples targets con el mismo proveedor. OJO: usar IDs de endpoint específicos (ej. ep-floral-mud), NUNCA 'neon.tech' genérico — eso bloquearía también los sandboxes dev de Neon.",
+  "patterns": ["ep-floral-mud"]
 }

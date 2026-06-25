@@ -1,8 +1,24 @@
 {
   "targets": {
+    "kredy": {
+      "path": "C:/Users/Augusto/Downloads/Proyectos/kredy",
+      "description": "Kredy — app de préstamos/crédito + capa AP (Agente Productor). Next.js/tRPC/Prisma. Rutas con usuarios externos: /l/[slug], /simular, /ap.",
+      "stack": "next+trpc+prisma",
+      "verifyCmd": "npx tsc --noEmit",
+      "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
+      "testCmd": "vitest run",
+      "qaBaseUrl": "http://localhost:3000",
+      "devDatabaseUrl": "${KREDY_DEV_DATABASE_URL}",
+      "devDirectUrl": "${KREDY_DEV_DATABASE_URL}",
+      "_devSetupNote": "Sandbox = Neon kredy-dev (ep-old-union-aiylgeew). Si el sandbox quedó con tablas viejas del tracker, re-sincronizar: cd kredy && npx prisma db push contra la URL directa.",
+      "prodDbPatterns": [
+        "jymdblurkpadupdqzfzo",
+        "aws-0-us-west-2.pooler.supabase.com"
+      ]
+    },
     "spensiv": {
       "path": "C:/Users/Augusto/Downloads/Proyectos/spensiv",
-      "description": "App finanzas personales + préstamos + capa AP",
+      "description": "Spensiv — finanzas personales (cashflow, tarjetas, gastos, proyección de deuda). Next.js. Prod DB = Neon ep-floral-mud (display 'spensiv').",
       "stack": "next+trpc+prisma",
       "verifyCmd": "npx tsc --noEmit",
       "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
@@ -10,22 +26,21 @@
       "qaBaseUrl": "http://localhost:3000",
       "devDatabaseUrl": "${SPENSIV_DEV_DATABASE_URL}",
       "devDirectUrl": "${SPENSIV_DEV_DATABASE_URL}",
-      "_devSetupNote": "Opciones: (A) Docker: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16; cd spensiv && npx prisma db push. (B) Supabase branch: $0.01344/h — crear en dashboard.supabase.com/project/jymdblurkpadupdqzfzo/branches y reemplazar URLs aquí.",
+      "_devSetupNote": "Sandbox dev = Neon 'spensiv-dev' (ep-restless-flower-adn0brum), schema materializado 2026-06-20. El guard bloquea la prod ep-floral-mud vía patrón global.",
       "prodDbPatterns": [
-        "jymdblurkpadupdqzfzo",
-        "aws-0-us-west-2.pooler.supabase.com"
+        "ep-floral-mud"
       ]
     },
     "argos": {
-      "path": "<COMPLETAR>",
-      "description": "App Argos — Supabase project wwzocpcolgdzkvcigchj",
+      "path": "C:/Users/Augusto/Downloads/Proyectos/portfolio-tracker",
+      "description": "Argos — dashboard de inversión + carry trade peso/FCI. React/Vite/Supabase-client. Supabase prod wwzocpcolgdzkvcigchj.",
       "stack": "react+vite+supabase",
+      "dbModel": "none",
       "verifyCmd": "npx tsc --noEmit",
-      "lintCmd": "<COMPLETAR>",
-      "testCmd": "<COMPLETAR>",
+      "lintCmd": "",
+      "testCmd": "vitest run",
       "qaBaseUrl": "http://localhost:5173",
-      "devDatabaseUrl": "<COMPLETAR>",
-      "devDirectUrl": "<COMPLETAR>",
+      "_dbNote": "Sin Prisma. dbModel=none → el loop no exige dev DB ni inyecta DATABASE_URL; build/test (vite/vitest) no tocan la DB. Las features deben ser UI/lógica; nada que escriba contra la Supabase prod.",
       "prodDbPatterns": [
         "wwzocpcolgdzkvcigchj"
       ]

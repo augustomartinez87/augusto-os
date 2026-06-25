@@ -51,3 +51,9 @@ Estado: `[done]` = completo · `[active]` = en curso · `[next]` = siguiente · 
 - Agente que lee métricas de uso real (Vercel Analytics, logs)
 - Propone ítems de backlog basados en evidencia
 - El PO prioriza, el sistema ejecuta
+
+## Fase 6 — Interacción desde el celu [pending]
+
+- 6a) Bot de Telegram: el loop notifica gates y Augusto aprueba/rechaza con un botón; canal para mandar ideas → cola/backlog. Reemplaza `npm run approve`. (S-006)
+- 6b) Dashboard web mobile-first como control plane (Supabase): features/steps/logs en vivo, "presencia" de agentes, cola de ideas, aprobar. El runner local pollea y ejecuta; el loop NO corre en la nube (repos + credenciales se quedan local). (S-007)
+- Habilita el salto a multi-target en paralelo (ver varios agentes trabajando a la vez).

@@ -1,0 +1,58 @@
+{
+  "featureId": "F-0004",
+  "branch": "feat/F-0004-confirmar-branding-spensiv-tracker-y-lim",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "En app/layout.tsx confirmar/ajustar metadata: title con 'Spensiv', openGraph.siteName: 'Spensiv', y metadataBase: new URL('https://spensiv-tracker.vercel.app'). Mantener description/branding de cashflow.",
+      "status": "done",
+      "commit": "51a00920205d2156200ad5db418a3b4070e50317",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 2,
+      "desc": "Grep en todo el repo por términos heredados de Kredy/AP ('préstamo', 'crédito', 'Portal AP', 'Kredy', 'AP_APP_NAME', '/l/') para inventariar coincidencias y clasificar cuáles no aplican al tracker.",
+      "status": "done",
+      "commit": "51a00920205d2156200ad5db418a3b4070e50317",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 3,
+      "desc": "Remover/reemplazar las referencias cruzadas a préstamos/crédito/Portal AP/Kredy encontradas en copy, constantes y strings de configuración no-UI, dejando solo el branding de cashflow del tracker.",
+      "status": "done",
+      "commit": "c77ce2de864770c031d3059c97745c3ca37a9d5c",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 4,
+      "desc": "Asegurar que el nombre visible 'Spensiv' aparezca correctamente en el header/navbar y demás componentes de UI, ajustando cualquier label residual.",
+      "status": "done",
+      "commit": "c77ce2de864770c031d3059c97745c3ca37a9d5c",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 5,
+      "desc": "Correr typecheck (tsc/next typecheck) y lint, y corregir cualquier error resultante de los cambios.",
+      "status": "done",
+      "commit": "c77ce2de864770c031d3059c97745c3ca37a9d5c",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-21T00:05:34.567Z",
+  "updatedAt": "2026-06-21T00:15:21.787Z",
+  "merged": true,
+  "awaitingPushApproval": false,
+  "pushed": true
+}

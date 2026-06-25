@@ -1,0 +1,46 @@
+{
+  "featureId": "F-0001",
+  "branch": "feat/F-0001-ap-score-badge-en-consola",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Crear helper `getLatestApScore(agentId: string): Promise<number | null>` en la capa de servicio AP (junto a ap-score.service.ts) que consulte el `ApScoreSnapshot` más reciente del agente vía Prisma (orderBy createdAt desc, take 1) y devuelva el valor numérico del score o null si no hay snapshot.",
+      "status": "running",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 2,
+      "desc": "Agregar query tRPC `ap.getScore` que reciba `{ agentId }` (validado con zod), llame a `getLatestApScore` y devuelva `{ score: number | null }`. No exponer TNA ni tasas en el payload.",
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "ui": false
+    },
+    {
+      "id": 3,
+      "desc": "Crear el componente `ApScoreBadge` que reciba un `score: number | null` y renderice un badge con el número (0-100) usando los tokens de color del theme de Spensiv: verde para score ≥70, amarillo para 40-69, rojo para <40, y un estado neutro/placeholder cuando el score es null.",
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    },
+    {
+      "id": 4,
+      "desc": "Integrar `ApScoreBadge` en la página `/ap` existente, consumiendo la query `ap.getScore` para el AP mostrado y renderizando el badge en el perfil del agente sin exponer TNA ni tasas.",
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "ui": true
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-19T01:05:45.259Z",
+  "updatedAt": "2026-06-19T16:25:13.394Z"
+}
