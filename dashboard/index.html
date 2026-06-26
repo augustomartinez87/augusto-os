@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0A0A0E" />
+<title>augusto-os · panel</title>
+<style>
+  :root{--bg:#0A0A0E;--card:#14141B;--line:#23232E;--txt:#E7E7EC;--mut:#8A8A99;--teal:#2FD4CD;--coral:#E5616A;--amber:#E0A23B}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.45;padding:16px;max-width:780px;margin:0 auto}
+  h1{font-size:17px;font-weight:600;margin:0;letter-spacing:.2px}
+  h2{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin:22px 0 10px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .live{font-size:12px;color:var(--mut)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+  .feat{font-size:16px;font-weight:600}
+  .sub{font-size:13px;color:var(--mut);margin-top:2px}
+  .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .b-now{background:rgba(47,212,205,.15);color:var(--teal)}
+  .b-done{background:rgba(138,138,153,.18);color:var(--mut)}
+  .b-hold{background:rgba(224,162,59,.16);color:var(--amber)}
+  .b-p1{background:rgba(229,97,106,.16);color:var(--coral)}
+  .steps{margin-top:10px}
+  .step{display:flex;align-items:center;gap:9px;font-size:13px;padding:4px 0;color:var(--mut)}
+  .step b{color:var(--txt);font-weight:400}
+  .s-done{color:var(--teal)}.s-run{color:var(--amber)}.s-blocked{color:var(--coral)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;padding:7px 0;border-top:1px solid var(--line)}
+  .row:first-child{border-top:none}
+  #log{background:#0c0c12;border:1px solid var(--line);border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--mut);max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .tabs{display:flex;gap:6px;margin:16px 0 6px}
+  .tab{flex:1;text-align:center;padding:9px;border-radius:10px;font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);cursor:pointer}
+  .tab.on{color:var(--teal);border-color:var(--teal)}
+  .panel{display:none}.panel.on{display:block}
+  .bgrp h3{font-size:13px;font-weight:600;margin:0 0 4px;display:flex;justify-content:space-between;color:var(--txt)}
+  .bgrp h3 span{color:var(--mut);font-weight:400}
+  .brow{display:flex;align-items:center;gap:9px;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+  .bid{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--mut);min-width:50px}
+  .blabel{flex:1}
+  .idea-in{display:flex;gap:8px;margin-bottom:12px}
+  input,button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--txt);padding:11px 12px}
+  input{flex:1;font-size:15px}
+  input:focus{outline:none;border-color:var(--teal)}
+  button{background:var(--teal);color:#04201E;font-weight:600;border:none;padding:11px 16px}
+  button:active{transform:scale(.98)}
+  .idea{font-size:14px;padding:8px 0;border-top:1px solid var(--line);color:var(--txt)}
+  .idea small{color:var(--mut);font-size:11px}
+  .empty{color:var(--mut);font-size:13px;padding:8px 0}
+  footer{color:var(--mut);font-size:11px;text-align:center;margin:24px 0 8px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>augusto-os</h1>
+    <span class="live" id="live">conectando…</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on" data-t="loop">Loop</div>
+    <div class="tab" data-t="backlog">Backlog</div>
+    <div class="tab" data-t="ideas">Ideas</div>
+  </div>
+
+  <div class="panel on" id="p-loop">
+    <h2>estado del loop</h2>
+    <div id="now" class="card"><span class="empty">cargando…</span></div>
+    <h2>log en vivo</h2>
+    <div id="log">—</div>
+    <h2>terminadas</h2>
+    <div id="done" class="card"><span class="empty">—</span></div>
+  </div>
+
+  <div class="panel" id="p-backlog">
+    <div id="backlog"><span class="empty">cargando backlog…</span></div>
+  </div>
+
+  <div class="panel" id="p-ideas">
+    <div class="idea-in">
+      <input id="idea" placeholder="tirá una idea…" autocomplete="off" />
+      <button id="send">Enviar</button>
+    </div>
+    <div id="ideas" class="card"><span class="empty">—</span></div>
+  </div>
+
+  <footer>se actualiza cada 5s · v1</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = "https://exyhnrynpuflbuprmdto.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4eWhucnlucHVmbGJ1cHJtZHRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MzAxNDEsImV4cCI6MjA5ODAwNjE0MX0.uH9Ms6O9Q2dhbtK4EMz0jS2Aie9BduBpUL0YX3WCQJU";
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => (s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+  document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("on"));
+    t.classList.add("on");
+    $("p-" + t.dataset.t).classList.add("on");
+  });
+
+  function runBadge(state){
+    const m = {active:["b-now","en curso"],done:["b-done","done"],blocked:["b-p1","bloqueado"],review:["b-hold","review"]};
+    const [c,t] = m[state] || ["b-done", state||"—"];
+    return `<span class="badge ${c}">${t}</span>`;
+  }
+  function blTag(priority, state){
+    const s = (state||"").toLowerCase();
+    if (s.includes("done") || priority === "✅") return null;
+    if (s.includes("block")) return ["b-hold","blocked"];
+    if (s.includes("espera") || s.includes("wait")) return ["b-hold","espera"];
+    if (s.includes("activ")) return ["b-now","activo"];
+    if (s === "hoy") return ["b-now","hoy"];
+    if (priority === "1") return ["b-p1","P1"];
+    return ["b-done","P"+(priority||"·")];
+  }
+  const ORDER = ["Sistema","Kredy","Spensiv","Argos"];
+
+  async function refresh(){
+    try{
+      const [runs, steps, logs, ideas, bl] = await Promise.all([
+        db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
+        db.from("orch_steps").select("*"),
+        db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(45),
+        db.from("orch_ideas").select("text,source,created_at").order("created_at",{ascending:false}).limit(25),
+        db.from("orch_backlog").select("*"),
+      ]);
+      const allRuns = runs.data || [];
+      const live = allRuns.find(r => r.state !== "done");
+      const dones = allRuns.filter(r => r.state === "done");
+
+      if(live){
+        const st = (steps.data||[]).filter(s => s.feature_id === live.feature_id).sort((a,b)=>a.step_no-b.step_no);
+        $("now").innerHTML =
+          `<div class="row" style="border:none;padding-top:0"><span class="feat">${esc(live.feature_id)}</span>${runBadge(live.state)}</div>`+
+          `<div class="sub">paso ${live.current_step}/${live.total_steps} · ${esc(live.branch||"")}</div>`+
+          `<div class="steps">`+ st.map(s=>{
+            const cls = s.status==="done"?"s-done":s.status==="running"?"s-run":s.status==="blocked"?"s-blocked":"";
+            const ic = s.status==="done"?"✓":s.status==="running"?"▸":s.status==="blocked"?"✕":"·";
+            return `<div class="step"><span class="${cls}">${ic}</span><b>${esc(s.descripcion||"").slice(0,90)}</b></div>`;
+          }).join("") +`</div>`;
+      } else {
+        $("now").innerHTML = `<span class="empty">en reposo — ningún feature corriendo</span>`;
+      }
+
+      $("log").textContent = (logs.data||[]).slice().reverse().map(l=>esc(l.line)).join("\n") || "—";
+      $("log").scrollTop = $("log").scrollHeight;
+
+      $("done").innerHTML = dones.length
+        ? dones.map(r=>`<div class="row"><span>${esc(r.feature_id)}</span>${runBadge("done")}</div>`).join("")
+        : `<span class="empty">—</span>`;
+
+      // backlog por proyecto
+      const items = (bl.data||[]);
+      const byProj = {};
+      for(const it of items){ const tag = blTag(it.priority, it.state); if(!tag) continue; (byProj[it.project] = byProj[it.project]||[]).push({...it,tag}); }
+      const projs = Object.keys(byProj).sort((a,b)=>{const ia=ORDER.indexOf(a),ib=ORDER.indexOf(b);return (ia<0?9:ia)-(ib<0?9:ib);});
+      $("backlog").innerHTML = projs.length ? projs.map(p=>{
+        const rows = byProj[p].sort((a,b)=>(a.priority>b.priority?1:-1));
+        return `<div class="card bgrp"><h3>${esc(p)} <span>${rows.length}</span></h3>`+
+          rows.map(r=>`<div class="brow"><span class="bid">${esc(r.item_id)}</span><span class="blabel">${esc(r.label)}</span><span class="badge ${r.tag[0]}">${r.tag[1]}</span></div>`).join("")+
+          `</div>`;
+      }).join("") : `<span class="empty">sin pendientes</span>`;
+
+      $("ideas").innerHTML = (ideas.data||[]).length
+        ? ideas.data.map(i=>`<div class="idea">${esc(i.text)}<br><small>${esc(i.source)} · ${new Date(i.created_at).toLocaleString()}</small></div>`).join("")
+        : `<span class="empty">sin ideas todavía</span>`;
+
+      $("live").innerHTML = `<span class="dot" style="background:var(--teal)"></span>en vivo`;
+    }catch(e){
+      $("live").innerHTML = `<span class="dot" style="background:var(--coral)"></span>sin conexión`;
+    }
+  }
+
+  async function sendIdea(){
+    const v = $("idea").value.trim(); if(!v) return;
+    $("idea").value = "";
+    await db.from("orch_ideas").insert({ text: v, source: "web" });
+    refresh();
+  }
+  $("send").onclick = sendIdea;
+  $("idea").addEventListener("keydown", e => { if(e.key==="Enter") sendIdea(); });
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+</body>
+</html>
