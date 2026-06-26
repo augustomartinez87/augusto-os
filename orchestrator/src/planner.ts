@@ -6,6 +6,7 @@ import { log } from './limits.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 import { fileURLToPath } from 'url'
+import { MODEL_PLANNER } from './models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -47,7 +48,7 @@ SPEC DEL FEATURE:
 ${featureMd}`
 
   const result = await execa('claude', [
-    '--model', 'claude-opus-4-8',
+    '--model', MODEL_PLANNER,
     '--max-turns', '1',
     '--output-format', 'text',
     '--dangerously-skip-permissions',

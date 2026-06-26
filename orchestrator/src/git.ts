@@ -79,8 +79,20 @@ export async function mergeIntoMain(branch: string, baseBranch = 'main'): Promis
 /**
  * Push de main al remoto. Con la integración Git↔Vercel, esto dispara el deploy a prod.
  * Acción de prod → solo se llama DESPUÉS del OK humano y de pasar todas las verificaciones.
+ * Aborta si HEAD no está en baseBranch para evitar pushear contenido equivocado a prod.
  */
 export async function pushMain(baseBranch = 'main'): Promise<boolean> {
+  let current: string
+  try {
+    current = (await currentBranch()).trim()
+  } catch (e) {
+    log(`[git] push abortado — no se pudo determinar el branch actual: ${e}`)
+    return false
+  }
+  if (current !== baseBranch) {
+    log(`[git] push abortado — HEAD está en '${current}', no en '${baseBranch}'. Verificá que el merge se completó correctamente.`)
+    return false
+  }
   const res = await execa('git', ['push', 'origin', baseBranch], { cwd: getRepoRoot(), reject: false })
   if (res.exitCode !== 0) {
     log(`[git] push a ${baseBranch} FALLÓ: ${res.stderr}`)
