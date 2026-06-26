@@ -9,6 +9,7 @@
     "approve": "tsx --env-file=.env src/index.ts --approve",
     "bot": "tsx --env-file=.env src/bot.ts",
     "sync": "tsx --env-file=.env src/sync.ts",
+    "intake": "tsx --env-file=.env src/intake-cli.ts",
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
