@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { saveState, type OrchestratorState } from './state.js'
 import { log } from './limits.js'
+import { notifyGate } from './telegram.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const BLOCKED_LOG = path.join(__dirname, '..', 'blocked.log')
@@ -34,8 +35,13 @@ export function logBlocked(command: string, label: string): void {
   log(`[gates] BLOQUEADO (${label}): requiere aprobación humana`)
 }
 
-export function requiresHumanApproval(stepDesc: string): boolean {
-  return HUMAN_GATE_PATTERNS.some(({ regex }) => regex.test(stepDesc))
+export function requiresHumanApproval(_stepDesc: string): boolean {
+  // Política (jun 2026): los gates por-step se AUTO-APRUEBAN — Augusto no revisa
+  // steps a nivel técnico. La protección real está en el db-guard (anti-prod), el
+  // hook de comandos (checkHumanGate bloquea prisma/deploy/drop/truncate REALES en
+  // ejecución) y el verifier. El deploy a prod se maneja aparte: auto-deploy en
+  // verde + aviso por Telegram; si falla, no deploya y avisa el error.
+  return false
 }
 
 export function setHumanGate(state: OrchestratorState, detail: string): void {
@@ -43,7 +49,9 @@ export function setHumanGate(state: OrchestratorState, detail: string): void {
   saveState(state)
   log(`\n[gates] *** PAUSA: requiere aprobación humana ***`)
   log(`[gates] Detalle: ${detail}`)
-  log(`[gates] Ejecutá: npm run approve`)
+  log(`[gates] Ejecutá: npm run approve  (o aprobá desde Telegram)`)
+  // Aviso por Telegram (no-op si no hay credenciales). Fire-and-forget, nunca rompe el loop.
+  void notifyGate(detail, state.featureId)
 }
 
 export function clearHumanGate(state: OrchestratorState): void {

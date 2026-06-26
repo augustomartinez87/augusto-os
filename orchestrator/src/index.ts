@@ -13,6 +13,7 @@ import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
 import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
+import { notifyDeployed, notifyReleaseFailed } from './telegram.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
@@ -45,6 +46,23 @@ function appendProgress(featureId: string, summary: string): void {
   log(`[system] PROGRESS.md actualizado`)
 }
 
+// Detecta si un feature ya se ejecutó y finalizó, para no re-planificar y gastar tokens.
+function featureAlreadyFinished(featureId: string): string | null {
+  // Señal fuerte: STATE archivado = el feature ya se liberó (push/deploy hecho).
+  const archived = path.join(__dirname, '..', `STATE.${featureId}.archived.json`)
+  if (existsSync(archived)) {
+    let when = ''
+    try { when = JSON.parse(readFileSync(archived, 'utf-8')).updatedAt ?? '' } catch { /* ignore */ }
+    return when ? `liberado el ${when}` : 'liberado (STATE archivado)'
+  }
+  // Señal secundaria: figura como completado en PROGRESS.md
+  const progressPath = path.join(SYSTEM_DIR, 'PROGRESS.md')
+  if (existsSync(progressPath) && readFileSync(progressPath, 'utf-8').includes(`${featureId} completado`)) {
+    return 'figura como completado en PROGRESS.md'
+  }
+  return null
+}
+
 // ── CLI: approve command ──────────────────────────────────────────────────────
 
 const args = process.argv.slice(2)
@@ -69,6 +87,14 @@ async function main() {
     if (!featureId) {
       console.error('Uso: npm start <featureId>\n  featureId = nombre del archivo en features/ sin .md')
       process.exit(1)
+    }
+    // Guard anti-reejecución: si el feature ya finalizó, no re-planificar (gasta tokens).
+    const finished = featureAlreadyFinished(featureId)
+    if (finished && !args.includes('--force')) {
+      log(`[main] ⚠ ${featureId} YA se ejecutó y finalizó (${finished}).`)
+      log(`[main] Re-ejecutarlo invoca al planner (Opus) + executor (Sonnet) y gasta tokens sin necesidad.`)
+      log(`[main] Si estás seguro de re-ejecutarlo igual: npm start ${featureId} --force`)
+      process.exit(0)
     }
     state = await startFeature(featureId)
   } else {
@@ -154,40 +180,26 @@ async function runLoop(state: OrchestratorState) {
         appendProgress(state.featureId, buildPRBody(state))
       }
 
-      // 2. Fase de release: verificaciones → OK humano → push (Vercel deploya solo)
+      // 2. Fase de release: si las verificaciones dan VERDE → push+deploy automático + aviso.
+      //    Si FALLAN → NO deploya y avisa el error por Telegram para debuggear.
       if (!state.pushed) {
-        if (state.awaitingPushApproval) {
-          // Volvimos tras el OK humano (npm run approve limpió el gate)
-          state.awaitingPushApproval = false
-          saveState(state)
-          log('[main] OK recibido — pusheando main (Vercel deploya prod automáticamente)...')
-          const ok = await pushMain()
-          if (!ok) {
-            log('[main] Push falló. main local quedó mergeada; revisá credenciales/remoto y reintentá con `npm start ' + state.featureId + '`.')
-            break
-          }
-          state.pushed = true
-          saveState(state)
-        } else {
-          const checks = await runReleaseChecks()
-          if (!checks.ok) {
-            log(`[main] RELEASE BLOQUEADO — verificaciones fallaron:\n${checks.errors.slice(0, 2000)}`)
-            log(`[main] Arreglá y re-corré \`npm start ${state.featureId}\` para reintentar el release.`)
-            break
-          }
-          state.awaitingPushApproval = true
-          saveState(state)
-          setHumanGate(
-            state,
-            `RELEASE listo para PUSH+DEPLOY a prod de "${state.featureId}".\n` +
-            `Verificaciones OK: typecheck + lint + tests + build.\n` +
-            `${checks.tnaNote}\n` +
-            `Aprobá en otra terminal con:  npm run approve   → eso pushea main y Vercel deploya prod.\n` +
-            `Si NO querés deployar, no apruebes (Ctrl+C); la branch ya está mergeada en main local.`,
-          )
-          await runLoop(state)
-          return
+        const checks = await runReleaseChecks()
+        if (!checks.ok) {
+          log(`[main] RELEASE BLOQUEADO — verificaciones fallaron, NO se deploya:\n${checks.errors.slice(0, 2000)}`)
+          void notifyReleaseFailed(state.featureId, checks.errors)
+          log(`[main] Arreglá y re-corré \`npm start ${state.featureId}\` para reintentar el release.`)
+          break
         }
+        log('[main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...')
+        const ok = await pushMain()
+        if (!ok) {
+          log('[main] Push falló. main local quedó mergeada; revisá credenciales/remoto y reintentá con `npm start ' + state.featureId + '`.')
+          void notifyReleaseFailed(state.featureId, 'El push a main falló (credenciales/remoto). La branch ya está mergeada en main local; reintentá el release.')
+          break
+        }
+        state.pushed = true
+        saveState(state)
+        void notifyDeployed(state.featureId, checks.tnaNote)
       }
 
       // 3. Cierre
@@ -207,10 +219,17 @@ async function runLoop(state: OrchestratorState) {
 
     log(`\n[main] === Step ${step.id}/${state.steps.length}: ${step.desc} ===`)
 
-    if (requiresHumanApproval(step.desc)) {
+    if (requiresHumanApproval(step.desc) && !step.humanApproved) {
       setHumanGate(state, `Step ${step.id}: ${step.desc}`)
-      await runLoop(state)
-      return
+      // Esperar aprobación inline y marcar el step como aprobado para NO re-gatear
+      // el MISMO paso una y otra vez (bug del loop infinito).
+      while (loadState()?.needsHumanApproval) {
+        await new Promise((r) => setTimeout(r, 60_000))
+      }
+      state = loadState()!
+      markStepStatus(state, step.id, 'pending', { humanApproved: true })
+      log(`[main] Step ${step.id} aprobado — continuando (no se re-gatea)`)
+      continue
     }
 
     markStepStatus(state, step.id, 'running', { sessionId: step.sessionId })

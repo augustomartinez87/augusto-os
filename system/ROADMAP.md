@@ -32,7 +32,7 @@ Estado: `[done]` = completo · `[active]` = en curso · `[next]` = siguiente · 
 - Si `mode: SLEEP` → no interrumpir al PO, continuar o registrar blocker
 - Si `mode: OFFICE` → solo preguntas Sí/No
 - Si `mode: PRODUCT` → preguntas abiertas permitidas
-- Integrar con el human-gate actual
+- Nota (ADR-0019): ya NO hay human-gate de deploy ni de steps — el loop auto-deploya en verde y avisa por Telegram (o avisa el error si falla). Este gating por estado aplicaría a interrupciones/preguntas, no a aprobar deploys.
 
 ## Fase 3 — Multi-target & feature routing [pending]
 
@@ -54,6 +54,6 @@ Estado: `[done]` = completo · `[active]` = en curso · `[next]` = siguiente · 
 
 ## Fase 6 — Interacción desde el celu [pending]
 
-- 6a) Bot de Telegram: el loop notifica gates y Augusto aprueba/rechaza con un botón; canal para mandar ideas → cola/backlog. Reemplaza `npm run approve`. (S-006)
+- 6a) Bot de Telegram (AlantORCH) — HECHO: el loop **avisa el deploy a prod** o el **error si falla** (ya no aprueba gates: el deploy es automático en verde, ADR-0019); canal para mandar ideas con `/idea`. (S-006)
 - 6b) Dashboard web mobile-first como control plane (Supabase): features/steps/logs en vivo, "presencia" de agentes, cola de ideas, aprobar. El runner local pollea y ejecuta; el loop NO corre en la nube (repos + credenciales se quedan local). (S-007)
 - Habilita el salto a multi-target en paralelo (ver varios agentes trabajando a la vez).

@@ -1,0 +1,63 @@
+{
+  "featureId": "F-0005",
+  "branch": "feat/F-0005-gate-de-l-mite-de-originaci-n-por-v-ncul",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Crear el servicio de límites por vínculo en server (p.ej. server/services/relationshipLimits.ts) con DEFAULT_RELATIONSHIP_LIMITS (conocido y amigo → 500000, amigo_de_amigo → 200000, desconocido → 0) y loadRelationshipLimits() que aplique overrides persistidos del JSON de config si existen y caiga al default cuando falten, sin migración, replicando el patrón loadScoreConfig/minApScore de F-0002. Typecheck y lint.",
+      "status": "done",
+      "commit": "9080ea7e1f8c4c0c5d289ac787bb18b42564affd",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": []
+    },
+    {
+      "id": 2,
+      "desc": "Implementar checkRelationshipLimit({ relationship, referrer, capital, enforcementMode }) en el mismo servicio, que devuelva { blocked: boolean, requiresManualReview: boolean, reason?: string }. Trata relationship ausente/no reconocido como 'desconocido' (límite 0): hard → blocked=true, soft → requiresManualReview=true. El reason nunca expone TNA/tasa. Typecheck y lint.",
+      "status": "done",
+      "commit": "9080ea7e1f8c4c0c5d289ac787bb18b42564affd",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": []
+    },
+    {
+      "id": 3,
+      "desc": "Agregar la regla del referido dentro de checkRelationshipLimit: si relationship === 'amigo_de_amigo' y referrer está vacío/null → requiresManualReview = true (no se permite referido sin referente/aval registrado), independientemente de si el monto entra en el límite. Typecheck y lint.",
+      "status": "done",
+      "commit": "9080ea7e1f8c4c0c5d289ac787bb18b42564affd",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": []
+    },
+    {
+      "id": 4,
+      "desc": "En preApprove (server/routers/ap.ts, ~línea 340, junto a checkDebtorLimit y el gate de score de F-0002), cargar la Person vinculada al préstamo si existe, leer su relationship/referrer, y aplicar checkRelationshipLimit con el enforcementMode del RiskConfig: hard rechaza la pre-aprobación con error claro (sin tasa), soft setea requiresManualReview. Documentar con comentario la degradación segura cuando no hay Person vinculada (se usa el tier por defecto sin romper). Typecheck y lint.",
+      "status": "done",
+      "commit": "9080ea7e1f8c4c0c5d289ac787bb18b42564affd",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": []
+    },
+    {
+      "id": 5,
+      "desc": "Agregar tests del gate junto a los de preApprove, mockeando la config de límites y la Person: monto bajo el límite pasa; sobre el límite hard bloquea y soft flaggea (requiresManualReview); relationship desconocido bloquea (hard) y flaggea (soft); amigo_de_amigo sin referrer flaggea; amigo_de_amigo con referrer y monto OK pasa. Tests, typecheck y lint pasan.",
+      "status": "done",
+      "commit": "9080ea7e1f8c4c0c5d289ac787bb18b42564affd",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": []
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-25T18:17:11.770Z",
+  "updatedAt": "2026-06-25T22:03:54.624Z",
+  "merged": true,
+  "awaitingPushApproval": false,
+  "pushed": true
+}

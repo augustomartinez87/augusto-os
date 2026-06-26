@@ -7,6 +7,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0021 · 2026-06-25 · Estrategia de mocking: userCache pre-poblado vs mock de prisma.user
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se pre-carga el usuario en `userCache` del contexto en lugar de mockear `prisma.user.findUnique`, para que el middleware `isAuthed` lo encuentre en caché y no haga ninguna llamada a Prisma para auth.
+**Contexto:** El middleware `isAuthed` llama `ctx.prisma.user.findUnique` solo cuando el usuario no está en caché. La forma más simple de testear el router sin mockear todo el esquema de User es saltar esa rama pre-cargando la caché.
+**Alternativas descartadas:** Mockear `prisma.user.findUnique` explícitamente en cada test; o exportar `createCallerFactory` desde `lib/trpc.ts` para crear un caller con contexto ya enriquecido (sin middleware). Ambas son más verbosas o requieren cambios en prod.
+**Consecuencias / riesgo residual:** Si `isAuthed` cambia su lógica de caché (p. ej. añade más campos al User), los tests deberán actualizar `MOCK_USER`. Si la firma de `userCache` cambia, los tests rompen — es un acoplamiento bajo pero real.
+
+> Generado por el loop · feature F-0007 · step 6
+
+---
+## ADR-0020 · 2026-06-25 · Botones inline en el banner vs. navegación a pestaña Documentos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se creó `DocUploadButton` como componente standalone con su propia lógica de upload, renderizando los botones directamente en el banner de advertencia.
+**Contexto:** El spec dice "conectar la subida… reusando el flujo de upload existente" pero no especifica si el CTA del banner debe disparar el upload inline o simplemente navegar a la pestaña Documentos donde `LoanAttachments` ya tiene los botones de subida para todos los tipos.
+**Alternativas descartadas:** (1) Hacer el banner clickeable y switchear programáticamente a la pestaña Documentos — sin código nuevo pero UX con dos clics. (2) Extraer un hook `useLoanAttachmentUpload(loanId)` compartido entre `LoanAttachments` y el banner — sin duplicación, pero refactor más amplio. Se descartó por ser mayor al cambio mínimo requerido.
+**Consecuencias / riesgo residual:** Hay duplicación parcial de la lógica fetch+mutación entre `LoanAttachments` y `DocUploadButton`. Si la lógica de upload cambia (ej. endpoint, validaciones), hay que actualizarla en los dos lugares.
+
+> Generado por el loop · feature F-0007 · step 4
+
+---
+## ADR-0018 · 2026-06-25 · Banner de pendientes se muestra solo en préstamos activos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La condición `loan.status === 'active'` se agrega además de `documentStatus.status === 'pendiente'`, de modo que préstamos completados, refinanciados o incobrables no muestran la alerta aunque les falten documentos.
+**Contexto:** El spec dice "vista de detalle del préstamo activo" pero no especifica si la restricción de estado debe estar hardcodeada en el componente o si el helper ya lo maneja. El helper es agnóstico al estado del préstamo; el filtro debe vivir en la UI.
+**Alternativas descartadas:** Mostrar el banner para cualquier estado (si hay documentos faltantes, siempre alertar). Descartado porque un préstamo cerrado o incobrable no requiere que el usuario suba documentos.
+**Consecuencias / riesgo residual:** Si en el futuro se quiere mostrar la alerta también en `defaulted` (para auditoría), hay que ampliar la condición en el componente.
+
+> Generado por el loop · feature F-0007 · step 3
+
+---
+## ADR-0017 · 2026-06-25 · Carga de RiskConfig dentro del gate de vínculo vs. reutilización del check de deudor
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El gate de vínculo carga su propio `riskConfig.findFirst` en lugar de recibir el objeto ya cargado, porque `checkDebtorLimit` no expone el `RiskConfig` como retorno y no existe una consulta previa al config de riesgo en `preApprove`.
+**Contexto:** El spec pide aplicar `checkRelationshipLimit` con el `enforcementMode` de `RiskConfig`, pero en el flujo existente `preApprove` no carga `RiskConfig` en ningún punto anterior — sólo usa `AgentConfig`.
+**Alternativas descartadas:** Extraer una función `loadRiskConfig` compartida con `checkDebtorLimit`; refactorizar `checkDebtorLimit` para devolver el config. Ambas implican tocar `lib/risk/debtorLimit.ts`, que está fuera del scope del step 4.
+**Consecuencias / riesgo residual:** Se hace una query extra a `risk_configs` en el path de pre-aprobación. Si en un step futuro se centraliza la carga de `RiskConfig`, este bloque debería recibirlo como parámetro.
+
+> Generado por el loop · feature F-0005 · step 4
+
+---
+## ADR-0016 · 2026-06-25 · La regla del referido no override blocked=true en hard mode
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando `amigo_de_amigo` sin referrer y capital supera el límite en modo `hard`, se devuelve `blocked: true, requiresManualReview: true` en lugar de forzar solo `requiresManualReview`. El flag `blocked` no se anula.
+**Contexto:** El spec dice "forzar requiresManualReview = true" pero no especifica qué pasa cuando el check de capital ya retorna `blocked: true`. Podría haberse silenciado el `blocked` para dejar que el flujo manual lo resuelva.
+**Alternativas descartadas:** Retornar `blocked: false, requiresManualReview: true` siempre que aplique la regla del referido, anulando el bloqueo por capital — esto daría más control manual pero abriría el paso a montos prohibidos si el revisor no nota el límite.
+**Consecuencias / riesgo residual:** El orquestador que llama a `checkRelationshipLimit` debe manejar el caso `blocked: true && requiresManualReview: true`; si solo lee `blocked`, la regla del referido queda silenciada en ese path.
+
+> Generado por el loop · feature F-0005 · step 3
+
+---
+## ADR-0015 · 2026-06-25 · checkRelationshipLimit es síncrona y acepta limits precargados
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La función es pura y síncrona; el llamador carga los límites con `loadRelationshipLimits(db, userId)` y los pasa como `limits?`. Si se omite, usa `DEFAULT_RELATIONSHIP_LIMITS`.
+**Contexto:** El spec define la firma como `{ relationship, referrer, capital, enforcementMode }` sin mencionar `db` ni `userId`. Para cumplir esa firma sin acceso a la DB dentro de la función, se separaron la carga (async, ya existía en step 1) y la evaluación (sync, step 2).
+**Alternativas descartadas:** Recibir `db + userId` internamente y hacer la función async; eso la habría acoplado a Prisma y forzado a los callers a await una función que conceptualmente es solo una comparación.
+**Consecuencias / riesgo residual:** El caller debe asegurarse de cargar los límites antes de llamar a `checkRelationshipLimit`; si omite `limits` opera sobre defaults, lo cual es seguro pero puede no reflejar overrides de RiskConfig.
+
+> Generado por el loop · feature F-0005 · step 2
+
+---
+## ADR-0014 · 2026-06-25 · JSON de overrides como campo futuro en RiskConfig, no en tabla dedicada
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** `loadRelationshipLimits` lee `cfg.relationshipLimits` (Json?) desde `RiskConfig` vía optional chaining y try/catch; mientras la columna no exista siempre devuelve los defaults. No se crea una tabla dedicada tipo `ApScoreConfig`.
+**Contexto:** El spec dice "del JSON de RiskConfig" pero `RiskConfig` no tiene ese campo aún, y "sin migración" prohíbe crearlo ahora. `loadScoreConfig` usa tabla dedicada; `debtorLimit.ts` usa optional chaining sobre `RiskConfig`. El spec apunta a `RiskConfig` → se siguió ese modelo.
+**Alternativas descartadas:** Tabla dedicada tipo `ApScoreConfig` con `id: 'default'` (como `loadScoreConfig`), pero requeriría migración ahora.
+**Consecuencias / riesgo residual:** La migración de F-0005 (step posterior) deberá agregar `relationshipLimits Json?` a `RiskConfig` para que los overrides persistan. Hasta ese momento el servicio siempre retorna los defaults.
+
+> Generado por el loop · feature F-0005 · step 1
+
+---
 ## ADR-XXXX · YYYY-MM-DD · <título corto>
 
 **Estado:** propuesta | aceptada | reemplazada-por-ADR-YYYY | descartada
@@ -25,6 +123,22 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 - `Derivada` → consecuencia técnica forzada por otro ADR; no es una elección libre.
 
 > Convención de estados de features (backlog/active/review/done/blocked) → ver `system/CONVENTIONS.md`.
+
+---
+
+## ADR-0019 · 2026-06-25 · Auto-deploy en verde + sin gates por-step (reemplaza la aprobación humana manual)
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Se eliminan los gates de aprobación humana por-step (auto-pass) y el gate de deploy a prod pasa a **auto-deploy cuando las verificaciones dan verde** (typecheck + lint + tests + build + TNA check). Si fallan, NO deploya y avisa el error por Telegram. La seguridad deja de ser la aprobación humana previa (que Augusto siempre concedía sin revisar) y pasa a: (a) la verificación automática, (b) el aviso post-deploy por Telegram, (c) la posibilidad de revertir.
+
+**Contexto:** Augusto siempre aprobaba sin revisar a nivel técnico → el tap humano no agregaba seguridad, solo fricción. El db-guard (anti-prod), el hook de comandos (bloquea prisma/deploy/drop reales en ejecución) y el verifier siguen activos.
+
+**Alternativas descartadas:** Auto-deploy sin aviso (máxima velocidad, mínima visibilidad — descartado por ser app con plata real); mantener un tap en Telegram por feature (descartado por fricción innecesaria dado el comportamiento real).
+
+**Consecuencias / riesgo residual:** Un bug que pase las verificaciones llega a prod sin checkpoint humano; mitigación = aviso + revert. **Actualizar el `CLAUDE.md` global**, que hoy exige aprobación explícita para deploys a prod — esta decisión lo cambia deliberadamente. Pendiente: flujo de revert one-tap desde Telegram.
 
 ---
 

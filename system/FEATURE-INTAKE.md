@@ -41,3 +41,8 @@
 3. Se escribe `features/F-XXXX.md` desde `_TEMPLATE.md`.
 4. Opcional: se agrega al BACKLOG/ROADMAP.
 5. `npm start F-XXXX` → el loop ejecuta hasta el gate de release.
+
+- [2026-06-25T18:02:52.905Z] (telegram) Hola
+- [2026-06-25T18:11:03.053Z] (telegram) agregar un export csv para spensiv?
+- [2026-06-25T18:15:29.880Z] (telegram) argos comparar contra Rendi finance a ver que ideas podemos robar
+- [2026-06-25T18:19:59.449Z] (telegram) comparar argos contra tracker también, hay cosas por mejorar

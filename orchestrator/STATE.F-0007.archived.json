@@ -1,0 +1,85 @@
+{
+  "featureId": "F-0007",
+  "branch": "feat/F-0007-documentos-pendientes-del-pr-stamo-foto-",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Agregar un helper puro `getLoanDocumentStatus(attachments: LoanAttachment[])` (en lib/server) que devuelva `{ status: \"pendiente\" | \"completo\", missing: (\"mutual\"|\"pagare\")[] }`: requiere al menos un attachment type \"mutual\" y uno \"pagare\"; si falta alguno status=\"pendiente\" con `missing` listando los faltantes, si están ambos status=\"completo\" y missing=[]. Typecheck y lint.",
+      "status": "done",
+      "commit": "f8858a78feb51505d08331c5cc591b5a27a8d941",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": [],
+      "humanApproved": false
+    },
+    {
+      "id": 2,
+      "desc": "Exponer `documentStatus` en la query de detalle del préstamo del router de loans (server/routers), computándolo con el helper a partir de los `LoanAttachment` del préstamo, sin alterar el resto del payload existente. Typecheck y lint.",
+      "status": "done",
+      "commit": "4ff3b418141173f87ec50acd4ff998125365974f",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": [],
+      "humanApproved": false
+    },
+    {
+      "id": 3,
+      "desc": "En la vista de detalle del préstamo activo, renderizar un badge/checklist de pendientes cuando `documentStatus.status = \"pendiente\"` con el texto \"Pendiente: subir contrato firmado y pagaré\", indicando según `missing` cuál de los dos falta (mutuo firmado y/o pagaré). Si está \"completo\" no se muestra. Typecheck y lint.",
+      "status": "done",
+      "commit": "19e1e779904b9b215fa23c608b5e5cd5a09a1c7e",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true,
+      "adrIds": [
+        18
+      ],
+      "humanApproved": false
+    },
+    {
+      "id": 4,
+      "desc": "Conectar la subida de las dos fotos (mutuo firmado y pagaré) en la vista del préstamo reusando el flujo de upload existente de `LoanAttachment` (el mismo de `transfer_receipt`, sin storage nuevo), pasando `type` \"mutual\" y \"pagare\" respectivamente y refrescando la query para recomputar `documentStatus`. Typecheck y lint.",
+      "status": "done",
+      "commit": "1c4c03f276f3d0ff2b9e021c6b0f2d2be61a1725",
+      "sessionId": null,
+      "retries": 0,
+      "ui": true,
+      "adrIds": [
+        20
+      ],
+      "humanApproved": false
+    },
+    {
+      "id": 5,
+      "desc": "Agregar tests del helper `getLoanDocumentStatus`: con 0 attachments → pendiente/missing=[mutual,pagare]; con solo \"mutual\" → pendiente/missing=[pagare]; con solo \"pagare\" → pendiente/missing=[mutual]; con ambos → completo/missing=[]. Tests, typecheck y lint pasan.",
+      "status": "done",
+      "commit": "edb28782cf92f44ecb59de168a7692a04d928de4",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": [],
+      "humanApproved": false
+    },
+    {
+      "id": 6,
+      "desc": "Agregar un test de integración del router de loans verificando que `documentStatus` se expone correctamente y que subir una foto actualiza el estado de pendiente a completo, y que el `documentStatus` es informativo: no bloquea ni altera el flujo de pre-aprobar/aprobar/activar. Tests, typecheck y lint pasan.",
+      "status": "done",
+      "commit": "775ac34c7ec2644934659eed293103d9c55f1eec",
+      "sessionId": null,
+      "retries": 0,
+      "ui": false,
+      "adrIds": [
+        21
+      ],
+      "humanApproved": false
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-06-25T22:04:15.893Z",
+  "updatedAt": "2026-06-25T22:42:31.608Z",
+  "merged": true,
+  "awaitingPushApproval": false,
+  "pushed": true
+}

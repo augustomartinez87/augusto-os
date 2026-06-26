@@ -18,6 +18,7 @@ export const StepSchema = z.object({
   ui: z.boolean().default(false),
   error: z.string().nullable().optional(),
   adrIds: z.array(z.number()).default([]),
+  humanApproved: z.boolean().default(false),
 })
 
 export const StateSchema = z.object({

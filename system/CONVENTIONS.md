@@ -9,10 +9,10 @@ Reglas que el sistema (y cualquier agente, sea Claude, Llama u otro) debe respet
 Todo ítem de trabajo (feature, fix, refactor) tiene exactamente **un** estado en cada momento. Fuente de verdad: `system/BACKLOG.md` (cola) + `system/PROGRESS.md` (histórico append-only de lo terminado).
 
 ```
-idea → backlog → active → review → done
-                    │         │
-                    ├──────► blocked   (depende de algo externo / decisión pendiente)
-                    └──────► waiting    (espera OK de Augusto)
+idea → backlog → active → done   (auto-deploy en verde, sin gate humano)
+                    │
+                    ├──────► blocked   (la verificación falla / depende de algo externo)
+                    └──────► waiting    (espera una acción de Augusto FUERA del loop, ej. una migración)
                               dropped   (descartado; se documenta por qué)
 ```
 
@@ -21,16 +21,16 @@ idea → backlog → active → review → done
 | `idea` | capturada, sin refinar | FEATURE-INTAKE.md / cola de ideas |
 | `backlog` | refinada y priorizada, **pendiente** de empezar | BACKLOG.md |
 | `active` (WIP) | **en ejecución ahora** por el loop o por Augusto | BACKLOG.md (marcada WIP) + `features/F-XXXX.md` |
-| `review` | construida, esperando review/merge humano | BACKLOG.md + branch |
-| `done` | terminada y mergeada/deployada | **PROGRESS.md** (con pasos + commits) |
-| `blocked` | no puede avanzar por dependencia externa | BACKLOG.md |
-| `waiting` | terminada técnicamente, espera OK explícito de Augusto | BACKLOG.md |
+| `review` | (transitorio) construida y mergeada local; deploya sola si la verificación da verde | branch |
+| `done` | terminada y deployada a prod | **PROGRESS.md** (con pasos + commits) |
+| `blocked` | la verificación falló (con aviso del error) o depende de algo externo | BACKLOG.md |
+| `waiting` | espera una acción de Augusto FUERA del loop (ej. correr una migración) — NO el deploy, que es automático | BACKLOG.md |
 | `dropped` | descartada; registrar motivo en un ADR | BACKLOG.md (tachada) |
 
 **Reglas de transición:**
 - Una feature entra al loop solo desde `backlog` o `active`.
-- Al completar todos los steps y pasar `runReleaseChecks` → pasa a `review` o `waiting` (gate humano), nunca directo a `done`.
-- Pasa a `done` **solo** tras el push/merge a main. En ese momento se appendea a `PROGRESS.md` y se marca ✅ en `BACKLOG.md`.
+- Al completar todos los steps, corre `runReleaseChecks`. Si da **verde** → **auto-deploy** (push a main → Vercel) + aviso por Telegram → `done`. Si **falla** → `blocked` + aviso del error por Telegram (NO deploya). No hay gate humano de deploy (ver ADR-0019).
+- Al pasar a `done` se appendea a `PROGRESS.md` y se marca ✅ en `BACKLOG.md`.
 - `blocked`/`waiting` deben nombrar **de qué** dependen (otra feature, una migración, un OK).
 
 > Regla práctica para Augusto: para saber "qué se está haciendo ahora" mirá los ítems `active` en BACKLOG. Para el histórico, PROGRESS.md. Para "por qué se hizo así", DECISIONS.md (ADR).
