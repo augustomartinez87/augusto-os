@@ -55,7 +55,7 @@ async function pushLogTail(featureId: string): Promise<void> {
   const content = readFileSync(LOG_FILE, 'utf-8')
   if (logOffset < 0) { logOffset = content.length; return } // primera vuelta: no reenviar histórico
   if (content.length <= logOffset) return
-  const lines = content.slice(logOffset).split('\n').filter((l) => l.trim())
+  const lines = content.slice(logOffset).split('\n').filter((l) => l.trim() && !l.includes('[telegram]') && !l.includes('[sync]'))
   logOffset = content.length
   if (lines.length) {
     await rest('POST', 'orch_logs', lines.slice(-50).map((line) => ({ feature_id: featureId, line })))
@@ -94,6 +94,21 @@ function parseBacklog(): unknown[] {
   return rows
 }
 
+// Sube las ideas de FEATURE-INTAKE.md (telegram/local) a orch_ideas para que se vean en el dashboard.
+async function pushIntakeIdeas(): Promise<void> {
+  if (!existsSync(INTAKE)) return
+  const ideas: { text: string; source: string; created_at: string }[] = []
+  for (const ln of readFileSync(INTAKE, 'utf-8').split('\n')) {
+    const m = ln.match(/^- \[(.+?)\] \((.+?)\) (.+)$/)
+    if (m) ideas.push({ created_at: m[1], source: m[2], text: m[3].trim() })
+  }
+  if (!ideas.length) return
+  const existing = await rest('GET', 'orch_ideas?select=text')
+  const have = new Set((existing ?? []).map((x: any) => x.text))
+  const toInsert = ideas.filter((i) => !have.has(i.text))
+  if (toInsert.length) await rest('POST', 'orch_ideas', toInsert, { Prefer: 'return=minimal' })
+}
+
 async function tick(): Promise<void> {
   const s = loadState()
   let featureId = 'idle'
@@ -121,6 +136,7 @@ async function tick(): Promise<void> {
   }
   await upsert('orch_backlog', parseBacklog())
   await pushLogTail(featureId)
+  await pushIntakeIdeas()
   await pullWebIdeas()
 }
 
