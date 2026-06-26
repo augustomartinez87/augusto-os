@@ -237,4 +237,30 @@ describe('appendAdr', () => {
     const content = readFileSync(emptyFile, 'utf-8')
     expect(content).toContain('## ADR-0001')
   })
+
+  // ── S-017: insertion must not fall inside the template fence ─────────────
+
+  it('inserts the new ADR after the template fence, not inside it (S-017)', () => {
+    // FIXTURE has a ``` fence containing "## ADR-XXXX". Without the fix, the insertion
+    // lands BEFORE "## ADR-XXXX" (inside the fence block). With the fix (\d{4} regex),
+    // it skips the template placeholder and inserts before ## ADR-0010 (after the fence).
+    appendAdr(baseDraft, 'F-0011', 1, tmpFile)
+    const content = readFileSync(tmpFile, 'utf-8')
+
+    // The closing ``` of the template fence is followed by a blank line and ---
+    const fenceCloseIdx = content.indexOf('```\n\n---')
+    expect(fenceCloseIdx).toBeGreaterThan(-1)  // sanity: fixture has the fence
+
+    const pos11 = content.indexOf('## ADR-0011')
+    expect(pos11).toBeGreaterThan(-1)
+    // The new ADR must appear AFTER the closing fence delimiter
+    expect(pos11).toBeGreaterThan(fenceCloseIdx + 3)
+  })
+
+  it('the template fence content remains unchanged after insertion', () => {
+    appendAdr(baseDraft, 'F-0011', 1, tmpFile)
+    const content = readFileSync(tmpFile, 'utf-8')
+    // The fence block with ADR-XXXX must still be intact
+    expect(content).toContain('```\n## ADR-XXXX')
+  })
 })

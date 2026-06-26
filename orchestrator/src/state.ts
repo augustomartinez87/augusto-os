@@ -30,9 +30,8 @@ export const StateSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   // ── Fase de release (post-merge) ──
-  merged: z.boolean().default(false),            // branch ya mergeada a main (local)
-  awaitingPushApproval: z.boolean().default(false), // verificaciones OK, esperando OK humano para push+deploy
-  pushed: z.boolean().default(false),            // push a main hecho → Vercel deploya solo
+  merged: z.boolean().default(false),  // branch ya mergeada a main (local)
+  pushed: z.boolean().default(false),  // push a main hecho → Vercel deploya solo
 })
 
 export type Step = z.infer<typeof StepSchema>
@@ -54,7 +53,7 @@ export function saveState(state: OrchestratorState): void {
   writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), 'utf-8')
 }
 
-export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds'>[]): OrchestratorState {
+export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds' | 'humanApproved'>[]): OrchestratorState {
   const now = new Date().toISOString()
   const state: OrchestratorState = {
     featureId,
@@ -67,13 +66,13 @@ export function initState(featureId: string, branch: string, steps: Omit<Step, '
       sessionId: null,
       retries: 0,
       adrIds: [],
+      humanApproved: false,
     })),
     pausedUntil: null,
     needsHumanApproval: null,
     createdAt: now,
     updatedAt: now,
     merged: false,
-    awaitingPushApproval: false,
     pushed: false,
   }
   saveState(state)
@@ -88,7 +87,15 @@ export function markStepStatus(state: OrchestratorState, stepId: number, status:
 }
 
 export function getNextPendingStep(state: OrchestratorState): Step | null {
-  return state.steps.find(s => s.status !== 'done') ?? null
+  const next = state.steps.find(s => s.status !== 'done') ?? null
+  // A blocked step requires human intervention — return null so the loop stops
+  // cleanly instead of re-executing the step in an inconsistent state.
+  if (next?.status === 'blocked') return null
+  return next
+}
+
+export function getBlockedStep(state: OrchestratorState): Step | null {
+  return state.steps.find(s => s.status === 'blocked') ?? null
 }
 
 /**

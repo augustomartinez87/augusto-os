@@ -80,8 +80,9 @@ export function appendAdr(draft: AdrDraft, featureId: string, stepId: number, fi
     ``,
   ].join('\n')
 
-  // Insert as newest-first: before the first ## ADR- entry, after the header/template block
-  const insertIdx = content.indexOf('\n## ADR-')
+  // Insert newest-first: before the first real ADR entry (4-digit ID), which sits AFTER
+  // the template block. Using \d{4} avoids matching ## ADR-XXXX inside the template fence.
+  const insertIdx = content.search(/\n## ADR-\d{4}/)
   const newContent = insertIdx === -1
     ? content + entry
     : content.slice(0, insertIdx + 1) + entry + content.slice(insertIdx + 1)

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, appendFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parse as parseYaml } from 'yaml'
 import {
   loadState, saveState, initState, markStepStatus,
-  getNextPendingStep, archiveState, type OrchestratorState,
+  getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState,
 } from './state.js'
 import { planFeature, loadFeatureSpec } from './planner.js'
 import { executeStepWithRetry } from './executor.js'
@@ -18,6 +18,7 @@ import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta } from './adr.js'
+import { appendProgress } from './progress.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -36,14 +37,6 @@ function readSystemContext(): { mode: string } {
     log('[system] Modo SLEEP — el loop no interrumpe al operador. Pendientes se registran y continúan.')
   }
   return { mode }
-}
-
-function appendProgress(featureId: string, summary: string): void {
-  const progressPath = path.join(SYSTEM_DIR, 'PROGRESS.md')
-  const timestamp = new Date().toISOString().split('T')[0]
-  const entry = `\n## ${timestamp} — ${featureId} completado\n\n${summary}\n`
-  appendFileSync(progressPath, entry, 'utf-8')
-  log(`[system] PROGRESS.md actualizado`)
 }
 
 // Detecta si un feature ya se ejecutó y finalizó, para no re-planificar y gastar tokens.
@@ -166,6 +159,13 @@ async function runLoop(state: OrchestratorState) {
   while (true) {
     const step = getNextPendingStep(state)
     if (!step) {
+      const blocked = getBlockedStep(state)
+      if (blocked) {
+        log(`[main] Step ${blocked.id} BLOQUEADO — ejecución detenida. Requiere intervención humana.`)
+        log(`[main] Error: ${blocked.error ?? '(sin detalle)'}`)
+        log(`[main] Restaurá el step a 'pending' en STATE.json y re-ejecutá \`npm start ${state.featureId}\`.`)
+        break
+      }
       log(`[main] Feature ${state.featureId}: steps COMPLETOS.`)
 
       // 1. Merge a main (local, una sola vez)
@@ -177,7 +177,7 @@ async function runLoop(state: OrchestratorState) {
           log(`[main] Merge automático no aplicado (posible conflicto). Branch ${state.branch} intacta — resolvé y re-corré.`)
           break
         }
-        appendProgress(state.featureId, buildPRBody(state))
+        appendProgress(path.join(SYSTEM_DIR, 'PROGRESS.md'), state.featureId, buildPRBody(state))
       }
 
       // 2. Fase de release: si las verificaciones dan VERDE → push+deploy automático + aviso.

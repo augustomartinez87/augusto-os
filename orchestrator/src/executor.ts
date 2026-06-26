@@ -1,5 +1,5 @@
 import { execa } from 'execa'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { log, isUsageLimitError, isContextWindowError, handleUsageLimit, exponentialBackoff } from './limits.js'
@@ -7,9 +7,29 @@ import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 import { parseAdrBlocks, type AdrDraft } from './adr.js'
+import { MODEL_BUILDER } from './models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGS_DIR = path.join(__dirname, '..', 'logs')
+const FEATURES_DIR = path.join(__dirname, '..', 'features')
+
+function extractSection(md: string, heading: string): string {
+  const idx = md.indexOf(`## ${heading}`)
+  if (idx === -1) return ''
+  const after = md.slice(idx + `## ${heading}`.length)
+  const nextHeading = after.search(/^## /m)
+  return (nextHeading === -1 ? after : after.slice(0, nextHeading)).trim()
+}
+
+function loadSpecSections(featureId: string): { fueraDeAlcance: string; restriccionesClave: string } {
+  const specPath = path.join(FEATURES_DIR, `${featureId}.md`)
+  if (!existsSync(specPath)) return { fueraDeAlcance: '', restriccionesClave: '' }
+  const md = readFileSync(specPath, 'utf-8')
+  return {
+    fueraDeAlcance: extractSection(md, 'Fuera de alcance'),
+    restriccionesClave: extractSection(md, 'Restricciones clave'),
+  }
+}
 
 export const MAX_RETRIES = 3
 
@@ -22,13 +42,26 @@ export interface ExecutorResult {
   adrBlocks: AdrDraft[]
 }
 
-function buildPrompt(step: Step, featureId: string, priorError?: string): string {
+function buildPrompt(
+  step: Step,
+  featureId: string,
+  specSections: { fueraDeAlcance: string; restriccionesClave: string },
+  priorError?: string,
+): string {
   const targetName = getActiveTargetName()
   const stack = getTargetConfig().stack
+
+  const alcanceBlock = specSections.fueraDeAlcance
+    ? `\nFUERA DE ALCANCE (no hacer):\n${specSections.fueraDeAlcance}\n`
+    : ''
+  const restriccionesBlock = specSections.restriccionesClave
+    ? `\nRESTRICCIONES CLAVE (no romper):\n${specSections.restriccionesClave}\n`
+    : ''
+
   const base = `Sos un agente de código implementando el step ${step.id} del feature ${featureId} en el repo "${targetName}" (stack: ${stack}).
 
 TAREA: ${step.desc}
-
+${alcanceBlock}${restriccionesBlock}
 RESTRICCIONES ABSOLUTAS:
 - NO corras "prisma migrate", "prisma db push", ni SQL destructivo.
 - NO deployés a Vercel.
@@ -82,10 +115,11 @@ export async function executeStep(
   state: OrchestratorState,
   priorError?: string,
 ): Promise<ExecutorResult> {
-  const prompt = buildPrompt(step, state.featureId, priorError)
+  const specSections = loadSpecSections(state.featureId)
+  const prompt = buildPrompt(step, state.featureId, specSections, priorError)
 
   const args = [
-    '--model', 'claude-sonnet-4-6',
+    '--model', MODEL_BUILDER,
     '--output-format', 'text',
     '--dangerously-skip-permissions',
     '--allowedTools', 'Read,Edit,Write,Bash,Glob,Grep',
