@@ -11,6 +11,7 @@ import { planFeature, loadFeatureSpec } from './planner.js'
 import { executeStepWithRetry } from './executor.js'
 import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
+import { runReviewer } from './reviewer.js'
 import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { notifyDeployed, notifyReleaseFailed } from './telegram.js'
@@ -308,6 +309,42 @@ async function runLoop(state: OrchestratorState) {
         }
       }
     }
+
+    const review = await runReviewer(step, state)
+    if (!review.approved) {
+      log(`[reviewer] CHANGES_REQUESTED en step ${step.id}:\n${review.feedback}`)
+      step.retries = (step.retries ?? 0) + 1
+      if (step.retries >= 3) {
+        markStepStatus(state, step.id, 'blocked', { error: review.feedback })
+        setHumanGate(state, `Step ${step.id}: Reviewer rechazó el diff 3 veces`)
+        await runLoop(state)
+        return
+      }
+      markStepStatus(state, step.id, 'pending', { retries: step.retries })
+      const fix = await executeStepWithRetry(step, state, () => review.feedback)
+      if (!fix.ok) {
+        markStepStatus(state, step.id, 'blocked')
+        setHumanGate(state, `Step ${step.id}: no pasa review tras fix`)
+        await runLoop(state)
+        return
+      }
+      pendingAdrBlocks = fix.adrBlocks
+      const verify2 = await runVerifier()
+      if (!verify2.ok) {
+        markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
+        setHumanGate(state, `Step ${step.id}: verifier falla tras corrección de reviewer`)
+        await runLoop(state)
+        return
+      }
+      const review2 = await runReviewer(step, state)
+      if (!review2.approved) {
+        markStepStatus(state, step.id, 'blocked', { error: review2.feedback })
+        setHumanGate(state, `Step ${step.id}: reviewer rechaza tras segunda corrección`)
+        await runLoop(state)
+        return
+      }
+    }
+    log(`[reviewer] APPROVED step ${step.id}`)
 
     const sha = await commitStep(step.id, step.desc)
 

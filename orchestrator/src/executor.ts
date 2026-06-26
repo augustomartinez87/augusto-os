@@ -21,7 +21,7 @@ function extractSection(md: string, heading: string): string {
   return (nextHeading === -1 ? after : after.slice(0, nextHeading)).trim()
 }
 
-function loadSpecSections(featureId: string): { fueraDeAlcance: string; restriccionesClave: string } {
+export function loadSpecSections(featureId: string): { fueraDeAlcance: string; restriccionesClave: string } {
   const specPath = path.join(FEATURES_DIR, `${featureId}.md`)
   if (!existsSync(specPath)) return { fueraDeAlcance: '', restriccionesClave: '' }
   const md = readFileSync(specPath, 'utf-8')
