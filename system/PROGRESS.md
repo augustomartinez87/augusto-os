@@ -221,3 +221,17 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0006/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+---
+
+## 2026-06-27 — S-022: Dashboard → vista Operaciones [sistema]
+
+**Commit:** `e79e7ee`
+
+Rediseño del dashboard (`dashboard/index.html`) de tabs co-iguales a vista Operaciones orientada a supervisión del equipo de agentes.
+
+- Roster honesto: Planner (Opus) + Builder (Sonnet) como agentes LLM; Verifier + Deploy marcados "auto". Researcher no aparece (no existe).
+- Hero "quién tiene la posta" via `derivePosta(run, allSteps)`.
+- Feed de deltas (pasos done + features): log crudo en panel colapsable.
+- Preservado: mode-bar PRODUCT/OFFICE/SLEEP, ideas, backlog, polling 5s.
+- ADR-0031 documentado en DECISIONS.md.
