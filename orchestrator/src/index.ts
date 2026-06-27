@@ -2,7 +2,6 @@
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { parse as parseYaml } from 'yaml'
 import {
   loadState, saveState, initState, markStepStatus,
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState,
@@ -20,6 +19,7 @@ import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta } from './adr.js'
 import { appendProgress } from './progress.js'
+import { getOperatorState } from './operator-state.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -28,11 +28,7 @@ const SYSTEM_DIR = path.join(__dirname, '..', '..', 'system')
 // ── System memory ─────────────────────────────────────────────────────────────
 
 function readSystemContext(): { mode: string } {
-  const statePath = path.join(SYSTEM_DIR, 'OPERATOR_STATE.yaml')
-  if (!existsSync(statePath)) return { mode: 'PRODUCT' }
-  const raw = readFileSync(statePath, 'utf-8')
-  const parsed = parseYaml(raw) ?? {}
-  const mode = (parsed.mode ?? 'PRODUCT') as string
+  const { mode } = getOperatorState()
   log(`[system] Modo operativo: ${mode}`)
   if (mode === 'SLEEP') {
     log('[system] Modo SLEEP — el loop no interrumpe al operador. Pendientes se registran y continúan.')
