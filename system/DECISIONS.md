@@ -7,6 +7,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0032 · 2026-06-27 · S-015: umbrales de staleness para liveness del roster
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente (auditoria pendiente por Augusto)
+**Target:** sistema
+
+**Decisión:** Dos umbrales para clasificar el heartbeat de `orch_presence`: (1) `STALE_SEC = 30` — sin señal de heartbeat por >30s → punto gris, label "sin señal", sin animación de pulso. (2) `CUELGUE_SEC = 120` — sin heartbeat por >2min con un run activo → punto coral, label "posible cuelgue", borde rojo (clase `stage.cuelgue`). Por debajo de 30s, el agente se muestra como activo normal.
+**Contexto:** El proceso sync.ts emite heartbeat cada 5s. Si el proceso muere, el heartbeat para. Un threshold de 30s = 6 ticks fallidos → ruido tolerable (reinicio, GC, red lenta). 2min = umbral claro de "esto no es retraso, es cuelgue". Valores derivados del intervalo de tick (5s) y de la experiencia con el `Lock stale (660s)` visto en logs del autopilot.
+**Alternativas descartadas:** Umbral único (30s para todo) — no distingue "retraso momentáneo" de "loop muerto hace 10 minutos". Usar `updated_at` de `orch_steps` — mide inactividad del loop pero no muerte del proceso monitor.
+**Consecuencias:** Augusto puede ajustar `STALE_SEC`/`CUELGUE_SEC` en `dashboard/index.html` (constantes al inicio del script). Un loop colgado *dentro* del proceso (ej. lock stale en Claude Code) seguirá mostrando heartbeat fresco si sync.ts sobrevive — limitación conocida; requeriría heartbeat desde index.ts para detectar ese caso.
+
+> S-015 · 2026-06-27
+
+---
 ## ADR-0031 · 2026-06-27 · Dashboard vista Operaciones: roster honesto de etapas reales + feed de deltas
 
 **Estado:** aceptada

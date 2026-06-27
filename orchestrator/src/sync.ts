@@ -8,6 +8,7 @@ import { loadState, type OrchestratorState } from './state.js'
 import { log } from './limits.js'
 import { getOperatorState } from './operator-state.js'
 import { tryAutopilotPick } from './autopilot.js'
+import { MODEL_PLANNER, MODEL_BUILDER } from './models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -38,6 +39,73 @@ async function rest(method: string, q: string, body?: unknown, extra?: Record<st
 async function upsert(table: string, rows: unknown[]): Promise<void> {
   if (!rows.length) return
   await rest('POST', table, rows, { Prefer: 'resolution=merge-duplicates,return=minimal' })
+}
+
+function modelShortName(m: string): string {
+  if (m.includes('opus')) return 'Opus'
+  if (m.includes('sonnet')) return 'Sonnet'
+  if (m.includes('haiku')) return 'Haiku'
+  return m.split('-').slice(0, 2).join('-')
+}
+
+// S-015: emite presencia real a orch_presence. Ambos roles (planner+builder) reciben
+// un heartbeat en cada tick, permitiendo que el dashboard detecte si el proceso murió
+// (last_heartbeat deja de actualizarse). La lógica espeja derivePosta del dashboard
+// pero la calcula el orquestador, que conoce la verdad.
+async function pushPresence(s: OrchestratorState | null): Promise<void> {
+  const now = new Date().toISOString()
+  const plannerModel = modelShortName(MODEL_PLANNER)
+  const builderModel = modelShortName(MODEL_BUILDER)
+
+  if (!s) {
+    await upsert('orch_presence', [
+      { role: 'planner', model: plannerModel, state: 'idle', feature_id: null, step_no: null, detail: null, last_heartbeat: now, updated_at: now },
+      { role: 'builder', model: builderModel, state: 'idle', feature_id: null, step_no: null, detail: null, last_heartbeat: now, updated_at: now },
+    ])
+    return
+  }
+
+  const steps = s.steps
+  const running = steps.find((st) => st.status === 'running')
+  const anyBlocked = steps.some((st) => st.status === 'blocked')
+  const allDone = steps.length > 0 && steps.every((st) => st.status === 'done')
+
+  let plannerState = 'idle'
+  let builderState = 'idle'
+  let builderDetail: string | null = null
+  let builderStep: number | null = null
+
+  if (anyBlocked) {
+    const blocked = steps.find((st) => st.status === 'blocked')
+    builderState = 'blocked'
+    builderDetail = (blocked?.desc ?? 'Un paso quedó bloqueado.').slice(0, 120)
+  } else if (steps.length === 0) {
+    plannerState = 'planning'
+  } else if (running) {
+    builderState = 'building'
+    builderDetail = running.desc.slice(0, 120)
+    builderStep = running.id
+  } else if (allDone && s.merged) {
+    builderState = 'deploying'
+    builderDetail = 'Pusheando a main.'
+  } else if (allDone) {
+    builderState = 'verifying'
+    builderDetail = 'Verificando (tsc · lint · tests).'
+  }
+
+  await upsert('orch_presence', [
+    {
+      role: 'planner', model: plannerModel, state: plannerState,
+      feature_id: s.featureId, step_no: null,
+      detail: plannerState === 'planning' ? 'Descomponiendo el spec en pasos.' : null,
+      last_heartbeat: now, updated_at: now,
+    },
+    {
+      role: 'builder', model: builderModel, state: builderState,
+      feature_id: s.featureId, step_no: builderStep, detail: builderDetail,
+      last_heartbeat: now, updated_at: now,
+    },
+  ])
 }
 
 function deriveState(s: OrchestratorState): string {
@@ -144,6 +212,7 @@ async function pushIntakeIdeas(): Promise<void> {
 async function tick(): Promise<void> {
   const s = loadState()
   let featureId = 'idle'
+  await pushPresence(s)
   if (s) {
     featureId = s.featureId
     await upsert('orch_runs', [{

@@ -77,3 +77,19 @@ insert into orch_operator_state (id, mode, response_style) values (1, 'PRODUCT',
 alter table orch_operator_state enable row level security;
 create policy "anon read operator_state"   on orch_operator_state for select to anon using (true);
 create policy "anon update operator_state" on orch_operator_state for update to anon using (id = 1) with check (id = 1);
+
+-- S-015: presencia real de agentes (planner + builder). sync.ts emite un heartbeat cada 5s.
+-- El dashboard detecta cuelgues cuando last_heartbeat supera el umbral de staleness.
+-- Solo el runner (service_role) escribe; el dashboard (anon) solo lee.
+create table if not exists orch_presence (
+  role           text primary key,        -- 'planner' | 'builder'
+  model          text,                    -- 'Opus' | 'Sonnet' | 'DeepSeek' ...
+  state          text,                    -- idle | planning | building | verifying | deploying | blocked
+  feature_id     text,
+  step_no        int,
+  detail         text,                    -- descripción corta del step actual (≤120 chars)
+  last_heartbeat timestamptz default now(),
+  updated_at     timestamptz default now()
+);
+alter table orch_presence enable row level security;
+create policy "anon read presence" on orch_presence for select to anon using (true);

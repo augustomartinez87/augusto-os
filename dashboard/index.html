@@ -41,6 +41,9 @@
   .stage-name{font-size:13px;font-weight:600;color:var(--mut)}
   .stage.on .stage-name{color:var(--txt)}
   .stage-auto{font-size:9px;color:var(--mut2);border:1px solid var(--line);border-radius:5px;padding:0 4px;margin-left:auto;letter-spacing:.5px;text-transform:uppercase}
+  .stage-model{font-size:9px;color:var(--mut2);border:1px solid var(--line);border-radius:5px;padding:0 4px;margin-left:auto;letter-spacing:.5px}
+  .stage.on .stage-model{color:var(--teal);border-color:rgba(47,212,205,.3)}
+  .stage.cuelgue{border-color:rgba(229,97,106,.45)}
   .stage-state{font-size:12px;color:var(--mut2)}
   .stage.on .stage-state{color:var(--teal)}
   .stage.blocked .stage-state{color:var(--coral)}
@@ -229,47 +232,91 @@
     return `<span class="badge ${c}">${t}</span>`;
   }
 
-  // ── EL CORAZÓN: deriva quién tiene la posta a partir de datos reales. Versión mínima
-  //    de la "capa de narración" del manifiesto (evento real → estado legible).
+  // ── Umbrales de staleness (S-015). Supuesto del agente; auditable en DECISIONS.md ADR-0032.
+  const STALE_SEC = 30;    // > 30s sin heartbeat → "sin señal"
+  const CUELGUE_SEC = 120; // > 2 min sin heartbeat + run activo → "posible cuelgue"
+
+  function staleSec(iso){ if(!iso) return Infinity; return Math.floor((Date.now()-new Date(iso).getTime())/1000); }
+
+  const PRESENCE_LABEL = {planning:"planificando",building:"implementando",verifying:"verificando",deploying:"deployando",blocked:"bloqueado"};
+
+  // ── derivePosta: fallback cuando orch_presence está vacío (runner viejo sin S-015).
+  //    También se usa para alimentar el hero y el feed (fuente: orch_runs/orch_steps).
   function derivePosta(run, allSteps){
-    if(!run) return null; // reposo
+    if(!run) return null;
     const sts = (allSteps||[]).filter(s => s.feature_id === run.feature_id).sort((a,b)=>a.step_no-b.step_no);
     const running = sts.find(s => s.status === "running");
     const anyBlocked = sts.some(s => s.status === "blocked");
-
     if(run.state === "blocked" || anyBlocked)
-      return {stage:"builder", state:"blocked", ctx: (running?.descripcion) || "Un paso quedó bloqueado.", since:run.updated_at};
+      return {stage:"builder", state:"blocked", ctx:(running?.descripcion)||"Un paso quedó bloqueado.", since:run.updated_at};
     if(run.state === "waiting" || run.state === "review")
       return {stage:"deploy", state:"waiting", ctx:"Espera tu decisión para avanzar.", since:run.updated_at};
     if(sts.length === 0)
       return {stage:"planner", state:"active", ctx:"Descomponiendo el spec en pasos.", since:run.updated_at};
     if(running)
-      return {stage:"builder", state:"active", ctx:running.descripcion || "Implementando.", since:running.updated_at,
+      return {stage:"builder", state:"active", ctx:running.descripcion||"Implementando.", since:running.updated_at,
               step:run.current_step, total:run.total_steps};
     if(sts.every(s => s.status === "done"))
       return {stage:"deploy", state:"active", ctx:"Release en verde.", since:run.updated_at};
     return {stage:"verifier", state:"active", ctx:"Verificando (tsc · lint · tests).", since:run.updated_at};
   }
 
-  function renderRoster(posta){
+  // ── renderRoster: usa orch_presence como fuente de verdad para planner/builder.
+  //    Para verifier/deploy (auto), lee el estado del builder o cae a derivePosta.
+  //    Detecta liveness: stale>30s→"sin señal", stale>2min+run activo→"posible cuelgue".
+  function renderRoster(posta, presenceMap){
     $("roster").innerHTML = STAGES.map(s=>{
-      const on = posta && posta.stage === s.id;
-      const blocked = on && posta.state === "blocked";
-      const cls = blocked ? "stage blocked" : on ? "stage on" : "stage";
-      let stateTxt, time = "";
-      if(on){
-        stateTxt = posta.state === "blocked" ? "bloqueado"
-                 : posta.state === "waiting" ? "te espera" : "en curso";
-        time = `<div class="stage-time">${timeAgo(posta.since)}</div>`;
+      const pres = presenceMap?.[s.id]; // solo no-null para planner/builder
+      let on=false, blocked=false, cuelgue=false, stale=false;
+      let stateTxt="", time="", modelBadge="";
+
+      if(pres){
+        // Slot con presencia real (planner o builder)
+        const age = staleSec(pres.last_heartbeat);
+        cuelgue = age > CUELGUE_SEC && pres.state !== "idle";
+        stale   = !cuelgue && age > STALE_SEC;
+        if(cuelgue){
+          blocked = true; stateTxt = "posible cuelgue";
+        } else if(stale){
+          stateTxt = "sin señal";
+        } else {
+          on      = pres.state !== "idle" && pres.state !== "blocked";
+          blocked = pres.state === "blocked";
+          stateTxt = PRESENCE_LABEL[pres.state] || (posta ? "en espera" : "en reposo");
+          if((on||blocked) && pres.detail) time = `<div class="stage-time">${esc(pres.detail.slice(0,52))}</div>`;
+        }
+        if(pres.model) modelBadge = `<span class="stage-model">${esc(pres.model)}</span>`;
       } else {
-        stateTxt = posta ? "en espera" : "en reposo";
+        // Slot sin presencia propia: verifier/deploy o runner pre-S-015
+        const bPres = presenceMap?.builder;
+        const bAge  = staleSec(bPres?.last_heartbeat);
+        const bFresh = bPres && bAge <= STALE_SEC;
+        let fromPres = false;
+        if(bFresh){
+          if(s.id==="verifier" && bPres.state==="verifying"){ on=true; fromPres=true; }
+          if(s.id==="deploy"   && bPres.state==="deploying") { on=true; fromPres=true; }
+          if(fromPres && bPres.detail) time=`<div class="stage-time">${esc(bPres.detail.slice(0,52))}</div>`;
+        }
+        if(!fromPres){
+          // caer a derivePosta
+          on      = !!(posta && posta.stage === s.id);
+          if(on){
+            blocked = posta.state === "blocked";
+            stateTxt = blocked ? "bloqueado" : posta.state === "waiting" ? "te espera" : "en curso";
+            time = `<div class="stage-time">${timeAgo(posta.since)}</div>`;
+          }
+        }
+        if(!stateTxt) stateTxt = on ? "en curso" : posta ? "en espera" : "en reposo";
       }
-      const dotColor = blocked ? "var(--coral)" : on ? "var(--teal)" : "var(--mut2)";
-      const dotCls = on && !blocked ? "dot pulse" : "dot";
+
+      if(!stateTxt) stateTxt = posta ? "en espera" : "en reposo";
+      const cls = cuelgue ? "stage cuelgue" : blocked ? "stage blocked" : on ? "stage on" : "stage";
+      const dotColor = (cuelgue||blocked) ? "var(--coral)" : on ? "var(--teal)" : "var(--mut2)";
+      const dotCls   = on && !blocked ? "dot pulse" : "dot";
       return `<div class="${cls}">
         <div class="stage-top"><span class="${dotCls}" style="background:${dotColor}"></span>
           <span class="stage-name">${s.name}</span>
-          ${s.auto ? `<span class="stage-auto">auto</span>` : ``}</div>
+          ${modelBadge}${!modelBadge && s.auto ? `<span class="stage-auto">auto</span>` : ``}</div>
         <div class="stage-state">${stateTxt}</div>${time}</div>`;
     }).join("");
   }
@@ -377,20 +424,25 @@
 
   async function refresh(){
     try{
-      const [runs, steps, logs, ideas, bl, opState] = await Promise.all([
+      const [runs, steps, logs, ideas, bl, opState, presR] = await Promise.all([
         db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
         db.from("orch_steps").select("*"),
         db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(60),
         db.from("orch_ideas").select("text,source,created_at").order("created_at",{ascending:false}).limit(25),
         db.from("orch_backlog").select("*"),
         db.from("orch_operator_state").select("mode").eq("id", 1).maybeSingle(),
+        db.from("orch_presence").select("*"),
       ]);
       const allRuns = runs.data || [];
       const allSteps = steps.data || [];
       const live = allRuns.find(r => r.state !== "done");
       const posta = derivePosta(live, allSteps);
 
-      renderRoster(posta);
+      // presenceMap: { planner: {...}, builder: {...} } — null si la tabla no existe o está vacía
+      const presRows = presR.data || [];
+      const presenceMap = presRows.length ? presRows.reduce((m,r)=>({...m,[r.role]:r}),{}) : null;
+
+      renderRoster(posta, presenceMap);
       renderHero(live, posta);
       renderFeed(allRuns, allSteps);
       renderBacklog(bl.data || []);
