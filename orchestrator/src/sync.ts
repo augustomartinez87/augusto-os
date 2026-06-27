@@ -1,11 +1,12 @@
 // src/sync.ts — S-007 Fase A: espeja el estado del loop a Supabase (control plane).
 // Sin dependencias: usa fetch contra la REST API (PostgREST) de Supabase.
 // Degradación total: si faltan SUPABASE_URL/SERVICE_KEY, no-op. Correr con `npm run sync`.
-import { readFileSync, existsSync, appendFileSync, readdirSync } from 'fs'
+import { readFileSync, existsSync, appendFileSync, readdirSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { loadState, type OrchestratorState } from './state.js'
 import { log } from './limits.js'
+import { getOperatorState } from './operator-state.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -13,6 +14,7 @@ const SYSTEM_DIR = path.join(__dirname, '..', '..', 'system')
 const LOG_FILE = path.join(ORCH_DIR, 'orchestrator.log')
 const INTAKE = path.join(SYSTEM_DIR, 'FEATURE-INTAKE.md')
 const BACKLOG = path.join(SYSTEM_DIR, 'BACKLOG.md')
+const OPERATOR_STATE_YAML = path.join(SYSTEM_DIR, 'OPERATOR_STATE.yaml')
 
 const URL = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_KEY
@@ -71,6 +73,35 @@ async function pullWebIdeas(): Promise<void> {
     appendFileSync(INTAKE, `\n- [${i.created_at}] (web) ${i.text}`, 'utf-8')
     log(`[sync] idea desde la web → FEATURE-INTAKE.md`)
   }
+}
+
+// Escribe OPERATOR_STATE.yaml preservando formato y comentarios originales.
+function writeOperatorStateYaml(mode: string, responseStyle: string): void {
+  const content =
+    `mode: ${mode}        # PRODUCT | OFFICE | SLEEP\n` +
+    `available_for_questions: true\n` +
+    `response_style: ${responseStyle}   # normal | short\n` +
+    `\n` +
+    `# PRODUCT: el sistema puede hacer preguntas abiertas\n` +
+    `# OFFICE:  solo preguntas Sí/No o A/B/C\n` +
+    `# SLEEP:   no bloquea, registra pendientes y sigue (loops nocturnos)\n` +
+    `#\n` +
+    `# Fase 1: el loop lee este archivo y loguea el modo al iniciar.\n` +
+    `# El gating por modo (cuándo interrumpir, cuándo seguir solo) se implementa en Fase 2.\n`
+  writeFileSync(OPERATOR_STATE_YAML, content, 'utf-8')
+}
+
+let seenOperatorUpdatedAt: string | null = null
+async function pullOperatorState(): Promise<void> {
+  const rows = await rest('GET', 'orch_operator_state?id=eq.1&select=mode,response_style,updated_at')
+  const row = (rows ?? [])[0]
+  if (!row) return
+  if (row.updated_at === seenOperatorUpdatedAt) return
+  seenOperatorUpdatedAt = row.updated_at
+  const current = getOperatorState(OPERATOR_STATE_YAML)
+  if (row.mode === current.mode && row.response_style === current.responseStyle) return
+  writeOperatorStateYaml(row.mode, row.response_style)
+  log(`[sync] OPERATOR_STATE actualizado: mode=${row.mode} response_style=${row.response_style}`)
 }
 
 // Parsea system/BACKLOG.md (tablas markdown por sección) → filas para orch_backlog.
@@ -138,6 +169,7 @@ async function tick(): Promise<void> {
   await pushLogTail(featureId)
   await pushIntakeIdeas()
   await pullWebIdeas()
+  await pullOperatorState()
 }
 
 async function run(): Promise<void> {
