@@ -7,6 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { loadState, saveState } from './state.js'
 import { log } from './limits.js'
+import { getOperatorState, type OperatorMode, type ResponseStyle, type OperatorState } from './operator-state.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INBOX = path.join(__dirname, '..', '..', 'system', 'FEATURE-INTAKE.md')
@@ -30,12 +31,62 @@ function allowed(id: unknown): boolean {
   return CHAT_ID != null && CHAT_ID !== '' && String(id) === String(CHAT_ID)
 }
 
+// ── Internal helpers ───────────────────────────────────────────────────────────
+
+type SendFn = typeof tg
+
+// Injected only in tests: overrides getOperatorState and the transport layer.
+interface TgDeps {
+  getState?: () => OperatorState
+  send?: SendFn
+  chatId?: string
+}
+
+function pickText(full: string, short: string, mode: OperatorMode, style: ResponseStyle): string {
+  return mode === 'OFFICE' && style === 'short' ? short : full
+}
+
+/** Sends text with retry. Accepts optional test deps to inject send/chatId. */
+async function tgSendRetry(text: string, deps?: Pick<TgDeps, 'send' | 'chatId'>): Promise<void> {
+  if (!deps?.send && (!API || !CHAT_ID)) return
+  const send = deps?.send ?? tg
+  const chatId = deps?.chatId ?? CHAT_ID
+  const body = { chat_id: chatId!, text }
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const r = await send('sendMessage', body)
+      if (r?.ok) return
+    } catch (e) {
+      log(`[telegram] intento ${attempt}/5 de avisar falló: ${(e as Error).message}`)
+    }
+    await new Promise((res) => setTimeout(res, 2000))
+  }
+  log('[telegram] no se pudo enviar el aviso tras 5 intentos.')
+}
+
+// ── Public notification functions ──────────────────────────────────────────────
+
 /** Llamado por gates.ts cuando el loop pausa en un gate humano. No-op si no hay credenciales. */
-export async function notifyGate(detail: string, featureId: string): Promise<void> {
-  if (!API || !CHAT_ID) return
+export async function notifyGate(detail: string, featureId: string, _deps?: TgDeps): Promise<void> {
+  const { mode, responseStyle } = (_deps?.getState ?? getOperatorState)()
+
+  if (mode === 'SLEEP') {
+    log(`[telegram] SLEEP — notificación suprimida: gate ${featureId}`)
+    return
+  }
+
+  if (!_deps?.send && (!API || !CHAT_ID)) return
+
+  const send = _deps?.send ?? tg
+  const chatId = _deps?.chatId ?? CHAT_ID
+
+  const fullText = `🔔 Gate de *${featureId}*\n\n${detail}`
+  const shortText = `🔔 Gate *${featureId}* — ${detail.split('\n')[0]}`
+  const text = pickText(fullText, shortText, mode, responseStyle)
+
   const body = {
-    chat_id: CHAT_ID,
-    text: `🔔 Gate de *${featureId}*\n\n${detail}`,
+    chat_id: chatId!,
+    text,
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [[
@@ -48,7 +99,7 @@ export async function notifyGate(detail: string, featureId: string): Promise<voi
   // reintenta ante cortes de red transitorios en vez de perderse en el primer fallo.
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      const r = await tg('sendMessage', body)
+      const r = await send('sendMessage', body)
       if (r?.ok) return
     } catch (e) {
       log(`[telegram] intento ${attempt}/5 de avisar el gate falló: ${(e as Error).message}`)
@@ -58,31 +109,33 @@ export async function notifyGate(detail: string, featureId: string): Promise<voi
   log('[telegram] no se pudo avisar el gate tras 5 intentos — usá `npm run approve` para este.')
 }
 
-/** Envía un mensaje de texto plano con reintento (sin parse_mode, para no romper con caracteres del error). */
-async function tgSendRetry(text: string): Promise<void> {
-  if (!API || !CHAT_ID) return
-  const body = { chat_id: CHAT_ID, text }
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      const r = await tg('sendMessage', body)
-      if (r?.ok) return
-    } catch (e) {
-      log(`[telegram] intento ${attempt}/5 de avisar falló: ${(e as Error).message}`)
-    }
-    await new Promise((res) => setTimeout(res, 2000))
-  }
-  log('[telegram] no se pudo enviar el aviso tras 5 intentos.')
-}
-
 /** Aviso de deploy exitoso a prod (auto-deploy en verde). */
-export async function notifyDeployed(featureId: string, tnaNote?: string): Promise<void> {
-  await tgSendRetry(`✅ ${featureId} deployado a prod.\nVerificación OK: typecheck + lint + tests + build.${tnaNote ? `\n${tnaNote}` : ''}`)
+export async function notifyDeployed(featureId: string, tnaNote?: string, _deps?: TgDeps): Promise<void> {
+  const { mode, responseStyle } = (_deps?.getState ?? getOperatorState)()
+
+  if (mode === 'SLEEP') {
+    log(`[telegram] SLEEP — notificación suprimida: deployed ${featureId}`)
+    return
+  }
+
+  const full = `✅ ${featureId} deployado a prod.\nVerificación OK: typecheck + lint + tests + build.${tnaNote ? `\n${tnaNote}` : ''}`
+  const short = `✅ ${featureId} deployado`
+  await tgSendRetry(pickText(full, short, mode, responseStyle), _deps)
 }
 
 /** Aviso de release fallido — NO se deployó. Manda el error para debuggear. */
-export async function notifyReleaseFailed(featureId: string, errors: string): Promise<void> {
+export async function notifyReleaseFailed(featureId: string, errors: string, _deps?: TgDeps): Promise<void> {
+  const { mode, responseStyle } = (_deps?.getState ?? getOperatorState)()
+
+  if (mode === 'SLEEP') {
+    log(`[telegram] SLEEP — notificación suprimida: release failed ${featureId}`)
+    return
+  }
+
   const clip = errors.length > 1400 ? errors.slice(0, 1400) + '…' : errors
-  await tgSendRetry(`❌ ${featureId} NO se deployó — falló la verificación:\n\n${clip}\n\nRevisalo conmigo o con quien corresponda.`)
+  const full = `❌ ${featureId} NO se deployó — falló la verificación:\n\n${clip}\n\nRevisalo conmigo o con quien corresponda.`
+  const short = `❌ ${featureId} NO se deployó`
+  await tgSendRetry(pickText(full, short, mode, responseStyle), _deps)
 }
 
 /** Limpia el gate en STATE.json — equivalente a `npm run approve`. El loop (que pollea STATE) reanuda solo. */
