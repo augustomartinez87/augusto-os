@@ -26,8 +26,8 @@ export const RISK_KEYWORDS = [
   'migración', 'migracion', 'migrate', 'deploy a prod', 'dinero real', 'cuenta real', 'transferencia',
 ]
 
+// Only Pipeline-1 targets. 'Sistema' is Pipeline-2 (self-modification) — never eligible here.
 const SECTION_TARGET_MAP: Record<string, string> = {
-  Sistema: 'sistema',
   Kredy: 'kredy',
   Spensiv: 'spensiv',
   Argos: 'argos',
@@ -71,6 +71,10 @@ export function parseEligibleBacklog(backlogPath = DEFAULT_BACKLOG_PATH): Backlo
     // State must be exactly 'pending' (case-insensitive, trimmed) — nothing else
     if (c[4].trim().toLowerCase() !== 'pending') continue
 
+    // Skip sections that belong to Pipeline 2 (Sistema) or any unknown section
+    const target = SECTION_TARGET_MAP[project]
+    if (!target) continue
+
     // Risk keyword denylist (against the full raw line)
     const llower = ln.toLowerCase()
     if (RISK_KEYWORDS.some(kw => llower.includes(kw.toLowerCase()))) continue
@@ -80,7 +84,6 @@ export function parseEligibleBacklog(backlogPath = DEFAULT_BACKLOG_PATH): Backlo
     let label = (bold ? bold[1] : desc).replace(/[*`]/g, '')
     label = label.split(/\s[—–-]\s| \(/)[0].trim()
 
-    const target = SECTION_TARGET_MAP[project] ?? 'sistema'
     rows.push({ id, project, target, priority, label, fullLine: ln, state: c[4].trim() })
   }
 
@@ -250,6 +253,10 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
   }
 
   // Lock is held from here — always release in finally
+  let marked = false
+  let pickedBacklogId: string | null = null
+  let pickedFeatureId: string | null = null
+
   try {
     // 5. Find eligible item
     const picks = parseEligibleBacklog(opts?.backlogPath)
@@ -263,10 +270,15 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     }
 
     const pick = picks[0]
+    pickedBacklogId = pick.id  // captured here so catch can revert even if markBacklogState throws
 
-    // 6. Mark as in-progress immediately (prevents re-pick in the window between lock-release and STATE.json creation)
+    // 6. Mark as in-progress and count the attempt atomically — before any async step.
+    //    Both happen together so that every attempt (success or failure) counts exactly once
+    //    against the daily cap, preventing runaway on repeated Architect failures.
     const isoNow = new Date().toISOString()
     markBacklogState(pick.id, `armado (autopilot) ${isoNow}`, opts?.backlogPath)
+    marked = true
+    incrementCounter(counterPath)
 
     // 7. Intake + Architect (no LLM for picking — both steps are injectable for tests)
     const intakeFn = opts?.runIntakeFn ?? runIntake
@@ -276,6 +288,7 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     const architectFn = opts?.runArchitectFn ?? runArchitect
     const featureFilePath = await architectFn(intake)
     const featureId = path.basename(featureFilePath, '.md')
+    pickedFeatureId = featureId  // captured so catch can clean up the map entry
 
     // 8. Record mapping featureId → backlogId for post-release cleanup
     recordPick(featureId, pick.id, mapPath)
@@ -306,14 +319,22 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     const spawnFn = opts?.spawnLoop ?? defaultSpawnLoop
     spawnFn(featureId)
 
-    // 11. Commit counter and release lock
-    incrementCounter(counterPath)
+    // 11. Release lock (counter already incremented in step 6)
     releaseLock(lockPath)
 
     log(`[autopilot] SLEEP — arrancó ${featureId} desde ${pick.id} sin intervención.`)
     return { featureId, backlogId: pick.id }
   } catch (e) {
     log(`[autopilot] error durante pick: ${(e as Error).message}`)
+    // Revert the backlog row to a distinguishable failure state so it's not re-picked
+    // and the operator can see what happened when they return.
+    if (marked && pickedBacklogId) {
+      markBacklogState(pickedBacklogId, `failed (autopilot) ${new Date().toISOString()}`, opts?.backlogPath)
+    }
+    // Remove dead map entry if the pick was partially committed
+    if (pickedFeatureId) {
+      clearPick(pickedFeatureId, mapPath)
+    }
     return null
   } finally {
     releaseLock(lockPath)  // idempotent — no-op if already released in step 11

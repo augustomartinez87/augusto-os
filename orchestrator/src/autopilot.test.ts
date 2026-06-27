@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from 'fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import {
@@ -19,6 +19,8 @@ import {
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+// Sistema items are Pipeline-2 scope — must NEVER be eligible for Pipeline-1 spawns.
+// Kredy/Spensiv/Argos are Pipeline-1 targets.
 const BACKLOG_FIXTURE = `# Backlog — test
 
 ## Sistema
@@ -27,10 +29,10 @@ const BACKLOG_FIXTURE = `# Backlog — test
 |----|---|-------------|--------|
 | S-001 | 1 | **Item de alta prioridad** — prioridad 1, excluido | pending |
 | S-002 | ✅ | **Item completado** | done 2026-06-01 |
-| S-003 | 2 | **Item P2 elegible** — feature limpia | pending |
+| S-003 | 2 | **Item P2 Sistema** — Pipeline 2, nunca elegible | pending |
 | S-004 | 3 | **Item con mutuo** — toca mutuo y dinero | pending |
-| S-005 | 2 | **Otro item P2** — segunda opción | pending |
-| S-006 | 4 | **Item P4 limpio** | pending |
+| S-005 | 2 | **Otro item P2 Sistema** | pending |
+| S-006 | 4 | **Item P4 Sistema limpio** | pending |
 | S-007 | 2 | **Item waiting** — en espera | waiting |
 | S-008 | 2 | **Item blocked** — bloqueado | blocked |
 | S-009 | 2 | **Item done** — ya terminado | done 2026-06-20 |
@@ -48,6 +50,12 @@ const BACKLOG_FIXTURE = `# Backlog — test
 | ID | P | Descripción | Estado |
 |----|---|-------------|--------|
 | SP-001 | 3 | **Seed data Spensiv** | pending |
+
+## Argos
+
+| ID | P | Descripción | Estado |
+|----|---|-------------|--------|
+| AR-001 | 4 | **Feature Argos P4** | pending |
 `
 
 const SLEEP_YAML = `mode: SLEEP
@@ -108,19 +116,45 @@ describe('parseEligibleBacklog', () => {
     expect(rows.map(r => r.id)).not.toContain('S-010')
   })
 
-  it('excludes items with risk keywords in the line', () => {
+  it('excludes items with state "failed (autopilot) ..." (not pending)', () => {
+    const custom = BACKLOG_FIXTURE.replace(
+      '| KR-001 | 2 | **Feature Kredy limpia** | pending |',
+      '| KR-001 | 2 | **Feature Kredy limpia** | failed (autopilot) 2026-06-27T00:00:00.000Z |',
+    )
+    writeFileSync(backlogPath, custom, 'utf-8')
     const rows = parseEligibleBacklog(backlogPath)
-    expect(rows.map(r => r.id)).not.toContain('S-004')  // contains 'mutuo'
-    expect(rows.map(r => r.id)).not.toContain('KR-002') // contains 'producción'/'deploy a prod'
+    expect(rows.map(r => r.id)).not.toContain('KR-001')
   })
 
-  it('includes P2+ pending items without risk keywords', () => {
+  it('excludes items with risk keywords in the line', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    expect(rows.map(r => r.id)).not.toContain('S-004')   // 'mutuo'
+    expect(rows.map(r => r.id)).not.toContain('KR-002')  // 'deploy a prod'
+  })
+
+  // Bug A: Sistema is Pipeline-2 — all its items must be excluded regardless of priority/state
+  it('excludes ALL items from the Sistema section (Pipeline-2 scope)', () => {
     const rows = parseEligibleBacklog(backlogPath)
     const ids = rows.map(r => r.id)
-    expect(ids).toContain('S-003')
-    expect(ids).toContain('S-005')
+    expect(ids).not.toContain('S-003')  // P2 pending — would have been eligible before the fix
+    expect(ids).not.toContain('S-005')  // P2 pending — same
+    expect(ids).not.toContain('S-006')  // P4 pending — same
+  })
+
+  it('no resulting target is "sistema"', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    expect(rows.every(r => r.target !== 'sistema')).toBe(true)
+  })
+
+  it('includes P2+ pending items from Pipeline-1 sections without risk keywords', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    const ids = rows.map(r => r.id)
     expect(ids).toContain('KR-001')
     expect(ids).toContain('SP-001')
+    expect(ids).toContain('AR-001')
+    // Sistema items must NOT be included even though they look eligible
+    expect(ids).not.toContain('S-003')
+    expect(ids).not.toContain('S-005')
   })
 
   it('sorts by priority ascending', () => {
@@ -128,7 +162,7 @@ describe('parseEligibleBacklog', () => {
     for (let i = 1; i < rows.length; i++) {
       expect(rows[i].priority).toBeGreaterThanOrEqual(rows[i - 1].priority)
     }
-    // P2 items come before P3 and P4
+    // KR-001 (P2) before SP-001 (P3) before AR-001 (P4)
     const p2 = rows.filter(r => r.priority === 2)
     const p3 = rows.filter(r => r.priority === 3)
     const p4 = rows.filter(r => r.priority === 4)
@@ -138,18 +172,18 @@ describe('parseEligibleBacklog', () => {
 
   it('assigns correct target from section', () => {
     const rows = parseEligibleBacklog(backlogPath)
-    const s003 = rows.find(r => r.id === 'S-003')
     const kr001 = rows.find(r => r.id === 'KR-001')
     const sp001 = rows.find(r => r.id === 'SP-001')
-    expect(s003?.target).toBe('sistema')
+    const ar001 = rows.find(r => r.id === 'AR-001')
     expect(kr001?.target).toBe('kredy')
     expect(sp001?.target).toBe('spensiv')
+    expect(ar001?.target).toBe('argos')
   })
 
   it('RISK_KEYWORDS export is non-empty and case-insensitive checks work', () => {
     expect(RISK_KEYWORDS.length).toBeGreaterThan(0)
-    // 'Dinero' (capitalized) should also be caught if the backlog line has it
-    const custom = `## Sistema\n| ID | P | Descripción | Estado |\n|----|---|-------------|--------|\n| X-001 | 2 | Manejar Dinero real | pending |\n`
+    // Risk keyword on a Kredy row (valid section) still excluded
+    const custom = `## Kredy\n| ID | P | Descripción | Estado |\n|----|---|-------------|--------|\n| KR-099 | 2 | Manejar Dinero real | pending |\n`
     const tmpFile = path.join(tmpDir, 'custom.md')
     writeFileSync(tmpFile, custom, 'utf-8')
     expect(parseEligibleBacklog(tmpFile)).toHaveLength(0)
@@ -171,37 +205,36 @@ describe('markBacklogState', () => {
   afterEach(() => { rmSync(tmpDir, { recursive: true }) })
 
   it('changes the state column for the matching ID', () => {
-    markBacklogState('S-003', 'armado (autopilot) 2026-06-26T00:00:00.000Z', backlogPath)
-    const content = require('fs').readFileSync(backlogPath, 'utf-8')
-    expect(content).toContain('armado (autopilot) 2026-06-26T00:00:00.000Z')
+    markBacklogState('KR-001', 'armado (autopilot) 2026-06-27T00:00:00.000Z', backlogPath)
+    const content = readFileSync(backlogPath, 'utf-8')
+    expect(content).toContain('armado (autopilot) 2026-06-27T00:00:00.000Z')
   })
 
   it('does not change other rows', () => {
-    markBacklogState('S-003', 'done 2026-06-26 (autopilot)', backlogPath)
-    const { readFileSync: rfs } = require('fs')
-    const lines = rfs(backlogPath, 'utf-8').split('\n')
-    const s005line = lines.find((l: string) => l.includes('S-005'))
-    expect(s005line).toContain('pending')
+    markBacklogState('KR-001', 'done 2026-06-27 (autopilot)', backlogPath)
+    const lines = readFileSync(backlogPath, 'utf-8').split('\n')
+    const sp001line = lines.find(l => l.includes('SP-001'))
+    expect(sp001line).toContain('pending')
   })
 
   it('no-op when ID does not exist', () => {
-    const before = require('fs').readFileSync(backlogPath, 'utf-8')
+    const before = readFileSync(backlogPath, 'utf-8')
     markBacklogState('NONEXISTENT-999', 'done', backlogPath)
-    const after = require('fs').readFileSync(backlogPath, 'utf-8')
+    const after = readFileSync(backlogPath, 'utf-8')
     expect(after).toBe(before)
   })
 
   it('is idempotent when called twice with same state', () => {
-    markBacklogState('S-003', 'done 2026-06-26 (autopilot)', backlogPath)
-    markBacklogState('S-003', 'done 2026-06-26 (autopilot)', backlogPath)
-    const content = require('fs').readFileSync(backlogPath, 'utf-8')
-    const count = (content.match(/done 2026-06-26 \(autopilot\)/g) ?? []).length
+    markBacklogState('KR-001', 'done 2026-06-27 (autopilot)', backlogPath)
+    markBacklogState('KR-001', 'done 2026-06-27 (autopilot)', backlogPath)
+    const content = readFileSync(backlogPath, 'utf-8')
+    const count = (content.match(/done 2026-06-27 \(autopilot\)/g) ?? []).length
     expect(count).toBe(1)
   })
 
   it('does not break non-table lines', () => {
-    markBacklogState('S-003', 'done', backlogPath)
-    const content = require('fs').readFileSync(backlogPath, 'utf-8')
+    markBacklogState('KR-001', 'done', backlogPath)
+    const content = readFileSync(backlogPath, 'utf-8')
     expect(content).toContain('# Backlog — test')
     expect(content).toContain('## Sistema')
   })
@@ -284,7 +317,7 @@ describe('canTriggerToday / incrementCounter', () => {
 
   it('incrementCounter creates file on first call', () => {
     incrementCounter(counterPath)
-    const c = JSON.parse(require('fs').readFileSync(counterPath, 'utf-8'))
+    const c = JSON.parse(readFileSync(counterPath, 'utf-8'))
     expect(c.count).toBe(1)
     expect(c.date).toBe(new Date().toISOString().split('T')[0])
   })
@@ -293,14 +326,14 @@ describe('canTriggerToday / incrementCounter', () => {
     incrementCounter(counterPath)
     incrementCounter(counterPath)
     incrementCounter(counterPath)
-    const c = JSON.parse(require('fs').readFileSync(counterPath, 'utf-8'))
+    const c = JSON.parse(readFileSync(counterPath, 'utf-8'))
     expect(c.count).toBe(3)
   })
 
   it('incrementCounter resets when date changes', () => {
     writeFileSync(counterPath, JSON.stringify({ date: '1999-12-31', count: 99 }), 'utf-8')
     incrementCounter(counterPath)
-    const c = JSON.parse(require('fs').readFileSync(counterPath, 'utf-8'))
+    const c = JSON.parse(readFileSync(counterPath, 'utf-8'))
     expect(c.count).toBe(1)
     expect(c.date).toBe(new Date().toISOString().split('T')[0])
   })
@@ -320,12 +353,12 @@ describe('tryAutopilotPick', () => {
 
   const mockIntake = (text: string) => ({
     ideaText: text,
-    target: 'sistema' as const,
+    target: 'sistema' as const,  // overridden in tryAutopilotPick by pick.target
     classification: 'feature' as const,
     relatedAdrs: [],
     relatedFeatures: [],
     relatedBacklogIds: [],
-    contextSummary: 'Target: sistema | Clasificación: feature',
+    contextSummary: 'Target: kredy | Clasificación: feature',
     needsArchitect: true,
   })
 
@@ -386,19 +419,33 @@ describe('tryAutopilotPick', () => {
     expect(result).toBeNull()
   })
 
+  // Bug A: first pick must come from Kredy/Spensiv/Argos — never from Sistema
+  it('first pick is from Pipeline-1 sections (Kredy/Spensiv/Argos), never from Sistema', async () => {
+    const result = await tryAutopilotPick(baseOpts())
+    expect(result).not.toBeNull()
+    // KR-001 is the first P2 pending item in a Pipeline-1 section
+    expect(result?.backlogId).toBe('KR-001')
+    // Sistema rows must be untouched
+    const content = readFileSync(backlogPath, 'utf-8')
+    expect(content).toContain('| S-003 | 2 | **Item P2 Sistema**')
+    const s003line = content.split('\n').find(l => l.includes('S-003'))
+    expect(s003line).toContain('pending')
+  })
+
   it('successful pick: marks first eligible item as "armado" in backlog', async () => {
     await tryAutopilotPick(baseOpts())
-    const content = require('fs').readFileSync(backlogPath, 'utf-8')
-    // S-003 is the first P2 pending item (note: S-004 is P2 but has 'mutuo'; S-005 is P2 clean)
-    // Actually from the fixture, S-003 is P2 clean so it should be first
+    const content = readFileSync(backlogPath, 'utf-8')
     expect(content).toMatch(/armado \(autopilot\)/)
+    // The marked item is KR-001, not any Sistema item
+    const kr001line = content.split('\n').find(l => l.includes('KR-001'))
+    expect(kr001line).toMatch(/armado \(autopilot\)/)
   })
 
   it('successful pick: returns featureId and backlogId', async () => {
     const result = await tryAutopilotPick(baseOpts())
     expect(result).not.toBeNull()
     expect(result?.featureId).toBe('F-0099')
-    expect(result?.backlogId).toBeTruthy()
+    expect(result?.backlogId).toBe('KR-001')
   })
 
   it('successful pick: records featureId→backlogId in the map', async () => {
@@ -428,16 +475,70 @@ describe('tryAutopilotPick', () => {
 
   it('writes the autopilot ADR if not already in DECISIONS.md', async () => {
     await tryAutopilotPick(baseOpts())
-    const content = require('fs').readFileSync(decisionsPath, 'utf-8')
+    const content = readFileSync(decisionsPath, 'utf-8')
     expect(content.toLowerCase()).toContain('loops nocturnos')
   })
 
   it('does not write the ADR twice if already present', async () => {
     writeFileSync(decisionsPath, '# ADR\n## ADR-0001 · loops nocturnos\ndone\n', 'utf-8')
     await tryAutopilotPick(baseOpts())
-    const content = require('fs').readFileSync(decisionsPath, 'utf-8')
+    const content = readFileSync(decisionsPath, 'utf-8')
     const count = (content.toLowerCase().match(/loops nocturnos/g) ?? []).length
     expect(count).toBe(1)
+  })
+
+  // Bug B fix — test (a): fallo post-marca verifica los tres invariantes
+  it('fallo post-marca: row queda "failed", counter sube, lock liberado', async () => {
+    const opts = {
+      ...baseOpts(),
+      runArchitectFn: async () => { throw new Error('Opus timeout') },
+    }
+    const result = await tryAutopilotPick(opts)
+
+    // tryAutopilotPick devuelve null
+    expect(result).toBeNull()
+
+    // La fila fue marcada 'failed (autopilot) ...' — no 'armado', no 'pending'
+    const content = readFileSync(backlogPath, 'utf-8')
+    const kr001line = content.split('\n').find(l => l.includes('KR-001'))
+    expect(kr001line).toMatch(/failed \(autopilot\)/)
+    expect(kr001line).not.toMatch(/armado/)
+    expect(kr001line).not.toContain('pending')
+
+    // El contador subió (1 intento consumido del cap)
+    const c = JSON.parse(readFileSync(counterPath, 'utf-8'))
+    expect(c.count).toBe(1)
+
+    // El lock fue liberado
+    expect(existsSync(lockPath)).toBe(false)
+  })
+
+  // Bug B fix — test (b): dos fallos consecutivos consumen 2 del cap (no runaway)
+  it('dos fallos consecutivos de Architect consumen 2 del cap diario', async () => {
+    const failingArch = async () => { throw new Error('timeout') }
+    // Primera llamada: falla en KR-001 → queda 'failed', counter=1
+    await tryAutopilotPick({ ...baseOpts(), runArchitectFn: failingArch })
+    // Segunda llamada: KR-001 ya no es 'pending' → toma SP-001, falla → counter=2
+    await tryAutopilotPick({ ...baseOpts(), runArchitectFn: failingArch })
+
+    const c = JSON.parse(readFileSync(counterPath, 'utf-8'))
+    expect(c.count).toBe(2)
+
+    // Con cap=2 ya no puede triggerear
+    expect(canTriggerToday(2, counterPath)).toBe(false)
+    // Con cap=5 (default) todavía puede (3 restantes)
+    expect(canTriggerToday(5, counterPath)).toBe(true)
+  })
+
+  it('fallo en Architect no deja entrada muerta en el map', async () => {
+    const opts = {
+      ...baseOpts(),
+      runArchitectFn: async () => { throw new Error('timeout') },
+    }
+    await tryAutopilotPick(opts)
+    // No debe haber ninguna entrada en el map (no llegó a hacer recordPick)
+    const mapContent = existsSync(mapPath) ? JSON.parse(readFileSync(mapPath, 'utf-8')) : {}
+    expect(Object.keys(mapContent)).toHaveLength(0)
   })
 
   it('releases lock even if architect throws', async () => {
@@ -458,6 +559,7 @@ describe('tryAutopilotPick', () => {
   })
 
   it('returns null and does not throw when backlog is empty of eligible items', async () => {
+    // Only a P1 Sistema item — excluded by both section filter and priority filter
     writeFileSync(backlogPath, '## Sistema\n| ID | P | Descripción | Estado |\n|----|---|-------------|--------|\n| S-001 | 1 | foo | pending |\n', 'utf-8')
     const result = await tryAutopilotPick(baseOpts())
     expect(result).toBeNull()
