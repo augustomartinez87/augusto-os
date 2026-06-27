@@ -60,11 +60,33 @@ idea → backlog → active → done   (auto-deploy en verde, sin gate humano)
 
 5. **Output para Augusto.** Al terminar una feature, el veredicto en castellano debe listar los ADR nuevos con su Origen, resaltando los `Supuesto del agente` para review rápida.
 
-**Estado de implementación:** spec, no implementado. Es el ítem **S-009** del backlog (toca `planner.ts`/`executor.ts`: agregar al prompt la instrucción de emitir ADR + un helper `appendAdr()` que asigne el próximo ID y escriba en `DECISIONS.md`). Va por Claude Code.
+**Estado de implementación:** implementado — S-009 done 2026-06-25. `appendAdr()` + `parseAdrBlocks()` viven en `orchestrator/src/adr.ts`; `executor.ts` llama a `parseAdrBlocks` sobre el output de cada step; `index.ts` llama a `appendAdr` al cerrar el step; `autopilot.ts` lo usa para el ADR del picking nocturno. 13 tests verdes en `adr.test.ts`.
 
 ---
 
-## 3. Portabilidad de modelo (por qué importa el punto 2)
+---
+
+## 3. Regla de IDs (append-only)
+
+Los IDs de work-items (`S-XXX` sistema · `F-XXXX` features · `SP-XXX` Kredy · `SPT-XXX` Spensiv · `AR-XXX` Argos) son **append-only**:
+
+- **Nunca se reusan ni se renumeran.** Un ID asignado es inmutable aunque el ítem se descarte.
+- Un ítem nuevo toma siempre el **próximo ID libre** (max(IDs existentes) + 1).
+- Los IDs "saltados" son huecos documentados; no se rellenan retroactivamente.
+
+**Motivación:** S-022 fue reasignado de "rotación de logs" a "Dashboard Operaciones" (commit `e79e7ee`, 2026-06-27) y el ítem original fue renumerado a S-025. Eso crea referencias rotas en git. Esta regla previene futuros accidentes equivalentes.
+
+**Huecos conocidos:** S-011 y S-012 no fueron asignados en el período 2026-06-19 a 2026-06-25 (la secuencia S-010 → S-013 los saltó sin documentar). Se mantienen como huecos permanentes.
+
+**Mapeo de colisión histórica (resuelto en S-026, 2026-06-27):**
+- `S-022 (original)` = "Rotación/retención de logs" → ahora `S-025` (pending)
+- `S-022 (actual)` = "Dashboard → vista Operaciones" → done 2026-06-27
+
+Si una referencia antigua cita "S-022 (rotación de logs)", apunta a lo que hoy es **S-025**.
+
+---
+
+## 4. Portabilidad de modelo (por qué importa el punto 2)
 
 El diseño separa **rol** (Planner, Builder/Executor, Verifier, Reviewer) de **modelo** (hoy Opus para planificar, Sonnet headless para ejecutar). La memoria del sistema —ADR, BACKLOG, PROGRESS, CONVENTIONS— es texto plano, sin dependencia del modelo. Esto permite:
 - Swapear el modelo de un rol (ej. Builder → Llama local) sin perder contexto: el modelo nuevo lee `system/` y retoma.

@@ -27,7 +27,7 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | S-020 | ✅ | **Builder ve restricciones del spec** — pasar "Fuera de alcance" + "Restricciones clave" del F-XXXX.md al prompt del executor (hoy solo ve `step.desc`). Afecta calidad/cumplimiento de reglas de dominio | done 2026-06-26 (Claude Code) |
 | S-021 | ✅ | **Tests del core** — `state.ts`, `index.ts` (loop), `gates.ts`. Hoy solo existe `adr.test.ts`; el sistema que deploya a prod es el menos testeado | done 2026-06-26 (Claude Code) |
 | S-022 | ✅ | **Dashboard → vista Operaciones** (rediseño de IA: roster honesto de etapas reales, hero "quién tiene la posta", feed de deltas no-logs; preserva ideas/mode/backlog). Fast-follow de S-007/S-015 | done 2026-06-27 (Claude Code) |
-| S-025 | 4 | Rotación/retención de logs (`orchestrator.log`, `blocked.log`, `logs/`, `qa-artifacts/`) — append-only sin límite, riesgo de llenar disco | pending |
+| S-025 | 4 | Rotación/retención de logs (`orchestrator.log`, `blocked.log`, `logs/`, `qa-artifacts/`) — append-only sin límite, riesgo de llenar disco. *(Nota: S-022(old) renombrado a S-025 en commit `e79e7ee`; ver CONVENTIONS §3)* | pending |
 | S-024 | 3 | **Evaluador de posts de X** — pegás un post guardado y el Architect lo juzga contra tu arquitectura real (lee `system/`): ¿ya implementado? / ¿vale la pena + beneficio concreto? / ¿es bait y por qué? Versión free = un prompt/skill; conecta con S-008 | pending |
 | S-023 | 4 | **Closed learning loop** (idea de Hermes) — cuando el loop resuelve un patrón recurrente, auto-generar un spec/template reutilizable para no re-razonar. Evolución del ADR/specs, en NUESTRO sistema (no adoptar Hermes como motor) | pending |
 | S-014 | 2 | **Routing multi-modelo** — Builder barato (DeepSeek V4 vía Claude Code Router) con Opus de Planner; el Verifier cubre el riesgo. Pilot en 1 feature, medir reintentos. Eval en `system/MODEL-ROUTING.md` | pending |
@@ -35,6 +35,7 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | S-013 | ✅ | Guard anti-reejecución (avisa "ya finalizó" + `--force` antes de gastar tokens) + reintento del aviso de gate por Telegram | done 2026-06-25 |
 | S-009 | ✅ | **ADR auto-log** — el loop escribe en DECISIONS.md cada decisión de diseño con su Origen. Helper `appendAdr()` + `parseAdrBlocks` + prompt del executor + idempotencia. 13 tests verdes | done 2026-06-25 (Claude Code) |
 | S-010 | 1 | **Migrar Kredy prod: Supabase → Neon** — unificar todo lo Prisma en Neon (prod + dev). Runbook en `system/MIGRATION-kredy-to-neon.md`. Toca dinero real → ejecuta Augusto con OK explícito | waiting |
+| S-026 | ✅ | **Reconciliación del backlog** — auditoría de estados reales cruzando BACKLOG/PROGRESS/prompts/git; corrección de S-009 en CONVENTIONS.md (era "spec, no implementado", está implementado); nota de mapeo S-022(old)→S-025; regla append-only de IDs (CONVENTIONS §3); huecos S-011/S-012 documentados | done 2026-06-27 (Claude Code) |
 
 ## Kredy [kredy]  (préstamos/crédito — ex "Spensiv", renombrado 2026-06-20)
 

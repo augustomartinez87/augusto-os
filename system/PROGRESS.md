@@ -235,3 +235,16 @@ Rediseño del dashboard (`dashboard/index.html`) de tabs co-iguales a vista Oper
 - Feed de deltas (pasos done + features): log crudo en panel colapsable.
 - Preservado: mode-bar PRODUCT/OFFICE/SLEEP, ideas, backlog, polling 5s.
 - ADR-0031 documentado en DECISIONS.md.
+
+---
+
+## 2026-06-27 — S-026: Reconciliación del backlog [sistema]
+
+Auditoría de higiene del backlog. Sin cambios a código del orquestador.
+
+- **Inventario:** cruzadas fuentes BACKLOG/PROGRESS/system/prompts/DECISIONS/git. Todos los S-XXX identificados y su estado real verificado.
+- **S-009 corregido en CONVENTIONS.md:** la sección "ADR automático" decía "spec, no implementado" — es incorrecto. `appendAdr()` + `parseAdrBlocks()` están en `orchestrator/src/adr.ts`, llamados desde `executor.ts` e `index.ts` desde 2026-06-25. Texto actualizado a "implementado".
+- **Colisión S-022/S-025 resuelta:** S-022 fue reasignado de "rotación de logs" a "Dashboard Operaciones" en commit `e79e7ee`. El BACKLOG ya refleja S-025 = log rotation. Se agrega nota de mapeo `S-022(old)→S-025` en S-025 y en CONVENTIONS §3.
+- **Regla append-only documentada:** nueva sección CONVENTIONS §3 — los IDs son inmutables, nunca se reusan ni renumeran, el próximo ítem toma max(IDs)+1.
+- **Huecos S-011/S-012:** documentados en CONVENTIONS §3 como huecos históricos (la secuencia saltó S-010→S-013 sin asignarlos).
+- **IDs ausentes de cualquier fuente:** ninguno — todos los S-XXX en BACKLOG tienen confirmación de estado real.
