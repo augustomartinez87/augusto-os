@@ -4,126 +4,196 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0E" />
-<title>augusto-os · panel</title>
+<title>augusto-os · operaciones</title>
 <style>
-  :root{--bg:#0A0A0E;--card:#14141B;--line:#23232E;--txt:#E7E7EC;--mut:#8A8A99;--teal:#2FD4CD;--coral:#E5616A;--amber:#E0A23B}
+  :root{
+    --bg:#0A0A0E;--card:#14141B;--card2:#101017;--line:#23232E;--line-soft:#1b1b24;
+    --txt:#E7E7EC;--mut:#8A8A99;--mut2:#5e5e6c;
+    --teal:#2FD4CD;--coral:#E5616A;--amber:#E0A23B
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.45;padding:16px;max-width:780px;margin:0 auto}
-  h1{font-size:17px;font-weight:600;margin:0;letter-spacing:.2px}
-  h2{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin:22px 0 10px}
-  .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
-  .live{font-size:12px;color:var(--mut)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
-  .feat{font-size:16px;font-weight:600}
-  .sub{font-size:13px;color:var(--mut);margin-top:2px}
-  .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.5;padding:24px 18px 40px;max-width:820px;margin:0 auto;-webkit-font-smoothing:antialiased}
+
+  /* ── header ── */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+  .brand{font-size:16px;font-weight:600;letter-spacing:.2px;display:flex;align-items:center;gap:8px}
+  .brand .glyph{width:9px;height:9px;border-radius:2px;background:var(--teal);display:inline-block}
+  .live{font-size:12px;color:var(--mut);display:flex;align-items:center}
+  .subhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 18px}
+  .greet{font-size:13px;color:var(--mut);margin:0}
+
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px;flex:none}
+  .dot.pulse{animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(47,212,205,.35)}50%{opacity:.65;box-shadow:0 0 0 5px rgba(47,212,205,0)}}
+  @keyframes fade{from{opacity:.45}to{opacity:.9}}
+
+  h2{font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:1.4px;margin:0 0 12px}
+
+  /* ── roster strip (presente) ── */
+  .roster{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:30px}
+  .stage{background:var(--card2);border:1px solid var(--line-soft);border-radius:12px;padding:12px 12px 11px;
+    display:flex;flex-direction:column;gap:7px;min-height:74px;transition:border-color .3s,background .3s}
+  .stage.on{background:var(--card);border-color:rgba(47,212,205,.4)}
+  .stage.blocked{border-color:rgba(229,97,106,.45)}
+  .stage-top{display:flex;align-items:center;gap:0}
+  .stage-name{font-size:13px;font-weight:600;color:var(--mut)}
+  .stage.on .stage-name{color:var(--txt)}
+  .stage-auto{font-size:9px;color:var(--mut2);border:1px solid var(--line);border-radius:5px;padding:0 4px;margin-left:auto;letter-spacing:.5px;text-transform:uppercase}
+  .stage-state{font-size:12px;color:var(--mut2)}
+  .stage.on .stage-state{color:var(--teal)}
+  .stage.blocked .stage-state{color:var(--coral)}
+  .stage-time{font-size:11px;color:var(--mut2);margin-top:auto}
+
+  /* ── loop hero ── */
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 24px;margin-bottom:30px}
+  .hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  .hero-fid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--mut);
+    border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .hero-title{font-size:13px;color:var(--mut)}
+  .badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
   .b-now{background:rgba(47,212,205,.15);color:var(--teal)}
   .b-done{background:rgba(138,138,153,.22);color:var(--mut)}
   .b-hold{background:rgba(224,162,59,.16);color:var(--amber)}
-  .b-p1{background:rgba(229,97,106,.16);color:var(--coral)}
-  .steps{margin-top:10px}
-  .step{display:flex;align-items:center;gap:9px;font-size:13px;padding:4px 0;color:var(--mut)}
-  .step b{color:var(--txt);font-weight:400}
-  .s-done{color:var(--teal)}.s-run{color:var(--amber)}.s-blocked{color:var(--coral)}
-  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;padding:7px 0;border-top:1px solid var(--line)}
-  .row:first-child{border-top:none}
-  #log{background:#0c0c12;border:1px solid var(--line);border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--mut);max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word}
-  .tabs{display:flex;gap:6px;margin:16px 0 6px}
-  .tab{flex:1;text-align:center;padding:9px;border-radius:10px;font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);cursor:pointer}
-  .tab.on{color:var(--teal);border-color:var(--teal)}
-  .panel{display:none}.panel.on{display:block}
+  .b-block{background:rgba(229,97,106,.16);color:var(--coral)}
+  .hero-who{font-size:13px;color:var(--mut);margin-bottom:4px}
+  .hero-stage{font-size:30px;font-weight:650;letter-spacing:-.3px;line-height:1.15;margin:0 0 12px;animation:fade .5s ease}
+  .hero-stage .accent{color:var(--teal)}
+  .hero-ctx{font-size:16px;color:var(--txt);line-height:1.5;margin-bottom:16px}
+  .hero-foot{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut)}
+  .hero-foot .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .hero-prog{height:3px;background:var(--line);border-radius:2px;margin-top:18px;overflow:hidden}
+  .hero-prog-bar{height:3px;background:var(--teal);border-radius:2px;transition:width .5s ease}
+  /* reposo */
+  .hero.rest{display:flex;flex-direction:column;align-items:center;text-align:center;padding:48px 24px}
+  .hero.rest .r-title{font-size:22px;font-weight:600;color:var(--txt);margin:14px 0 6px}
+  .hero.rest .r-sub{font-size:14px;color:var(--mut)}
+  .hero.rest .r-dot{width:10px;height:10px;border-radius:50%;background:var(--mut2)}
+
+  /* ── feed (pasado / deltas) ── */
+  .feed-row{display:flex;align-items:baseline;gap:12px;padding:11px 0;border-top:1px solid var(--line-soft);font-size:14px}
+  .feed-row:first-child{border-top:none}
+  .feed-tag{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mut);min-width:64px;flex:none}
+  .feed-tag.builder{color:var(--teal)}
+  .feed-tag.deploy{color:var(--amber)}
+  .feed-txt{flex:1;color:var(--txt)}
+  .feed-when{font-size:12px;color:var(--mut2);flex:none;white-space:nowrap}
+
+  /* ── secondary (segundo plano) ── */
+  .secondary{margin-bottom:28px;border-bottom:1px solid var(--line-soft);padding-bottom:6px}
+  .sec-nav{display:flex;gap:18px;margin-bottom:4px}
+  .sec-link{font-size:13px;color:var(--mut2);cursor:pointer;background:none;border:none;padding:6px 0;letter-spacing:.2px;transition:color .15s}
+  .sec-link:hover{color:var(--mut)}
+  .sec-link.on{color:var(--teal)}
+  .panel{display:none;padding-top:14px}.panel.on{display:block}
+
+  /* mode chips (en segundo plano, junto al header) */
+  .mode-bar{display:flex;gap:6px;margin:0}
+  .mode-chip{font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--line);
+    background:var(--card);color:var(--mut2);cursor:pointer;letter-spacing:.4px;line-height:1.4;
+    transition:border-color .15s,color .15s,background .15s}
+  .mode-chip.on{border-color:var(--teal);color:var(--teal);background:rgba(47,212,205,.1)}
+
+  /* backlog */
   .bgrp h3{font-size:13px;font-weight:600;margin:0 0 4px;display:flex;justify-content:space-between;color:var(--txt)}
   .bgrp h3 span{color:var(--mut);font-weight:400}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
   .brow{display:flex;align-items:center;gap:9px;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
   .bid{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--mut);min-width:50px}
   .blabel{flex:1}
-  .idea-in{display:flex;gap:8px;margin-bottom:12px}
-  input,button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--txt);padding:11px 12px}
-  input{flex:1;font-size:15px}
-  input:focus{outline:none;border-color:var(--teal)}
-  button{background:var(--teal);color:#04201E;font-weight:600;border:none;padding:11px 16px}
-  button:active{transform:scale(.98)}
-  .idea{font-size:14px;padding:8px 0;border-top:1px solid var(--line);color:var(--txt)}
-  .idea small{color:var(--mut);font-size:11px}
-  .empty{color:var(--mut);font-size:13px;padding:8px 0}
-  footer{color:var(--mut);font-size:11px;text-align:center;margin:24px 0 8px}
-  /* ── skeletons ── */
-  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
-  .skel{background:var(--line);border-radius:6px;height:16px;margin-bottom:8px;animation:pulse 1.8s ease-in-out infinite}
-  .skel.w-full{width:100%}.skel.w-75{width:75%}.skel.w-55{width:55%}
-  #log .skel{background:#1e1e2a}
-  /* ── progress bar ── */
   .bgrp-prog{height:4px;background:var(--line);border-radius:2px;margin:4px 0 3px;overflow:hidden}
   .bgrp-bar{height:4px;background:var(--teal);border-radius:2px;transition:width .4s ease}
   .bgrp-done{font-size:11px;color:var(--mut);margin-bottom:6px}
-  /* ── mode selector ── */
-  .mode-bar{display:flex;gap:6px;margin:8px 0 4px}
-  .mode-chip{font-size:11px;font-weight:600;padding:4px 11px;border-radius:20px;border:1px solid var(--line);background:var(--card);color:var(--mut);cursor:pointer;letter-spacing:.3px;line-height:1.4;transition:border-color .15s,color .15s,background .15s}
-  .mode-chip.on{border-color:var(--teal);color:var(--teal);background:rgba(47,212,205,.1)}
+
+  /* ideas */
+  .idea-in{display:flex;gap:8px;margin-bottom:12px}
+  input,button.send{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--txt);padding:11px 12px}
+  input{flex:1;font-size:15px}
+  input:focus{outline:none;border-color:var(--teal)}
+  button.send{background:var(--teal);color:#04201E;font-weight:600;border:none;padding:11px 16px;cursor:pointer}
+  button.send:active{transform:scale(.98)}
+  .idea{font-size:14px;padding:8px 0;border-top:1px solid var(--line);color:var(--txt)}
+  .idea small{color:var(--mut);font-size:11px}
+
+  /* log crudo */
+  #log{background:#0c0c12;border:1px solid var(--line);border-radius:12px;padding:12px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--mut);
+    max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+
+  .empty{color:var(--mut);font-size:13px;padding:8px 0;display:block}
+  footer{color:var(--mut2);font-size:11px;text-align:center;margin-top:36px}
+
+  /* skeletons */
+  @keyframes sk{0%,100%{opacity:.35}50%{opacity:.7}}
+  .skel{background:var(--line);border-radius:6px;height:14px;margin-bottom:9px;animation:sk 1.8s ease-in-out infinite}
+  .skel.w-full{width:100%}.skel.w-75{width:75%}.skel.w-55{width:55%}.skel.w-40{width:40%}
+
+  @media(max-width:560px){
+    body{padding:18px 14px 36px}
+    .roster{grid-template-columns:repeat(2,1fr)}
+    .hero-stage{font-size:25px}
+    .hero{padding:22px 18px}
+  }
 </style>
 </head>
 <body>
   <div class="top">
-    <h1>augusto-os</h1>
-    <span class="live" id="live">conectando…</span>
+    <span class="brand"><span class="glyph"></span>augusto-os</span>
+    <span class="live" id="live"><span class="dot" style="background:var(--mut2)"></span>conectando…</span>
   </div>
-  <div class="mode-bar">
-    <button class="mode-chip" data-mode="PRODUCT">PRODUCT</button>
-    <button class="mode-chip" data-mode="OFFICE">OFFICE</button>
-    <button class="mode-chip" data-mode="SLEEP">SLEEP</button>
-  </div>
-
-  <div class="tabs">
-    <div class="tab on" data-t="loop">Loop</div>
-    <div class="tab" data-t="backlog">Backlog</div>
-    <div class="tab" data-t="ideas">Ideas</div>
-  </div>
-
-  <div class="panel on" id="p-loop">
-    <h2>estado del loop</h2>
-    <div id="now" class="card">
-      <div class="skel w-75"></div>
-      <div class="skel w-55"></div>
-      <div class="skel w-full"></div>
+  <div class="subhead">
+    <span class="greet" id="greet">Tu equipo ya está trabajando.</span>
+    <div class="mode-bar">
+      <button class="mode-chip" data-mode="PRODUCT">PRODUCT</button>
+      <button class="mode-chip" data-mode="OFFICE">OFFICE</button>
+      <button class="mode-chip" data-mode="SLEEP">SLEEP</button>
     </div>
-    <h2>log en vivo</h2>
-    <div id="log">
-      <div class="skel w-full"></div>
-      <div class="skel w-75"></div>
-      <div class="skel w-55"></div>
-    </div>
-    <h2>terminadas</h2>
-    <div id="done" class="card"><span class="empty">—</span></div>
   </div>
 
-  <div class="panel" id="p-backlog">
-    <div id="backlog">
-      <div class="card bgrp">
-        <div class="skel w-55"></div>
-        <div class="skel w-full"></div>
-        <div class="skel w-75"></div>
+  <!-- ░░ utilidades · segundo plano, accesibles desde arriba ░░ -->
+  <div class="secondary">
+    <div class="sec-nav">
+      <button class="sec-link" data-t="backlog">Backlog</button>
+      <button class="sec-link" data-t="ideas">Ideas</button>
+      <button class="sec-link" data-t="log">Log crudo</button>
+    </div>
+    <div class="panel" id="p-backlog"><div id="backlog"><span class="empty">—</span></div></div>
+    <div class="panel" id="p-ideas">
+      <div class="idea-in">
+        <input id="idea" placeholder="tirá una idea…" autocomplete="off" />
+        <button class="send" id="send">Enviar</button>
       </div>
-      <div class="card bgrp">
-        <div class="skel w-75"></div>
-        <div class="skel w-55"></div>
-      </div>
+      <div id="ideas" class="card"><span class="empty">—</span></div>
     </div>
+    <div class="panel" id="p-log"><div id="log">—</div></div>
   </div>
 
-  <div class="panel" id="p-ideas">
-    <div class="idea-in">
-      <input id="idea" placeholder="tirá una idea…" autocomplete="off" />
-      <button id="send">Enviar</button>
-    </div>
-    <div id="ideas" class="card">
-      <div class="skel w-full"></div>
-      <div class="skel w-75"></div>
-      <div class="skel w-55"></div>
-    </div>
+  <!-- ░░ ROSTER · presente: quién está vivo y qué hace ahora ░░ -->
+  <h2>Equipo</h2>
+  <div class="roster" id="roster">
+    <div class="stage"><div class="stage-top"><span class="stage-name">Planner</span></div><div class="skel w-55"></div></div>
+    <div class="stage"><div class="stage-top"><span class="stage-name">Builder</span></div><div class="skel w-55"></div></div>
+    <div class="stage"><div class="stage-top"><span class="stage-name">Verifier</span></div><div class="skel w-55"></div></div>
+    <div class="stage"><div class="stage-top"><span class="stage-name">Deploy</span></div><div class="skel w-55"></div></div>
   </div>
 
-  <footer>se actualiza cada 5s · v1</footer>
+  <!-- ░░ LOOP HERO · quién tiene la posta ░░ -->
+  <div class="hero" id="hero">
+    <div class="skel w-40"></div>
+    <div class="skel w-75"></div>
+    <div class="skel w-full"></div>
+  </div>
+
+  <!-- ░░ FEED · pasado: qué cambió realmente (deltas, no logs) ░░ -->
+  <h2>Qué cambió</h2>
+  <div id="feed">
+    <div class="skel w-full"></div>
+    <div class="skel w-75"></div>
+    <div class="skel w-55"></div>
+  </div>
+
+  <footer>se actualiza cada 5s · operaciones v2</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -133,46 +203,175 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => (s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-  document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
-    document.querySelectorAll(".panel").forEach(x => x.classList.remove("on"));
-    t.classList.add("on");
-    $("p-" + t.dataset.t).classList.add("on");
-  });
+  // ── el pipeline REAL (system/ARQUITECTURA-ACTUAL.md). Solo Planner y Builder son LLM;
+  //    Verifier y Deploy son código determinístico → marcados "auto". Researcher no existe.
+  const STAGES = [
+    {id:"planner",  name:"Planner",  auto:false},
+    {id:"builder",  name:"Builder",  auto:false},
+    {id:"verifier", name:"Verifier", auto:true},
+    {id:"deploy",   name:"Deploy",   auto:true},
+  ];
+  const STAGE_NAME = Object.fromEntries(STAGES.map(s=>[s.id,s.name]));
 
-  function timeAgo(iso) {
-    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-    if (m < 1) return "ahora";
-    if (m < 60) return `hace ${m} min`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `hace ${h} h`;
-    return `hace ${Math.floor(h / 24)} d`;
+  function timeAgo(iso){
+    if(!iso) return "";
+    const m = Math.floor((Date.now() - new Date(iso).getTime())/60000);
+    if(m < 1) return "hace instantes";
+    if(m < 60) return `hace ${m} min`;
+    const h = Math.floor(m/60);
+    if(h < 24) return `hace ${h} h`;
+    return `hace ${Math.floor(h/24)} d`;
   }
-
   function runBadge(state){
-    const m = {active:["b-now","en curso"],done:["b-done","done"],blocked:["b-p1","bloqueado"],review:["b-hold","review"]};
+    const m = {active:["b-now","en curso"],done:["b-done","completado"],
+               blocked:["b-block","bloqueado"],review:["b-hold","en review"],waiting:["b-hold","esperándote"]};
     const [c,t] = m[state] || ["b-done", state||"—"];
     return `<span class="badge ${c}">${t}</span>`;
   }
+
+  // ── EL CORAZÓN: deriva quién tiene la posta a partir de datos reales. Versión mínima
+  //    de la "capa de narración" del manifiesto (evento real → estado legible).
+  function derivePosta(run, allSteps){
+    if(!run) return null; // reposo
+    const sts = (allSteps||[]).filter(s => s.feature_id === run.feature_id).sort((a,b)=>a.step_no-b.step_no);
+    const running = sts.find(s => s.status === "running");
+    const anyBlocked = sts.some(s => s.status === "blocked");
+
+    if(run.state === "blocked" || anyBlocked)
+      return {stage:"builder", state:"blocked", ctx: (running?.descripcion) || "Un paso quedó bloqueado.", since:run.updated_at};
+    if(run.state === "waiting" || run.state === "review")
+      return {stage:"deploy", state:"waiting", ctx:"Espera tu decisión para avanzar.", since:run.updated_at};
+    if(sts.length === 0)
+      return {stage:"planner", state:"active", ctx:"Descomponiendo el spec en pasos.", since:run.updated_at};
+    if(running)
+      return {stage:"builder", state:"active", ctx:running.descripcion || "Implementando.", since:running.updated_at,
+              step:run.current_step, total:run.total_steps};
+    if(sts.every(s => s.status === "done"))
+      return {stage:"deploy", state:"active", ctx:"Release en verde.", since:run.updated_at};
+    return {stage:"verifier", state:"active", ctx:"Verificando (tsc · lint · tests).", since:run.updated_at};
+  }
+
+  function renderRoster(posta){
+    $("roster").innerHTML = STAGES.map(s=>{
+      const on = posta && posta.stage === s.id;
+      const blocked = on && posta.state === "blocked";
+      const cls = blocked ? "stage blocked" : on ? "stage on" : "stage";
+      let stateTxt, time = "";
+      if(on){
+        stateTxt = posta.state === "blocked" ? "bloqueado"
+                 : posta.state === "waiting" ? "te espera" : "en curso";
+        time = `<div class="stage-time">${timeAgo(posta.since)}</div>`;
+      } else {
+        stateTxt = posta ? "en espera" : "en reposo";
+      }
+      const dotColor = blocked ? "var(--coral)" : on ? "var(--teal)" : "var(--mut2)";
+      const dotCls = on && !blocked ? "dot pulse" : "dot";
+      return `<div class="${cls}">
+        <div class="stage-top"><span class="${dotCls}" style="background:${dotColor}"></span>
+          <span class="stage-name">${s.name}</span>
+          ${s.auto ? `<span class="stage-auto">auto</span>` : ``}</div>
+        <div class="stage-state">${stateTxt}</div>${time}</div>`;
+    }).join("");
+  }
+
+  function renderHero(run, posta){
+    if(!run || !posta){
+      $("hero").className = "hero rest";
+      $("hero").innerHTML = `<span class="r-dot"></span>
+        <div class="r-title">El equipo está en reposo</div>
+        <div class="r-sub">Ningún feature corriendo. Nada que supervisar por ahora.</div>`;
+      $("greet").textContent = "Todo tranquilo. El equipo está en reposo.";
+      return;
+    }
+    $("hero").className = "hero";
+    $("greet").textContent = "Tu equipo ya está trabajando.";
+    const who = STAGE_NAME[posta.stage] || "—";
+    const stepLine = (posta.step && posta.total)
+      ? `<span class="mono">paso ${posta.step}/${posta.total}</span>` : "";
+    const branch = run.branch ? `<span class="mono">${esc(run.branch)}</span>` : "";
+    const prog = (posta.step && posta.total)
+      ? `<div class="hero-prog"><div class="hero-prog-bar" style="width:${Math.round(posta.step/posta.total*100)}%"></div></div>` : "";
+    $("hero").innerHTML =
+      `<div class="hero-meta">
+         <span class="hero-fid">${esc(run.feature_id)}</span>
+         ${run.title ? `<span class="hero-title">${esc(run.title)}</span>` : ""}
+         ${runBadge(posta.state === "blocked" ? "blocked" : posta.state === "waiting" ? "waiting" : run.state)}
+       </div>
+       <div class="hero-who">Tiene la posta</div>
+       <h1 class="hero-stage"><span class="accent">${who}</span></h1>
+       <div class="hero-ctx">${esc(posta.ctx)}</div>
+       <div class="hero-foot">${stepLine}${branch}<span>${timeAgo(posta.since)}</span></div>
+       ${prog}`;
+  }
+
+  // ── FEED: deltas (pasos completados + features terminadas). NUNCA el log crudo. (Decisión 02)
+  function renderFeed(runs, allSteps){
+    const ev = [];
+    for(const s of (allSteps||[])){
+      if(s.status === "done")
+        ev.push({ts:s.updated_at, tag:"builder", tagTxt:"Builder",
+                 txt:`${s.feature_id} · paso ${s.step_no} terminado: ${ (s.descripcion||"").slice(0,72) }`});
+    }
+    for(const r of (runs||[])){
+      if(r.state === "done")
+        ev.push({ts:r.updated_at, tag:"deploy", tagTxt:"Deploy",
+                 txt:`${r.feature_id} — feature completada y desplegada${r.title ? " · "+r.title.slice(0,60) : ""}`});
+    }
+    ev.sort((a,b)=> new Date(b.ts) - new Date(a.ts));
+    const top = ev.slice(0,14);
+    $("feed").innerHTML = top.length
+      ? top.map(e=>`<div class="feed-row">
+          <span class="feed-tag ${e.tag}">${e.tagTxt}</span>
+          <span class="feed-txt">${esc(e.txt)}</span>
+          <span class="feed-when">${timeAgo(e.ts)}</span></div>`).join("")
+      : `<span class="empty">Sin cambios todavía.</span>`;
+  }
+
+  // ── segundo plano: backlog / ideas / log ──
   function blTag(priority, state){
     const s = (state||"").toLowerCase();
-    if (s.includes("done") || priority === "✅") return null;
-    if (s.includes("block")) return ["b-hold","blocked"];
-    if (s.includes("espera") || s.includes("wait")) return ["b-hold","espera"];
-    if (s.includes("activ")) return ["b-now","activo"];
-    if (s === "hoy") return ["b-now","hoy"];
-    if (priority === "1") return ["b-p1","P1"];
+    if(s.includes("done") || priority === "✅") return null;
+    if(s.includes("block")) return ["b-hold","blocked"];
+    if(s.includes("espera") || s.includes("wait")) return ["b-hold","espera"];
+    if(s.includes("activ")) return ["b-now","activo"];
+    if(s === "hoy") return ["b-now","hoy"];
+    if(priority === "1") return ["b-block","P1"];
     return ["b-done","P"+(priority||"·")];
   }
   const ORDER = ["Sistema","Kredy","Spensiv","Argos"];
 
-  function setModeChip(mode) {
-    document.querySelectorAll('.mode-chip').forEach(c => c.classList.toggle('on', c.dataset.mode === mode));
+  function renderBacklog(bl){
+    const items = (bl||[]);
+    const byProj = {};
+    for(const it of items){ const tag = blTag(it.priority, it.state); if(!tag) continue; (byProj[it.project] = byProj[it.project]||[]).push({...it,tag}); }
+    const projs = Object.keys(byProj).sort((a,b)=>{const ia=ORDER.indexOf(a),ib=ORDER.indexOf(b);return (ia<0?9:ia)-(ib<0?9:ib);});
+    $("backlog").innerHTML = projs.length ? projs.map(p=>{
+      const rows = byProj[p].sort((a,b)=>(a.priority>b.priority?1:-1));
+      const total = items.filter(it => it.project === p).length;
+      const done  = items.filter(it => it.project === p && ((it.state||"").toLowerCase().includes("done") || it.priority === "✅")).length;
+      const pct = total > 0 ? Math.round(done/total*100) : 0;
+      return `<div class="card bgrp"><h3>${esc(p)} <span>${rows.length}</span></h3>`+
+        `<div class="bgrp-prog"><div class="bgrp-bar" style="width:${pct}%"></div></div>`+
+        `<div class="bgrp-done">${done}/${total} done</div>`+
+        rows.map(r=>`<div class="brow"><span class="bid">${esc(r.item_id)}</span><span class="blabel">${esc(r.label)}</span><span class="badge ${r.tag[0]}">${r.tag[1]}</span></div>`).join("")+
+        `</div>`;
+    }).join("") : `<span class="empty">sin pendientes</span>`;
   }
-  document.querySelectorAll('.mode-chip').forEach(chip => {
+
+  // secondary nav (toggle)
+  document.querySelectorAll(".sec-link").forEach(t => t.onclick = () => {
+    const isOn = t.classList.contains("on");
+    document.querySelectorAll(".sec-link").forEach(x => x.classList.remove("on"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("on"));
+    if(!isOn){ t.classList.add("on"); $("p-" + t.dataset.t).classList.add("on"); }
+  });
+
+  // mode chips
+  function setModeChip(mode){ document.querySelectorAll(".mode-chip").forEach(c => c.classList.toggle("on", c.dataset.mode === mode)); }
+  document.querySelectorAll(".mode-chip").forEach(chip => {
     chip.onclick = async () => {
-      setModeChip(chip.dataset.mode); // optimistic
-      await db.from('orch_operator_state').update({mode: chip.dataset.mode, updated_at: new Date().toISOString()}).eq('id', 1);
+      setModeChip(chip.dataset.mode);
+      await db.from("orch_operator_state").update({mode: chip.dataset.mode, updated_at: new Date().toISOString()}).eq("id", 1);
     };
   });
 
@@ -181,59 +380,30 @@
       const [runs, steps, logs, ideas, bl, opState] = await Promise.all([
         db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
         db.from("orch_steps").select("*"),
-        db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(45),
+        db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(60),
         db.from("orch_ideas").select("text,source,created_at").order("created_at",{ascending:false}).limit(25),
         db.from("orch_backlog").select("*"),
         db.from("orch_operator_state").select("mode").eq("id", 1).maybeSingle(),
       ]);
       const allRuns = runs.data || [];
+      const allSteps = steps.data || [];
       const live = allRuns.find(r => r.state !== "done");
-      const dones = allRuns.filter(r => r.state === "done");
+      const posta = derivePosta(live, allSteps);
 
-      if(live){
-        const st = (steps.data||[]).filter(s => s.feature_id === live.feature_id).sort((a,b)=>a.step_no-b.step_no);
-        $("now").innerHTML =
-          `<div class="row" style="border:none;padding-top:0"><span class="feat">${esc(live.feature_id)}</span>${runBadge(live.state)}</div>`+
-          `<div class="sub">paso ${live.current_step}/${live.total_steps} · ${esc(live.branch||"")}</div>`+
-          `<div class="steps">`+ st.map(s=>{
-            const cls = s.status==="done"?"s-done":s.status==="running"?"s-run":s.status==="blocked"?"s-blocked":"";
-            const ic = s.status==="done"?"✓":s.status==="running"?"▸":s.status==="blocked"?"✕":"·";
-            return `<div class="step"><span class="${cls}">${ic}</span><b>${esc(s.descripcion||"").slice(0,90)}</b></div>`;
-          }).join("") +`</div>`;
-      } else {
-        $("now").innerHTML = `<span class="empty">en reposo — ningún feature corriendo</span>`;
-      }
+      renderRoster(posta);
+      renderHero(live, posta);
+      renderFeed(allRuns, allSteps);
+      renderBacklog(bl.data || []);
 
       $("log").textContent = (logs.data||[]).slice().reverse().map(l=>esc(l.line)).join("\n") || "—";
-      $("log").scrollTop = $("log").scrollHeight;
-
-      $("done").innerHTML = dones.length
-        ? dones.map(r=>`<div class="row"><span>${esc(r.feature_id)}</span>${runBadge("done")}</div>`).join("")
-        : `<span class="empty">—</span>`;
-
-      // backlog por proyecto
-      const items = (bl.data||[]);
-      const byProj = {};
-      for(const it of items){ const tag = blTag(it.priority, it.state); if(!tag) continue; (byProj[it.project] = byProj[it.project]||[]).push({...it,tag}); }
-      const projs = Object.keys(byProj).sort((a,b)=>{const ia=ORDER.indexOf(a),ib=ORDER.indexOf(b);return (ia<0?9:ia)-(ib<0?9:ib);});
-      $("backlog").innerHTML = projs.length ? projs.map(p=>{
-        const rows = byProj[p].sort((a,b)=>(a.priority>b.priority?1:-1));
-        const total = items.filter(it => it.project === p).length;
-        const done  = items.filter(it => it.project === p && ((it.state||"").toLowerCase().includes("done") || it.priority === "✅")).length;
-        const pct = total > 0 ? Math.round(done / total * 100) : 0;
-        return `<div class="card bgrp"><h3>${esc(p)} <span>${rows.length}</span></h3>`+
-          `<div class="bgrp-prog"><div class="bgrp-bar" style="width:${pct}%"></div></div>`+
-          `<div class="bgrp-done">${done}/${total} done</div>`+
-          rows.map(r=>`<div class="brow"><span class="bid">${esc(r.item_id)}</span><span class="blabel">${esc(r.label)}</span><span class="badge ${r.tag[0]}">${r.tag[1]}</span></div>`).join("")+
-          `</div>`;
-      }).join("") : `<span class="empty">sin pendientes</span>`;
+      if($("p-log").classList.contains("on")) $("log").scrollTop = $("log").scrollHeight;
 
       $("ideas").innerHTML = (ideas.data||[]).length
         ? ideas.data.map(i=>`<div class="idea">${esc(i.text)}<br><small>${esc(i.source)} · ${timeAgo(i.created_at)}</small></div>`).join("")
         : `<span class="empty">sin ideas todavía</span>`;
 
-      if (opState.data?.mode) setModeChip(opState.data.mode);
-      $("live").innerHTML = `<span class="dot" style="background:var(--teal)"></span>en vivo`;
+      if(opState.data?.mode) setModeChip(opState.data.mode);
+      $("live").innerHTML = `<span class="dot pulse" style="background:var(--teal)"></span>en vivo`;
     }catch(e){
       $("live").innerHTML = `<span class="dot" style="background:var(--coral)"></span>sin conexión`;
     }

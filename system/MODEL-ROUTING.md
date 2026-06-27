@@ -62,6 +62,23 @@ Las dos van, y se potencian. Orden- primero **terminar S-007 Fase A/B** (el cont
 
 No migrar todo de golpe ni meter 5 modelos- un Builder barato + Opus arriba + el gate de verificación es el 90% del ahorro con el menor riesgo.
 
+## Framing: servicios/capacidades, no marcas (no construir un dispatcher)
+
+Principio: pensar en **capacidades intercambiables**, no en modelos. El modelo detrás de cada capacidad se puede swapear sin rediseñar el sistema (es el mismo principio rol≠modelo de `CONVENTIONS.md` §3, aplicado también a la capa de asesoría).
+
+Rutear por **tipo de incertidumbre** (mapa mental, no un router automático):
+
+| Pregunta | Capacidad | Hoy detrás | ¿Automatizable? |
+|----------|-----------|-----------|-----------------|
+| ¿Qué está pasando ahora? | Research | Grok / web | no (lo hace Augusto a mano) |
+| ¿Cómo debería diseñarse? | Architecture | Claude/Opus | parcial (Architect on-demand, S-008) |
+| ¿Vale la pena construirlo? | Strategy | ChatGPT / Claude | no (asesoría humana) |
+| ¿Cómo se implementa? | Builder | Sonnet → barato (S-014) | **sí, adentro del loop** |
+| ¿Hay bugs? | Verifier | código (tsc/lint/tests) | ya automatizado |
+| ¿Qué aprendimos? | Learning | ADR + S-023 | parcial |
+
+**Lo que SÍ se automatiza** = lo que vive *dentro* del sistema (Builder→barato S-014; Intake→Architect on-demand S-008; Verifier ya está). **Lo que NO** = el routing de asesoría humana (Claude/ChatGPT/Grok): Augusto ya es el router y es eficiente; cablear 3 APIs subiría costo y complejidad, no los bajaría. Descartado construir un dispatcher cross-proveedor.
+
 ## Fuentes
 - [Best AI Model for Coding (June 2026) — morphllm](https://www.morphllm.com/best-ai-model-for-coding)
 - [GLM-5.2 vs DeepSeek V4 vs Qwen3 — Developers Digest](https://www.developersdigest.tech/blog/glm-5-2-vs-deepseek-v4-vs-qwen3-open-weights-coding-showdown)

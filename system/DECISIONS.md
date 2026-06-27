@@ -7,6 +7,118 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0031 · 2026-06-27 · Dashboard vista Operaciones: roster honesto de etapas reales + feed de deltas
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** El roster del dashboard representa las etapas reales del pipeline (Planner/Builder como agentes LLM + Verifier/Deploy como código determinístico marcado "auto"). No se fabrican agentes inexistentes (Researcher no se muestra). El feed se construye de deltas (pasos done + features completadas), no del log crudo; el log pasa a panel colapsable. El hero responde "quién tiene la posta" derivado de `orch_runs`/`orch_steps` via `derivePosta()`.
+**Contexto:** Evitar "teatro" — actividad decorativa que no refleja el sistema real. El manifiesto de producto exige no mentir actividad. Según `system/ARQUITECTURA-ACTUAL.md`, solo Planner (Opus) y Builder (Sonnet) son agentes LLM reales; Verifier y Deploy son código determinístico. Como el loop es secuencial, solo se enciende quien tiene la posta.
+**Alternativas descartadas:** Roster de 5 agentes (Planner/Builder/Researcher/Verifier/Deploy) con estado simulado — fabrica actividad inexistente (Researcher no existe). Log crudo como feed principal — no comunica progreso, comunica ruido.
+**Consecuencias:** Cuando existan agentes LLM reales nuevos (p.ej. Reviewer, Tester), se suman al roster sin tocar la arquitectura de la vista. El log crudo sigue disponible en panel secundario colapsable para debugging.
+
+> S-022 · 2026-06-27
+
+---
+## ADR-0030 · 2026-06-27 · Loops nocturnos — sync.ts dispara npm start autónomamente en modo SLEEP
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** sync.ts llama a tryAutopilotPick() en cada tick. Si el modo es SLEEP y el loop está libre, toma el primer ítem P2+/pending/sin-keywords-de-riesgo del backlog, genera el spec vía Architect y spawnea `npm start` en background sin intervención humana.
+**Contexto:** El operador puede estar OOO total (modo SLEEP activado desde el dashboard). El sistema debe poder avanzar el backlog solo, sin consumir LLM en la decisión de picking (heurístico puro) y con backstops duros: gates del loop, cap 5/día, denylist de riesgo.
+**Alternativas descartadas:** Cron externo (más infra, requiere setup extra). Polling manual por Telegram (requiere disponibilidad del operador).
+**Consecuencias / riesgo residual:** Cap de 5 features/día. Lock con timeout 10 min protege contra crashes del sync. Si un gate humano se activa en SLEEP, el loop pausa en silencio (S-002). El backlog queda en "armado (autopilot) <ISO>" para trazabilidad; si falla el release no se resetea solo.
+
+> Generado por el loop · feature S-004 · step 0
+
+---
+## ADR-0027 · 2026-06-26 · El selector de ciudad va encima del botón "Generar contrato", no dentro del dropdown
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El `Select` se renderiza como elemento propio antes del `DropdownMenu`, de modo que el usuario elige ciudad primero y luego selecciona qué documento descargar.
+**Contexto:** El spec pedía "exponer un selector de ciudad" pero no especificó dónde ubicarlo dentro del componente. Las alternativas eran: (a) dentro de cada `DropdownMenuItem` como submenú, (b) como campo separado encima del botón principal.
+**Alternativas descartadas:** Submenú en cascada dentro del dropdown (más compacto pero peor UX en mobile y más complejo); radio buttons inline (más verboso para dos opciones).
+**Consecuencias / riesgo residual:** El flujo es: elegir ciudad → abrir dropdown → elegir documento. Si Augusto prefiere otra ubicación o quiere que la selección de ciudad esté dentro del propio dropdown, requiere ajuste de layout.
+
+> Generado por el loop · feature F-0006 · step 8
+
+---
+## ADR-0026 · 2026-06-26 · Intimación mediante "notificación fehaciente" sin especificar el canal
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usó "notificación fehaciente" como vehículo de la intimación, sin limitar el canal (postal, telegrama, WhatsApp con acuse, etc.), dejando esa elección al Mutuante.
+**Contexto:** El spec indica "5 días corridos para regularizar antes de poder dar por caídos los plazos" pero no especifica cómo debe canalizarse la intimación; en derecho argentino el término "fehaciente" es el estándar que admite múltiples medios y no cierra futuros canales.
+**Alternativas descartadas:** Mencionar explícitamente telegrama colacionado o carta documento (más restrictivo y puede quedar desactualizado); omitir la calidad de fehaciente (ambiguo y riesgoso en caso de litigio).
+**Consecuencias / riesgo residual:** Validar con el abogado que "notificación fehaciente" sea compatible con los medios que el Mutuante usa habitualmente (p.ej. WhatsApp); si se requiere un canal específico, la cláusula deberá ajustarse.
+
+> Generado por el loop · feature F-0006 · step 7
+
+---
+## ADR-0025 · 2026-06-26 · Extraer getMissingContractFields a lib/contract-gate.ts para testabilidad
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La función de validación del gate se movió del componente React (con `'use client'`) a un módulo puro en `lib/`, cambiando su firma de `(loan: LoanDetail)` a `(person: PersonGateFields | null | undefined)`.
+**Contexto:** El vitest.config.ts usa `environment: 'node'`; importar un componente con `'use client'` y `useState` en ese entorno falla. La función era una función pura sin dependencia de React, así que extraerla es el cambio mínimo que la hace testeable.
+**Alternativas descartadas:** (a) Cambiar el entorno de vitest a jsdom — agrega overhead y no es necesario para lógica pura. (b) Testear la UI con React Testing Library — fuera de alcance del step. (c) Duplicar la lógica en el test — testa una reimplementación, no el código real.
+**Consecuencias / riesgo residual:** El call site cambió de `getMissingContractFields(loan)` a `getMissingContractFields(loan.person)`. Si otros componentes en el futuro necesitan el gate, importan desde `lib/contract-gate` directamente.
+
+> Generado por el loop · feature F-0006 · step 5
+
+---
+## ADR-0024 · 2026-06-26 · "Ambos documentos" también bloqueado cuando faltan datos del contrato
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se deshabilita tanto "Contrato de Mutuo" como "Ambos documentos" cuando hay campos faltantes en `loan.person`. "Pagaré" se mantiene habilitado.
+**Contexto:** El spec dice "deshabilitar la opción de Contrato", pero "Ambos documentos" llama a `downloadBothDocuments` que incluye el contrato; permitirlo generaría un doc incompleto o fallaría silenciosamente.
+**Alternativas descartadas:** Bloquear solo "Contrato de Mutuo" y dejar "Ambos documentos" activo (generar solo el pagaré en ese caso, renombrando la opción).
+**Consecuencias / riesgo residual:** Si el comportamiento deseado es que "Ambos" genere solo el pagaré cuando el contrato está bloqueado, habría que refactorizar `downloadBothDocuments` para que sea condicional — queda abierto si Augusto prefiere ese flujo.
+
+> Generado por el loop · feature F-0006 · step 4
+
+---
+## ADR-0023 · 2026-06-26 · Fecha de emisión del pagaré = loan.startDate
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usa `loan.startDate` como fecha de emisión del pagaré, pre-completada en el documento generado, en lugar de dejarlo como placeholder.
+**Contexto:** El spec indica "Dejar líneas en blanco SOLO para firma, aclaración y DNI de la mutuaria", lo que implica que la fecha de emisión debe estar pre-completada. `loan.startDate` es la fecha disponible más cercana a la fecha real de firma.
+**Alternativas descartadas:** Dejar la fecha como placeholder rojo (inconsistente con la restricción de "solo tres blancos"); usar fecha actual en el momento de generación (no disponible de forma reproducible en el módulo).
+**Consecuencias / riesgo residual:** Si el contrato se genera antes de la firma y `startDate` difiere del día real de firma, la fecha del pagaré quedará desactualizada. El gate humano (revisión mutuo|pagaré) debe verificar esto antes de imprimir.
+
+> Generado por el loop · feature F-0006 · step 2
+
+---
+## ADR-0022 · 2026-06-26 · Agregar cláusula "sin protesto" al texto de SÉPTIMA
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se incorporó la mención `"sin protesto"` directamente en el cuerpo de la SÉPTIMA ("...un pagaré con cláusula 'sin protesto' por la suma de..."), no solo en la guía del pagaré.
+**Contexto:** El spec lista "Pagaré siempre con cláusula 'sin protesto'" como restricción clave y el nombre del branch es `sin-protesto-por-el-to`, pero la tarea del step 1 dice explícitamente solo "reemplazar capital/capitalLetras por el total". No se especificó dónde añadir "sin protesto" en este step.
+**Alternativas descartadas:** Dejarlo solo para el step de la guía del pagaré (`generatePagareGuide`), que es donde el prestamista rellena el instrumento físico. En ese caso SÉPTIMA no lo mencionaría.
+**Consecuencias / riesgo residual:** Si "sin protesto" no se quiere en SÉPTIMA (por criterio legal: que sea solo una instrucción del pagaré físico y no una cláusula declarativa del mutuo), hay que revertir esa frase. La validación de abogado que ya exige el spec debería cubrir esto.
+
+> Generado por el loop · feature F-0006 · step 1
+
+---
 ## ADR-0021 · 2026-06-25 · Estrategia de mocking: userCache pre-poblado vs mock de prisma.user
 
 **Estado:** aceptada
@@ -123,6 +235,38 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 - `Derivada` → consecuencia técnica forzada por otro ADR; no es una elección libre.
 
 > Convención de estados de features (backlog/active/review/done/blocked) → ver `system/CONVENTIONS.md`.
+
+---
+
+## ADR-0029 · 2026-06-26 · Marcador `<!-- procesado -->` en FEATURE-INTAKE.md para no reprocesar ideas
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** `intake-cli.ts`, al procesar una idea leída del archivo (sin arg de CLI), le agrega el sufijo `<!-- procesado -->` a esa línea de `system/FEATURE-INTAKE.md` para que no se vuelva a tomar como "última idea sin procesar" en una corrida futura.
+
+**Contexto:** El spec de S-008 no especificaba cómo evitar reprocesar ideas ya convertidas en spec; se dejó como decisión abierta a tomar con criterio. El archivo es append-only y lo escriben dos canales (Telegram `/idea`, dashboard web) — sin un marcador, cada corrida de `npm run intake` (sin arg) reprocesaría la idea más reciente sin distinguir si ya generó un `F-XXXX.md`.
+
+**Alternativas descartadas:** Mover las ideas procesadas a un archivo separado (`FEATURE-INTAKE.processed.md`) — más limpio pero rompe el log cronológico único que también usa el dashboard (S-007) para mostrar el historial de ideas. Un índice separado (ej. `intake-state.json` con offsets) — agrega un segundo archivo de estado a sincronizar.
+
+**Consecuencias / riesgo residual:** El formato de línea de `FEATURE-INTAKE.md` ahora es un contrato implícito para cualquier consumidor futuro (S-007 Fase C, u otro parser) — si algo más lee ese archivo esperando líneas "limpias", debe tolerar el sufijo `<!-- procesado -->`. Si se reformatea el archivo a mano, hay que preservar el marcador en las líneas ya procesadas.
+
+---
+
+## ADR-0028 · 2026-06-26 · `classify` prioriza "arquitectura" sobre "bug" cuando ambos matchean
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** En `intake.ts`, `classify()` chequea `ARCH_KEYWORDS` antes que `BUG_KEYWORDS` — si una idea matchea ambos conjuntos, se clasifica como `arquitectura`, no como `bug`.
+
+**Contexto:** El spec de S-008 no definía un orden de prioridad entre clasificaciones cuando una idea es ambigua (ej. "el loop falla al reintentar un step bloqueado" matchea tanto "falla" (bug) como "loop"/contexto de orquestador (arquitectura)).
+
+**Alternativas descartadas:** Priorizar `bug` sobre `arquitectura` (trataría bugs del propio orchestrator como features de producto comunes, perdiendo la señal de que ese código corre el auto-deploy a prod y merece más cuidado). Clasificación múltiple/no exclusiva (más expresivo pero el resto del pipeline — `needsArchitect`, el prompt al Architect — asume una sola clasificación).
+
+**Consecuencias / riesgo residual:** Un bug trivial del propio orchestrator (ej. typo en un log) podría clasificarse como `arquitectura` y disparar el Architect (Opus) innecesariamente si además matchea alguna keyword de `ARCH_KEYWORDS`. El costo de ese falso positivo es bajo (un spec de más para revisar) comparado con tratar un cambio arquitectónico real como bug menor.
 
 ---
 

@@ -191,3 +191,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0007/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-06-26 — F-0006 completado
+
+## Feature F-0006
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `lib/contract-generator.ts`, cláusula SÉPTIMA de `generateContract`: reemplazar `capital`/`capitalLetras` por el TOTAL a devolver (suma de cuotas = `loan.installments.reduce((s,i)=>s+i.amount,0)`) en números y en letras vía `amountToLegalText`/`numberToWords`. Ajustar la redacción para que siga siendo coherente ("librará un pagaré por la suma de [total]..."). Typecheck y lint. (9605455f)
+- [x] Step 2: Crear `generatePagare(loan)` en `lib/contract-generator.ts`: documento `.docx` A4 reutilizando helpers (`text/paragraph/clauseTitle`, `amountToLegalText`/`numberToWords`, `MUTUANTE`, `Packer`) y la estructura de `generatePagareGuide` como base. Incluir la palabra "pagaré", cláusula "sin protesto", "Debo/emos y pagaré sin protesto a [MUTUANTE.nombre] o a su orden la cantidad de [TOTAL en letras] ([cur][total])", vencimiento = fecha de la última cuota, lugar de pago = CABA, fecha/lugar de emisión, beneficiario = MUTUANTE. Dejar líneas en blanco SOLO para firma, aclaración y DNI de la mutuaria. No exponer capital ni TNA/tasa. Mantener advertencia de no dejar espacios en blanco. Typecheck y lint. (ac4f3d0d)
+- [x] Step 3: Agregar `downloadPagare(loan)` análogo a `downloadPagareGuide` (con `Packer`/`saveAs`) y actualizar el dropdown de `components/loans/generate-contract-button.tsx` para ofrecer "Pagaré" pre-llenado, reemplazando la "Guía de Pagaré" (dejar Contrato / Pagaré / Ambos). Typecheck y lint. (28b64eb2)
+- [x] Step 4: En `components/loans/generate-contract-button.tsx`, gate de descarga del CONTRATO: validar que `loan.person` tenga nombre, DNI y CUIL/CUIT; si falta alguno, deshabilitar la opción de Contrato y mostrar el motivo concreto ("Falta CUIL", "Falta DNI", etc.) sin descargar. Agregar un aviso visible cerca del botón/carga indicando que los datos se usan en el contrato y deben coincidir exactamente con el DNI. Typecheck y lint. (47a1757c)
+- [x] Step 5: Agregar tests: `generatePagare` incluye "sin protesto", el TOTAL a devolver en números y letras (no el capital), beneficiario = MUTUANTE y no expone TNA/tasa; la cláusula SÉPTIMA del contrato cita exactamente el mismo total; el gate bloquea la descarga del contrato si falta DNI/CUIL. Tests, typecheck y lint pasan. (c0053ba3)
+- [x] Step 6: En `lib/contract-generator.ts`, cláusula TERCERA: reemplazar los placeholders `[X%]`/`[X EN LETRAS]` por la tasa fija "OCHO POR CIENTO (8%)" mensual, en letras y en número. NO tocar `lib/loan-calculator.ts` ni la lógica de mora de refinanciación. Typecheck y lint. (6c25d741)
+- [x] Step 7: En `lib/contract-generator.ts`, cláusula SEXTA: incorporar la intimación previa de 5 (cinco) días corridos para regularizar antes de poder dar por caídos todos los plazos y exigir el total, manteniendo la redacción de aceleración total una vez vencido ese plazo. Typecheck y lint. (846b6b9c)
+- [x] Step 8: Agregar a `generateContract`/`generatePagare` un parámetro de ciudad (no campo de Prisma; en memoria, default CABA) que ajuste cláusula DÉCIMA (jurisdicción), lugar de pago del pagaré y la línea de cierre "Se firman... en la Ciudad de [ciudad]" para CABA vs Mar del Plata. Exponer un selector de ciudad (CABA / Mar del Plata, default CABA) en `components/loans/generate-contract-button.tsx` y pasarlo a las funciones generadoras. Typecheck y lint. (051e9e60)
+- [x] Step 9: Agregar tests: TERCERA cita "8%" fijo (sin placeholder); SEXTA incluye los 5 días de intimación; con selector "Mar del Plata" la cláusula DÉCIMA y el lugar de pago del pagaré dicen Mar del Plata y NO CABA; con default (sin elegir) todo sigue diciendo CABA. Tests, typecheck y lint pasan. (c0ef0d8d)
+
+### Decisiones (ADR)
+- ADR-0022 — Agregar cláusula "sin protesto" al texto de SÉPTIMA [Supuesto del agente] **⚠ REVISAR**
+- ADR-0023 — Fecha de emisión del pagaré = loan.startDate [Supuesto del agente] **⚠ REVISAR**
+- ADR-0024 — "Ambos documentos" también bloqueado cuando faltan datos del contrato [Supuesto del agente] **⚠ REVISAR**
+- ADR-0025 — Extraer getMissingContractFields a lib/contract-gate.ts para testabilidad [Supuesto del agente] **⚠ REVISAR**
+- ADR-0026 — Intimación mediante "notificación fehaciente" sin especificar el canal [Supuesto del agente] **⚠ REVISAR**
+- ADR-0027 — El selector de ciudad va encima del botón "Generar contrato", no dentro del dropdown [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0006/`
+
+> Revisar con Claude in Chrome para validación de UX.

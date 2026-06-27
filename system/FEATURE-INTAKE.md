@@ -46,3 +46,7 @@
 - [2026-06-25T18:11:03.053Z] (telegram) agregar un export csv para spensiv?
 - [2026-06-25T18:15:29.880Z] (telegram) argos comparar contra Rendi finance a ver que ideas podemos robar
 - [2026-06-25T18:19:59.449Z] (telegram) comparar argos contra tracker también, hay cosas por mejorar
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
