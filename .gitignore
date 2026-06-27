@@ -8,6 +8,10 @@ orchestrator/.env.bak-rename
 orchestrator/node_modules/
 orchestrator/dist/
 orchestrator/STATE.json
+orchestrator/AUTOPILOT_COUNTER.json
+orchestrator/AUTOPILOT_MAP.json
+orchestrator/AUTOPILOT.lock
+orchestrator/STATE.*.archived.json
 orchestrator/blocked.log
 orchestrator/orchestrator.log
 orchestrator/qa-artifacts/
