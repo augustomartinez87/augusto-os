@@ -4,6 +4,20 @@ Log append-only de features y milestones completados.
 
 ---
 
+## 2026-06-27 — S-015: Presencia real con heartbeat (agent team view)
+
+**Commit:** `3eccc34`
+
+**Qué se hizo:**
+- Tabla `orch_presence` en Supabase (RLS anon-read, service_role escribe). Migrar con el SQL de `dashboard/schema.sql`.
+- `sync.ts`: `pushPresence()` emite upsert cada 5s con state derivado (idle/planning/building/verifying/deploying/blocked) + model short-name (Opus/Sonnet).
+- Dashboard: roster lee `orch_presence` como fuente de verdad. Liveness: >30s→"sin señal", >2min+run activo→"posible cuelgue". Verifier/Deploy se iluminan cuando el builder pasa a verifying/deploying. `derivePosta` queda como fallback si la tabla está vacía (runner pre-S-015).
+- ADR-0032: umbrales de staleness documentados (supuesto del agente, auditable).
+
+**Notas:** El runner (sync.ts) necesita reiniciarse para empezar a emitir heartbeats. La tabla `orch_presence` debe crearse en Supabase antes del primer tick (ver SQL en schema.sql al final del archivo).
+
+---
+
 ## 2026-06-18 — F-0001: AP score badge en consola [spensiv]
 
 **Feature:** Badge visual que muestra el score del AP (verde ≥70 / amarillo 40-69 / rojo <40 / neutral null) en la cabecera del perfil del AP en `/ap`.
