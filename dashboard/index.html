@@ -57,12 +57,21 @@
   .bgrp-prog{height:4px;background:var(--line);border-radius:2px;margin:4px 0 3px;overflow:hidden}
   .bgrp-bar{height:4px;background:var(--teal);border-radius:2px;transition:width .4s ease}
   .bgrp-done{font-size:11px;color:var(--mut);margin-bottom:6px}
+  /* ── mode selector ── */
+  .mode-bar{display:flex;gap:6px;margin:8px 0 4px}
+  .mode-chip{font-size:11px;font-weight:600;padding:4px 11px;border-radius:20px;border:1px solid var(--line);background:var(--card);color:var(--mut);cursor:pointer;letter-spacing:.3px;line-height:1.4;transition:border-color .15s,color .15s,background .15s}
+  .mode-chip.on{border-color:var(--teal);color:var(--teal);background:rgba(47,212,205,.1)}
 </style>
 </head>
 <body>
   <div class="top">
     <h1>augusto-os</h1>
     <span class="live" id="live">conectando…</span>
+  </div>
+  <div class="mode-bar">
+    <button class="mode-chip" data-mode="PRODUCT">PRODUCT</button>
+    <button class="mode-chip" data-mode="OFFICE">OFFICE</button>
+    <button class="mode-chip" data-mode="SLEEP">SLEEP</button>
   </div>
 
   <div class="tabs">
@@ -157,14 +166,25 @@
   }
   const ORDER = ["Sistema","Kredy","Spensiv","Argos"];
 
+  function setModeChip(mode) {
+    document.querySelectorAll('.mode-chip').forEach(c => c.classList.toggle('on', c.dataset.mode === mode));
+  }
+  document.querySelectorAll('.mode-chip').forEach(chip => {
+    chip.onclick = async () => {
+      setModeChip(chip.dataset.mode); // optimistic
+      await db.from('orch_operator_state').update({mode: chip.dataset.mode, updated_at: new Date().toISOString()}).eq('id', 1);
+    };
+  });
+
   async function refresh(){
     try{
-      const [runs, steps, logs, ideas, bl] = await Promise.all([
+      const [runs, steps, logs, ideas, bl, opState] = await Promise.all([
         db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
         db.from("orch_steps").select("*"),
         db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(45),
         db.from("orch_ideas").select("text,source,created_at").order("created_at",{ascending:false}).limit(25),
         db.from("orch_backlog").select("*"),
+        db.from("orch_operator_state").select("mode").eq("id", 1).maybeSingle(),
       ]);
       const allRuns = runs.data || [];
       const live = allRuns.find(r => r.state !== "done");
@@ -212,6 +232,7 @@
         ? ideas.data.map(i=>`<div class="idea">${esc(i.text)}<br><small>${esc(i.source)} · ${timeAgo(i.created_at)}</small></div>`).join("")
         : `<span class="empty">sin ideas todavía</span>`;
 
+      if (opState.data?.mode) setModeChip(opState.data.mode);
       $("live").innerHTML = `<span class="dot" style="background:var(--teal)"></span>en vivo`;
     }catch(e){
       $("live").innerHTML = `<span class="dot" style="background:var(--coral)"></span>sin conexión`;
