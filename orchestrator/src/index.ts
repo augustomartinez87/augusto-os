@@ -20,6 +20,7 @@ import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta } from './adr.js'
 import { appendProgress } from './progress.js'
 import { getOperatorState } from './operator-state.js'
+import { resolveBacklogId, markBacklogState, clearPick } from './autopilot.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -197,6 +198,11 @@ async function runLoop(state: OrchestratorState) {
         state.pushed = true
         saveState(state)
         void notifyDeployed(state.featureId, checks.tnaNote)
+        const autopilotBacklogId = resolveBacklogId(state.featureId)
+        if (autopilotBacklogId) {
+          markBacklogState(autopilotBacklogId, `done ${new Date().toISOString().split('T')[0]} (autopilot)`)
+          clearPick(state.featureId)
+        }
       }
 
       // 3. Cierre

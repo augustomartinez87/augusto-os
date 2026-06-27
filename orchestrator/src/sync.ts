@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { loadState, type OrchestratorState } from './state.js'
 import { log } from './limits.js'
 import { getOperatorState } from './operator-state.js'
+import { tryAutopilotPick } from './autopilot.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -170,6 +171,7 @@ async function tick(): Promise<void> {
   await pushIntakeIdeas()
   await pullWebIdeas()
   await pullOperatorState()
+  try { await tryAutopilotPick() } catch (e) { log(`[autopilot] error en tick: ${(e as Error).message}`) }
 }
 
 async function run(): Promise<void> {
