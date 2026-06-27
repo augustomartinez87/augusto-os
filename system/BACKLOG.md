@@ -36,6 +36,7 @@ Formato: `P<n>` = prioridad (1 = más urgente) · `[target]` = repo destino
 | S-009 | ✅ | **ADR auto-log** — el loop escribe en DECISIONS.md cada decisión de diseño con su Origen. Helper `appendAdr()` + `parseAdrBlocks` + prompt del executor + idempotencia. 13 tests verdes | done 2026-06-25 (Claude Code) |
 | S-010 | 1 | **Migrar Kredy prod: Supabase → Neon** — unificar todo lo Prisma en Neon (prod + dev). Runbook en `system/MIGRATION-kredy-to-neon.md`. Toca dinero real → ejecuta Augusto con OK explícito | waiting |
 | S-026 | ✅ | **Reconciliación del backlog** — auditoría de estados reales cruzando BACKLOG/PROGRESS/prompts/git; corrección de S-009 en CONVENTIONS.md (era "spec, no implementado", está implementado); nota de mapeo S-022(old)→S-025; regla append-only de IDs (CONVENTIONS §3); huecos S-011/S-012 documentados | done 2026-06-27 (Claude Code) |
+| S-027 | ✅ | **Hardening heartbeat del loop + lock por liveness** — `LOOP_HEARTBEAT.json` desde `index.ts`; `orch_presence` con rol `loop`; `acquireLock` respeta lock si heartbeat fresco (nunca pisa un proceso vivo); `markBacklogState` retorna bool; dashboard usa heartbeat del loop para Builder | done 2026-06-27 (Claude Code) |
 
 ## Kredy [kredy]  (préstamos/crédito — ex "Spensiv", renombrado 2026-06-20)
 

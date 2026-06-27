@@ -7,6 +7,22 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0033 · 2026-06-27 · S-027: heartbeat del loop de build + lock por liveness
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Dos señales de vida separadas: (1) `planner`/`builder` en `orch_presence` siguen siendo el heartbeat de `sync.ts` (control plane alive, cada 5s); (2) nueva fila `role='loop'` en `orch_presence` cuyo `last_heartbeat` viene de `index.ts` (proceso de build alive) vía `LOOP_HEARTBEAT.json`. Lock (`AUTOPILOT.lock`) ahora guarda `featureId` y `acquireLock` respeta el lock si hay heartbeat fresco del loop (proceso vivo) independientemente de la antigüedad del lock. Dashboard usa `presenceMap.loop.last_heartbeat` para staleness del slot Builder; si no existe, hace fallback al heartbeat de `builder` (sync.ts). Umbral de liveness del lock: `LOOP_HB_STALE_MS = 3 min` (> `CUELGUE_SEC = 2 min` de ADR-0032). `markBacklogState` retorna `boolean`; `tryAutopilotPick` solo marca `marked=true` si la fila realmente existió.
+**Contexto:** ADR-0032 (S-015) documentó explícitamente la limitación: "Un loop colgado dentro del proceso seguirá mostrando heartbeat fresco si sync.ts sobrevive". El bug `Lock stale (660s), pisando...` ocurre cuando el lock tiene >10 min (Architect lento o proceso colgado) y se sobreescribe aunque el loop esté vivo. `markBacklogState: ID NONEXISTENT-999 no encontrado` ocurre cuando `AUTOPILOT_MAP.json` tiene una entrada stale o cuando el backlog fue editado manualmente entre el pick y el mark.
+**Alternativas descartadas:** Heartbeat directo de index.ts a Supabase (requiere credenciales en el loop, que hoy solo las tiene sync.ts). Señal vía IPC/socket entre sync.ts e index.ts (sobrecomplejo para procesos detached). Lock basado en PID + kill-check (frágil en Windows con procesos detached).
+**Consecuencias:** Si `index.ts` se cuelga en una LLM call, su heartbeat deja de avanzar en ≤3 min; el dashboard lo muestra como "posible cuelgue" (> CUELGUE_SEC = 2 min) y el lock pasa a ser reclamable (>3 min). ADR-0032 queda supersedido para la limitación de liveness del loop. sync.ts debe reiniciarse para empezar a emitir el rol `loop` (requiere que `index.ts` esté corriendo y haya escrito `LOOP_HEARTBEAT.json`).
+
+> S-027 · 2026-06-27
+
+---
+```
+
 ## ADR-0032 · 2026-06-27 · S-015: umbrales de staleness para liveness del roster
 
 **Estado:** aceptada

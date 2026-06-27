@@ -16,6 +16,7 @@ import {
   LOCK_PATH,
   COUNTER_PATH,
 } from './autopilot.js'
+import type { LoopHeartbeat } from './loop-heartbeat.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -245,39 +246,74 @@ describe('markBacklogState', () => {
 describe('acquireLock / releaseLock', () => {
   let tmpDir: string
   let lockPath: string
+  let hbPath: string  // non-existent by default → no heartbeat in most tests
 
   beforeEach(() => {
     tmpDir = mkdtempSync(path.join(tmpdir(), 'autopilot-lock-'))
     lockPath = path.join(tmpDir, 'AUTOPILOT.lock')
+    hbPath = path.join(tmpDir, 'NO_HB.json')  // doesn't exist — safe default
   })
 
   afterEach(() => { rmSync(tmpDir, { recursive: true }) })
 
   it('creates the lock file and returns true when no lock exists', () => {
     expect(existsSync(lockPath)).toBe(false)
-    expect(acquireLock(60_000, lockPath)).toBe(true)
+    expect(acquireLock(60_000, lockPath, hbPath)).toBe(true)
     expect(existsSync(lockPath)).toBe(true)
   })
 
   it('returns false when a fresh lock already exists', () => {
-    acquireLock(60_000, lockPath)
-    expect(acquireLock(60_000, lockPath)).toBe(false)
+    acquireLock(60_000, lockPath, hbPath)
+    expect(acquireLock(60_000, lockPath, hbPath)).toBe(false)
   })
 
-  it('overwrites a stale lock (older than staleMs) and returns true', () => {
+  it('overwrites a stale lock (older than staleMs) when no heartbeat', () => {
     const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
-    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs }), 'utf-8')
-    expect(acquireLock(10 * 60 * 1000, lockPath)).toBe(true)
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: null }), 'utf-8')
+    expect(acquireLock(10 * 60 * 1000, lockPath, hbPath)).toBe(true)
   })
 
   it('releaseLock removes the file', () => {
-    acquireLock(60_000, lockPath)
+    acquireLock(60_000, lockPath, hbPath)
     releaseLock(lockPath)
     expect(existsSync(lockPath)).toBe(false)
   })
 
   it('releaseLock is a no-op when no lock file exists', () => {
     expect(() => releaseLock(lockPath)).not.toThrow()
+  })
+
+  // ── liveness-aware (S-027) ────────────────────────────────────────────────
+  it('respects a stale-by-time lock when loop heartbeat is fresh', () => {
+    const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: 'F-0099' }), 'utf-8')
+    // Fresh heartbeat from the loop process
+    writeFileSync(hbPath, JSON.stringify({
+      featureId: 'F-0099', pid: 12345, phase: 'building:step-3',
+      lastHeartbeat: new Date().toISOString(),
+    } satisfies LoopHeartbeat), 'utf-8')
+    // Lock must NOT be stolen — process is alive
+    expect(acquireLock(10 * 60 * 1000, lockPath, hbPath)).toBe(false)
+  })
+
+  it('overwrites a stale lock when heartbeat is cold (loop hung)', () => {
+    const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: 'F-0099' }), 'utf-8')
+    // Cold heartbeat (>3 min old → LOOP_HB_STALE_MS)
+    const coldHb = new Date(Date.now() - 4 * 60 * 1000).toISOString()
+    writeFileSync(hbPath, JSON.stringify({
+      featureId: 'F-0099', pid: 12345, phase: 'building:step-3',
+      lastHeartbeat: coldHb,
+    } satisfies LoopHeartbeat), 'utf-8')
+    // Lock should be reclaimed — loop is hung
+    expect(acquireLock(10 * 60 * 1000, lockPath, hbPath)).toBe(true)
+  })
+
+  it('written lock includes featureId field (null on first write)', () => {
+    acquireLock(60_000, lockPath, hbPath)
+    const lock = JSON.parse(readFileSync(lockPath, 'utf-8'))
+    expect('featureId' in lock).toBe(true)
+    expect(lock.featureId).toBeNull()
   })
 })
 
@@ -346,6 +382,7 @@ describe('tryAutopilotPick', () => {
   let backlogPath: string
   let counterPath: string
   let lockPath: string
+  let hbPath: string
   let mapPath: string
   let statePath: string
   let operatorStatePath: string
@@ -369,6 +406,7 @@ describe('tryAutopilotPick', () => {
     backlogPath = path.join(tmpDir, 'BACKLOG.md')
     counterPath = path.join(tmpDir, 'COUNTER.json')
     lockPath = path.join(tmpDir, 'LOCK')
+    hbPath = path.join(tmpDir, 'NO_HB.json')  // no heartbeat by default
     mapPath = path.join(tmpDir, 'MAP.json')
     statePath = path.join(tmpDir, 'STATE.json')
     operatorStatePath = path.join(tmpDir, 'OPERATOR_STATE.yaml')
@@ -385,6 +423,7 @@ describe('tryAutopilotPick', () => {
     backlogPath,
     counterPath,
     lockPath,
+    hbPath,
     mapPath,
     statePath,
     operatorStatePath,
@@ -553,7 +592,7 @@ describe('tryAutopilotPick', () => {
 
   it('stale lock (>10 min old) gets overwritten and pick succeeds', async () => {
     const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
-    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs }), 'utf-8')
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: null }), 'utf-8')
     const result = await tryAutopilotPick(baseOpts())
     expect(result).not.toBeNull()
   })
@@ -564,5 +603,48 @@ describe('tryAutopilotPick', () => {
     const result = await tryAutopilotPick(baseOpts())
     expect(result).toBeNull()
     expect(existsSync(lockPath)).toBe(false)
+  })
+
+  // ── Liveness-aware lock (Tarea 2, S-027) ────────────────────────────────────
+  it('respects stale lock when loop heartbeat is fresh — no double spawn', async () => {
+    const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: 'F-0099' }), 'utf-8')
+    // Fresh heartbeat: the loop is alive
+    writeFileSync(hbPath, JSON.stringify({
+      featureId: 'F-0099', pid: 12345, phase: 'building:step-2',
+      lastHeartbeat: new Date().toISOString(),
+    } satisfies LoopHeartbeat), 'utf-8')
+    const result = await tryAutopilotPick(baseOpts())
+    // Must not spawn — would double-spawn over a live process
+    expect(result).toBeNull()
+  })
+
+  it('reclaims stale lock when loop heartbeat is cold — spawns correctly', async () => {
+    const staleTs = new Date(Date.now() - 11 * 60 * 1000).toISOString()
+    writeFileSync(lockPath, JSON.stringify({ createdAt: staleTs, featureId: 'F-DEAD' }), 'utf-8')
+    // Cold heartbeat: the loop is hung/dead
+    const coldHb = new Date(Date.now() - 4 * 60 * 1000).toISOString()
+    writeFileSync(hbPath, JSON.stringify({
+      featureId: 'F-DEAD', pid: 99999, phase: 'building:step-5',
+      lastHeartbeat: coldHb,
+    } satisfies LoopHeartbeat), 'utf-8')
+    const result = await tryAutopilotPick(baseOpts())
+    // Lock reclaimed, new pick should succeed
+    expect(result).not.toBeNull()
+  })
+
+  // ── markBacklogState returns bool (Tarea 3, S-027) ───────────────────────────
+  it('markBacklogState returns true when ID is found and false when missing', () => {
+    expect(markBacklogState('KR-001', 'done 2026-06-27', backlogPath)).toBe(true)
+    expect(markBacklogState('NONEXISTENT-999', 'done', backlogPath)).toBe(false)
+  })
+
+  it('successful pick: marked=true reflected in the map (pick proceeded)', async () => {
+    const result = await tryAutopilotPick(baseOpts())
+    expect(result).not.toBeNull()
+    // The KR-001 row should be marked as armado (markBacklogState returned true)
+    const content = readFileSync(backlogPath, 'utf-8')
+    const kr001line = content.split('\n').find(l => l.includes('KR-001'))
+    expect(kr001line).toMatch(/armado \(autopilot\)/)
   })
 })

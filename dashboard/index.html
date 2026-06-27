@@ -262,17 +262,27 @@
   }
 
   // ── renderRoster: usa orch_presence como fuente de verdad para planner/builder.
+  //    S-027: el rol 'loop' (index.ts) aporta el heartbeat real del proceso de build.
+  //    Para el slot Builder, staleness se calcula sobre loop.last_heartbeat si existe,
+  //    con fallback a builder.last_heartbeat (sync.ts — control-plane-alive).
   //    Para verifier/deploy (auto), lee el estado del builder o cae a derivePosta.
   //    Detecta liveness: stale>30s→"sin señal", stale>2min+run activo→"posible cuelgue".
   function renderRoster(posta, presenceMap){
+    const loopPres = presenceMap?.loop; // S-027: heartbeat de index.ts
     $("roster").innerHTML = STAGES.map(s=>{
-      const pres = presenceMap?.[s.id]; // solo no-null para planner/builder
+      const pres = presenceMap?.[s.id]; // no-null para planner/builder
       let on=false, blocked=false, cuelgue=false, stale=false;
       let stateTxt="", time="", modelBadge="";
 
       if(pres){
-        // Slot con presencia real (planner o builder)
-        const age = staleSec(pres.last_heartbeat);
+        // Slot con presencia real (planner o builder).
+        // Para builder: preferir heartbeat del loop (index.ts) porque es la señal real
+        // del proceso que construye. Si el loop se cuelga, su last_heartbeat se congela
+        // aunque sync.ts siga enviando el suyo fresco.
+        const hbForStaleness = (s.id === "builder" && loopPres)
+          ? loopPres.last_heartbeat
+          : pres.last_heartbeat;
+        const age = staleSec(hbForStaleness);
         cuelgue = age > CUELGUE_SEC && pres.state !== "idle";
         stale   = !cuelgue && age > STALE_SEC;
         if(cuelgue){
@@ -289,7 +299,9 @@
       } else {
         // Slot sin presencia propia: verifier/deploy o runner pre-S-015
         const bPres = presenceMap?.builder;
-        const bAge  = staleSec(bPres?.last_heartbeat);
+        // Para verifier/deploy: usar loop heartbeat si existe, si no el de builder (sync.ts)
+        const hbForVD = loopPres ? loopPres.last_heartbeat : bPres?.last_heartbeat;
+        const bAge  = staleSec(hbForVD);
         const bFresh = bPres && bAge <= STALE_SEC;
         let fromPres = false;
         if(bFresh){

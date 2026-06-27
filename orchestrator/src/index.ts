@@ -21,6 +21,7 @@ import { appendAdr, readAdrMeta } from './adr.js'
 import { appendProgress } from './progress.js'
 import { getOperatorState } from './operator-state.js'
 import { resolveBacklogId, markBacklogState, clearPick } from './autopilot.js'
+import { writeLoopHeartbeat } from './loop-heartbeat.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -126,8 +127,10 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
   // guard: abort if dev DB not configured or points to prod
   assertNoProdDb()
 
+  writeLoopHeartbeat(featureId, 'planning')
   const branch = await createFeatureBranch(featureId, title)
   const planSteps = await planFeature(spec)
+  writeLoopHeartbeat(featureId, 'planned')
   log(`[main] Feature ${featureId}: ${planSteps.length} pasos planificados`)
 
   return initState(featureId, branch, planSteps)
@@ -168,6 +171,7 @@ async function runLoop(state: OrchestratorState) {
 
       // 1. Merge a main (local, una sola vez)
       if (!state.merged) {
+        writeLoopHeartbeat(state.featureId, 'merging')
         const merged = await mergeIntoMain(state.branch)
         state.merged = merged
         saveState(state)
@@ -181,6 +185,7 @@ async function runLoop(state: OrchestratorState) {
       // 2. Fase de release: si las verificaciones dan VERDE → push+deploy automático + aviso.
       //    Si FALLAN → NO deploya y avisa el error por Telegram para debuggear.
       if (!state.pushed) {
+        writeLoopHeartbeat(state.featureId, 'deploying')
         const checks = await runReleaseChecks()
         if (!checks.ok) {
           log(`[main] RELEASE BLOQUEADO — verificaciones fallaron, NO se deploya:\n${checks.errors.slice(0, 2000)}`)
@@ -221,6 +226,7 @@ async function runLoop(state: OrchestratorState) {
     }
 
     log(`\n[main] === Step ${step.id}/${state.steps.length}: ${step.desc} ===`)
+    writeLoopHeartbeat(state.featureId, `building:step-${step.id}`)
 
     if (requiresHumanApproval(step.desc) && !step.humanApproved) {
       setHumanGate(state, `Step ${step.id}: ${step.desc}`)
@@ -261,6 +267,7 @@ async function runLoop(state: OrchestratorState) {
 
     let pendingAdrBlocks = execResult.adrBlocks
 
+    writeLoopHeartbeat(state.featureId, `verifying:step-${step.id}`)
     const verify = await runVerifier()
     if (!verify.ok) {
       log(`[main] Verifier falló en step ${step.id} — reintentando con el error`)

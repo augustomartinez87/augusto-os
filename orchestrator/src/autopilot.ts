@@ -8,6 +8,7 @@ import { runIntake, type IntakeResult } from './intake.js'
 import { runArchitect } from './architect.js'
 import { appendAdr, DECISIONS_PATH } from './adr.js'
 import { log } from './limits.js'
+import { readLoopHeartbeat, isLoopHeartbeatFresh, LOOP_HB_PATH } from './loop-heartbeat.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORCH_DIR = path.join(__dirname, '..')
@@ -92,8 +93,9 @@ export function parseEligibleBacklog(backlogPath = DEFAULT_BACKLOG_PATH): Backlo
   return rows
 }
 
-export function markBacklogState(id: string, newState: string, backlogPath = DEFAULT_BACKLOG_PATH): void {
-  if (!existsSync(backlogPath)) return
+// Returns true if the row was found and updated, false if the ID was not present (safe no-op).
+export function markBacklogState(id: string, newState: string, backlogPath = DEFAULT_BACKLOG_PATH): boolean {
+  if (!existsSync(backlogPath)) return false
   const content = readFileSync(backlogPath, 'utf-8')
   const lines = content.split('\n')
   let changed = false
@@ -107,10 +109,11 @@ export function markBacklogState(id: string, newState: string, backlogPath = DEF
     return parts.join('|')
   })
   if (!changed) {
-    log(`[autopilot] markBacklogState: ID ${id} no encontrado en ${backlogPath}`)
-    return
+    log(`[autopilot] markBacklogState: ID ${id} no encontrado — skip (el item puede haberse editado manualmente)`)
+    return false
   }
   writeFileSync(backlogPath, updated.join('\n'), 'utf-8')
+  return true
 }
 
 // ── Map (featureId → backlogId) ───────────────────────────────────────────────
@@ -170,19 +173,63 @@ export function incrementCounter(counterPath = COUNTER_PATH): void {
 }
 
 // ── Lock ──────────────────────────────────────────────────────────────────────
+// Lock file format: { createdAt: ISO, featureId: string | null }
+// featureId se rellena en updateLockFeatureId() una vez que el Architect devuelve el ID,
+// permitiendo al staleness checker correlacionar el lock con el heartbeat del loop.
 
-export function acquireLock(staleMs = 10 * 60 * 1000, lockPath = LOCK_PATH): boolean {
+interface LockFile { createdAt: string; featureId: string | null }
+
+function writeLock(lockPath: string, featureId: string | null): void {
+  writeFileSync(lockPath, JSON.stringify({ createdAt: new Date().toISOString(), featureId }), 'utf-8')
+}
+
+// Actualiza featureId en el lock existente (sin cambiar createdAt).
+// Llamar después de que el Architect devuelve el featureId para que el
+// staleness checker pueda correlacionarlo con el heartbeat del loop.
+export function updateLockFeatureId(featureId: string, lockPath = LOCK_PATH): void {
+  if (!existsSync(lockPath)) return
+  try {
+    const lock: LockFile = JSON.parse(readFileSync(lockPath, 'utf-8'))
+    lock.featureId = featureId
+    writeFileSync(lockPath, JSON.stringify(lock), 'utf-8')
+  } catch { /* ignore */ }
+}
+
+// Determina si el lock existente corresponde a un proceso vivo:
+// primero chequea el heartbeat del loop (señal directa del proceso), luego cae
+// a staleness por tiempo (gracia mientras el proceso arranca o si nunca llegó a emitir).
+export function acquireLock(staleMs = 10 * 60 * 1000, lockPath = LOCK_PATH, hbPath = LOOP_HB_PATH): boolean {
   if (existsSync(lockPath)) {
+    let lock: LockFile | null = null
     try {
-      const lock = JSON.parse(readFileSync(lockPath, 'utf-8'))
-      const age = Date.now() - new Date(lock.createdAt).getTime()
-      if (age < staleMs) return false
-      log(`[autopilot] Lock stale (${Math.round(age / 1000)}s), pisando...`)
+      lock = JSON.parse(readFileSync(lockPath, 'utf-8'))
     } catch {
       log('[autopilot] Lock malformado, pisando...')
+      writeLock(lockPath, null)
+      return true
     }
+
+    const age = Date.now() - new Date(lock!.createdAt).getTime()
+    const hb = readLoopHeartbeat(hbPath)
+
+    // Si hay heartbeat fresco del loop → proceso vivo, nunca pisar
+    if (isLoopHeartbeatFresh(hb)) {
+      return false
+    }
+
+    // Sin heartbeat fresco: respetar el período de gracia (proceso arrancando)
+    if (age < staleMs) return false
+
+    // Lock stale + sin heartbeat → proceso muerto o colgado; reclamar con log explícito
+    const hbAge = hb
+      ? `heartbeat ${Math.round((Date.now() - new Date(hb.lastHeartbeat).getTime()) / 1000)}s atrás`
+      : 'sin heartbeat de loop'
+    log(
+      `[autopilot] Lock stale (${Math.round(age / 1000)}s) — ${hbAge}. ` +
+      `Dueño anterior: feature=${lock!.featureId ?? 'desconocido'}, pid=${hb?.pid ?? 'desconocido'}. Reclamando.`
+    )
   }
-  writeFileSync(lockPath, JSON.stringify({ createdAt: new Date().toISOString() }), 'utf-8')
+  writeLock(lockPath, null)
   return true
 }
 
@@ -222,12 +269,14 @@ export interface AutopilotPickOpts {
   // For testing: override persistent-file paths
   counterPath?: string
   lockPath?: string
+  hbPath?: string
   mapPath?: string
   statePath?: string
 }
 
 export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ featureId: string; backlogId: string } | null> {
   const lockPath = opts?.lockPath ?? LOCK_PATH
+  const hbPath = opts?.hbPath ?? LOOP_HB_PATH
   const counterPath = opts?.counterPath ?? COUNTER_PATH
   const mapPath = opts?.mapPath ?? MAP_PATH
   const statePath = opts?.statePath ?? STATE_PATH
@@ -245,14 +294,16 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
       return null
     }
 
-    // 4. Mutex lock — prevents double-spawn in the Planner window
-    if (!acquireLock(10 * 60 * 1000, lockPath)) return null
+    // 4. Mutex lock — prevents double-spawn in the Planner window.
+    //    acquireLock respeta el lock si hay heartbeat fresco del loop (proceso vivo).
+    if (!acquireLock(10 * 60 * 1000, lockPath, hbPath)) return null
   } catch (e) {
     log(`[autopilot] error en pre-checks: ${(e as Error).message}`)
     return null
   }
 
   // Lock is held from here — always release in finally
+  // marked: true solo si markBacklogState realmente encontró y cambió el row
   let marked = false
   let pickedBacklogId: string | null = null
   let pickedFeatureId: string | null = null
@@ -273,11 +324,10 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     pickedBacklogId = pick.id  // captured here so catch can revert even if markBacklogState throws
 
     // 6. Mark as in-progress and count the attempt atomically — before any async step.
-    //    Both happen together so that every attempt (success or failure) counts exactly once
-    //    against the daily cap, preventing runaway on repeated Architect failures.
+    //    marked reflects whether the row was actually found (safe no-op if it disappeared by race).
+    //    Both happen together so that every attempt counts exactly once against the daily cap.
     const isoNow = new Date().toISOString()
-    markBacklogState(pick.id, `armado (autopilot) ${isoNow}`, opts?.backlogPath)
-    marked = true
+    marked = markBacklogState(pick.id, `armado (autopilot) ${isoNow}`, opts?.backlogPath)
     incrementCounter(counterPath)
 
     // 7. Intake + Architect (no LLM for picking — both steps are injectable for tests)
@@ -292,6 +342,9 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
 
     // 8. Record mapping featureId → backlogId for post-release cleanup
     recordPick(featureId, pick.id, mapPath)
+
+    // 8b. Update lock with featureId so staleness checker can correlate lock ↔ loop heartbeat
+    updateLockFeatureId(featureId, lockPath)
 
     // 9. Write autopilot ADR exactly once (one-time architectural decision record)
     if (!hasAutopilotAdr(opts?.decisionsPath)) {

@@ -4,6 +4,21 @@ Log append-only de features y milestones completados.
 
 ---
 
+## 2026-06-27 — S-027: Hardening heartbeat del loop + lock por liveness
+
+**Commit:** (ver SHA en git log)
+
+**Qué se hizo:**
+- **Tarea 1 — Heartbeat del loop real:** `orchestrator/src/loop-heartbeat.ts` nuevo módulo. `index.ts` emite `LOOP_HEARTBEAT.json` al inicio de cada fase (planning, building:step-N, verifying, merging, deploying). `sync.ts` lee ese archivo y lo empuja como rol `loop` a `orch_presence` con el `last_heartbeat` real de `index.ts` (no de sync.ts). Dashboard usa ese heartbeat para la staleness del slot Builder (con fallback al de sync.ts si no existe).
+- **Tarea 2 — Lock por liveness:** `acquireLock` ahora chequea `LOOP_HEARTBEAT.json` antes de decidir si el lock es stale. Si el heartbeat del loop está fresco (< 3 min), el lock NO se pisa aunque tenga >10 min de edad. Si el heartbeat está frío o no existe, cae al timeout habitual con log explícito (pid dueño, antigüedad del heartbeat). Lock file ahora incluye `featureId` para correlación. `updateLockFeatureId()` rellena ese campo luego de que el Architect devuelve el ID.
+- **Tarea 3 — Fix markBacklogState:** `markBacklogState` retorna `boolean` (true si encontró y modificó la fila, false con warning si el ID no existe). `tryAutopilotPick` asigna `marked = markBacklogState(...)` — solo intenta revertir si la fila fue realmente marcada.
+- **Tests:** 6 tests nuevos (liveness-aware lock, markBacklogState bool, double-spawn prevention). 216/216 verdes.
+- **ADR-0033** registra la decisión; supersede la limitación de ADR-0032 sobre liveness del loop.
+
+**Notas:** `⚠ dashboard/index.html` modificado — el push a main dispara Vercel. El cambio es retrocompatible (si no hay fila `loop`, usa el heartbeat de `builder` como antes). El `LOOP_HEARTBEAT.json` se genera solo cuando `index.ts` está corriendo; en reposo el dashboard cae al comportamiento de S-015.
+
+---
+
 ## 2026-06-27 — S-015: Presencia real con heartbeat (agent team view)
 
 **Commit:** `3eccc34`

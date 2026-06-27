@@ -9,6 +9,7 @@ import { log } from './limits.js'
 import { getOperatorState } from './operator-state.js'
 import { tryAutopilotPick } from './autopilot.js'
 import { MODEL_PLANNER, MODEL_BUILDER } from './models.js'
+import { readLoopHeartbeat } from './loop-heartbeat.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -49,9 +50,8 @@ function modelShortName(m: string): string {
 }
 
 // S-015: emite presencia real a orch_presence. Ambos roles (planner+builder) reciben
-// un heartbeat en cada tick, permitiendo que el dashboard detecte si el proceso murió
-// (last_heartbeat deja de actualizarse). La lógica espeja derivePosta del dashboard
-// pero la calcula el orquestador, que conoce la verdad.
+// un heartbeat en cada tick. S-027 agrega el rol 'loop' cuyo last_heartbeat viene de
+// index.ts (no de sync.ts) — permite distinguir "control plane vivo" de "proceso de build vivo".
 async function pushPresence(s: OrchestratorState | null): Promise<void> {
   const now = new Date().toISOString()
   const plannerModel = modelShortName(MODEL_PLANNER)
@@ -93,7 +93,7 @@ async function pushPresence(s: OrchestratorState | null): Promise<void> {
     builderDetail = 'Verificando (tsc · lint · tests).'
   }
 
-  await upsert('orch_presence', [
+  const rows: unknown[] = [
     {
       role: 'planner', model: plannerModel, state: plannerState,
       feature_id: s.featureId, step_no: null,
@@ -105,7 +105,22 @@ async function pushPresence(s: OrchestratorState | null): Promise<void> {
       feature_id: s.featureId, step_no: builderStep, detail: builderDetail,
       last_heartbeat: now, updated_at: now,
     },
-  ])
+  ]
+
+  // S-027: emitir el heartbeat del proceso de build (index.ts) como rol 'loop'.
+  // last_heartbeat es el timestamp que escribió index.ts, no el de sync.ts.
+  // Si el loop se cuelga, ese timestamp deja de avanzar mientras los de planner/builder siguen frescos.
+  const loopHb = readLoopHeartbeat()
+  if (loopHb && loopHb.featureId === s.featureId) {
+    rows.push({
+      role: 'loop', model: null, state: 'running',
+      feature_id: loopHb.featureId, step_no: null, detail: loopHb.phase,
+      last_heartbeat: loopHb.lastHeartbeat,  // timestamp real del loop, no de sync
+      updated_at: now,
+    })
+  }
+
+  await upsert('orch_presence', rows)
 }
 
 function deriveState(s: OrchestratorState): string {
