@@ -50,3 +50,7 @@
 - [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
 - [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
 - [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré

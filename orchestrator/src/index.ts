@@ -14,6 +14,7 @@ import { runReviewer } from './reviewer.js'
 import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { notifyDeployed, notifyReleaseFailed, pollApprovalOnce } from './telegram.js'
+import { isBotAlive } from './bot-heartbeat.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
@@ -151,8 +152,12 @@ async function runLoop(state: OrchestratorState) {
     log(`[main] Ejecutá: npm run approve  (o aprobá desde Telegram)`)
     let _tgOffset = 0
     while (loadState()?.needsHumanApproval) {
-      const r = await pollApprovalOnce(_tgOffset)
-      _tgOffset = r.newOffset
+      if (!isBotAlive()) {
+        // bot no está corriendo → el loop pollea Telegram directamente como fallback
+        const r = await pollApprovalOnce(_tgOffset)
+        _tgOffset = r.newOffset
+      }
+      // si el bot está vivo, él procesa el callback y escribe STATE.json → solo dormimos
       if (loadState()?.needsHumanApproval) await new Promise(res => setTimeout(res, 3_000))
     }
     state = loadState()!
@@ -236,8 +241,10 @@ async function runLoop(state: OrchestratorState) {
       // el MISMO paso una y otra vez (bug del loop infinito).
       let _tgOff2 = 0
       while (loadState()?.needsHumanApproval) {
-        const r2 = await pollApprovalOnce(_tgOff2)
-        _tgOff2 = r2.newOffset
+        if (!isBotAlive()) {
+          const r2 = await pollApprovalOnce(_tgOff2)
+          _tgOff2 = r2.newOffset
+        }
         if (loadState()?.needsHumanApproval) await new Promise(res => setTimeout(res, 3_000))
       }
       state = loadState()!

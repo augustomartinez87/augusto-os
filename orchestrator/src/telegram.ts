@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import { loadState, saveState } from './state.js'
 import { log } from './limits.js'
 import { getOperatorState, type OperatorMode, type ResponseStyle, type OperatorState } from './operator-state.js'
+import { writeBotHeartbeat } from './bot-heartbeat.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INBOX = path.join(__dirname, '..', '..', 'system', 'FEATURE-INTAKE.md')
@@ -238,6 +239,7 @@ export async function runTelegramListener(): Promise<void> {
   let offset = 0
 
   while (true) {
+    writeBotHeartbeat()
     try {
       const data = await tg('getUpdates', { offset, timeout: 10 })
       if (!data?.ok || !Array.isArray(data.result)) { await sleep(2000); continue }

@@ -23,6 +23,42 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ---
 ```
 
+## ADR-0036 · 2026-06-28 · S-025: retención de logs — disco 30 días, Supabase 7 días, throttle 1 hora
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente (auditable — Augusto puede ajustar los umbrales en `log-cleanup.ts`)
+**Target:** sistema
+
+**Decisión:** Crear `log-cleanup.ts` con tres umbrales exportados: `DISK_LOG_RETENTION_DAYS=30`, `SUPABASE_LOG_RETENTION_DAYS=7`, `CLEANUP_INTERVAL_MS=1h`. El cleanup corre desde `sync.ts` (que ya tiene el tick cada 5s), throttleado via `shouldRunCleanup(lastCleanupAt)`: primera ejecución al arrancar sync.ts, luego cada hora. Disco: borra `logs/*.log` y `loop-F-XXXX.log`/`blocked.log` de la raíz con mtime < 30 días, con doble guarda: siempre preserva `orchestrator.log` (sync.ts tiene un `logOffset` en memoria que apunta a él) y cualquier archivo que contenga el featureId activo. Supabase: DELETE a `orch_logs` donde `ts < now - 7d`, con `Prefer: return=representation` para contar filas eliminadas. No-op si Supabase no está configurado.
+
+**Contexto:** 39 archivos en `logs/` (136K), 2414 líneas en `orchestrator.log`, un solo run de prueba dejó 18 filas en `orch_logs`. El dashboard lee siempre `.order("ts", desc).limit(60)` — el cleanup no lo afecta bajo ninguna condición. `sync.ts` hace 720 ticks/hora; sin throttle cada tick haría un DELETE a Supabase.
+
+**Alternativas descartadas:** Retención por número de filas (K últimas) en vez de antigüedad — más complejo, requiere COUNT + DELETE en dos queries. Cleanup en un proceso/cron separado — sync.ts ya está siempre corriendo y tiene acceso a `rest()`. Rotar `orchestrator.log` — sync.ts mantiene `logOffset` en memoria apuntando al archivo; borrarlo en un run activo corrompería el offset.
+
+**Consecuencias:** Los 39 logs existentes (F-0001 a F-0007) serán borrados en el primer cleanup que corra (todos tienen más de 30 días si el repo tiene < 30 días de features, o se preservan si son recientes). `blocked.log` se borra por antigüedad (inofensivo: es un audit trail de rechazos, 1 línea actualmente). Las constantes de umbral están en `log-cleanup.ts` — Augusto las puede cambiar sin tocar sync.ts ni la lógica de build.
+
+> S-025 · 2026-06-28
+
+---
+
+## ADR-0035 · 2026-06-28 · S-029: coordinación bot + loop para evitar 409 Conflict de Telegram
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Crear `bot-heartbeat.ts` con `writeBotHeartbeat()` / `isBotAlive()`. El bot escribe `BOT_HEARTBEAT.json` al inicio de cada ciclo de long-poll (~10s). El gate-wait del loop chequea `isBotAlive()` antes de llamar `pollApprovalOnce()`: si el bot está vivo, el loop solo duerme 3s y relee STATE.json; si el bot está caído o nunca arrancó, el loop pollea Telegram directamente. Umbral de staleness del bot: 30s (= 3 ciclos perdidos). STATE.json sigue siendo la fuente de verdad del approve en ambos casos — la condición del while siempre es `loadState()?.needsHumanApproval`.
+
+**Contexto:** ADR-0034 (S-028) embebió `pollApprovalOnce()` en el loop para no depender del bot. Pero cuando `npm run bot` Y el loop corren a la vez, ambos hacen `getUpdates` con el mismo token → Telegram devuelve 409 Conflict al segundo consumidor. El loop nunca procesaba el callback porque el bot siempre tenía el long-poll abierto (timeout=10s > timeout=5s del loop). El 409 no rompía nada (el loop detecta el approve vía STATE.json escrito por el bot), pero era ruido innecesario y podría causar race conditions si el timing cambia.
+
+**Alternativas descartadas:** Un único proceso que maneje ideas Y gates (fusionar bot + loop): complica demasiado el ciclo de vida. Webhook para el bot y long-poll solo para el loop: requiere URL pública. Canal IPC entre bot y loop: sobrecomplejo.
+
+**Consecuencias:** Con los 3 procesos corriendo (sync, bot, loop): el bot es el único consumidor de getUpdates, sin 409. El loop queda 100% coordinado vía STATE.json. Si el bot cae mientras el loop espera un gate, en ≤30s el loop detecta que el bot está inactivo y empieza a pollApprovalOnce() como fallback automático — sin intervención manual.
+
+> S-029 · 2026-06-28
+
+---
+
 ## ADR-0034 · 2026-06-28 · S-028: polling de Telegram embebido en el gate-wait del loop
 
 **Estado:** aceptada

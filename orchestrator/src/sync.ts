@@ -10,6 +10,7 @@ import { getOperatorState } from './operator-state.js'
 import { tryAutopilotPick } from './autopilot.js'
 import { MODEL_PLANNER, MODEL_BUILDER } from './models.js'
 import { readLoopHeartbeat } from './loop-heartbeat.js'
+import { shouldRunCleanup, cleanDiskLogs, cleanSupabaseLogs } from './log-cleanup.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -135,6 +136,7 @@ function currentStep(s: OrchestratorState): number {
   return pend ? pend.id : s.steps.length
 }
 
+let lastCleanupAt = 0  // corre en el primer tick (0 → diff = Inf) y luego cada hora
 let logOffset = -1
 async function pushLogTail(featureId: string): Promise<void> {
   if (!existsSync(LOG_FILE)) return
@@ -256,6 +258,16 @@ async function tick(): Promise<void> {
   await pullWebIdeas()
   await pullOperatorState()
   try { await tryAutopilotPick() } catch (e) { log(`[autopilot] error en tick: ${(e as Error).message}`) }
+
+  if (shouldRunCleanup(lastCleanupAt)) {
+    lastCleanupAt = Date.now()
+    try {
+      const disk = cleanDiskLogs()
+      if (disk.deleted.length) log(`[sync] cleanup disco: ${disk.deleted.length} archivos eliminados (${disk.deleted.join(', ')})`)
+      const supa = await cleanSupabaseLogs(rest)
+      if (supa.deletedRows > 0) log(`[sync] cleanup orch_logs: ${supa.deletedRows} filas eliminadas`)
+    } catch (e) { log(`[sync] cleanup: ${(e as Error).message}`) }
+  }
 }
 
 async function run(): Promise<void> {
