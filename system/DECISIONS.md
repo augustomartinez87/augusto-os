@@ -23,6 +23,24 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ---
 ```
 
+## ADR-0034 · 2026-06-28 · S-028: polling de Telegram embebido en el gate-wait del loop
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Exportar `pollApprovalOnce(offset, deps?)` desde `telegram.ts` y llamarlo dentro del gate-wait de `runLoop` en lugar del `setTimeout(60_000)` original. El loop principal ahora procesa callbacks de aprobar/rechazar de Telegram directamente (sin depender de `npm run bot` corriendo en paralelo). El intervalo entre polls es 5s (timeout del getUpdates) + 3s de pausa = ~8s de latencia máxima desde que Augusto aprieta el botón hasta que el loop reanuda. `npm run approve` sigue funcionando como fallback (limpia STATE.json desde terminal).
+
+**Contexto:** S-006 implementó la notificación de gates por Telegram (inline keyboard ✅/🚫) pero el procesamiento del callback vivía en `npm run bot` (proceso separado). Si el bot no estaba corriendo cuando Augusto apretaba "Aprobar", el callback quedaba bufferizado en la API de Telegram y el loop esperaba para siempre. Bug reportado: "Augusto aprobó desde Telegram pero el loop siguió en 'Esperando aprobación humana'".
+
+**Alternativas descartadas:** Lanzar `npm run bot` automáticamente desde `index.ts` como child process (complica el manejo de señales, logs duplicados, ciclos de vida acoplados). Webhook en lugar de long-polling (requiere URL pública, cambia la arquitectura de red). Flag en Supabase como señal de aprobación (dependencia extra, el loop ya no podría operar offline).
+
+**Consecuencias:** `npm run bot` queda reducido a: (1) procesar `/idea` desde el celu, (2) manejar approvals cuando el loop no está corriendo (p. ej. si el usuario quiere pre-aprobar antes de lanzar). Si ambos procesos corren a la vez, `approveGate` es idempotente (segunda llamada retorna "No hay ningún gate pendiente." sin tocar state). `TgDeps` en `pollApprovalOnce` acepta solo `send` + `chatId` (subset de la interfaz existente) para mantener los tests limpios.
+
+> S-028 · 2026-06-28
+
+---
+
 ## ADR-0032 · 2026-06-27 · S-015: umbrales de staleness para liveness del roster
 
 **Estado:** aceptada

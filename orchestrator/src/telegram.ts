@@ -186,6 +186,45 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/**
+ * Hace un único ciclo de long-poll (timeout=5s) y procesa callbacks de
+ * aprobar/rechazar. Llamado desde el gate-wait del loop principal — no requiere
+ * que `npm run bot` esté corriendo en paralelo. Si no hay credenciales configuradas
+ * es no-op, por lo que `npm run approve` sigue siendo el camino de fallback.
+ */
+export async function pollApprovalOnce(
+  offset: number,
+  deps?: Pick<TgDeps, 'send' | 'chatId'>,
+): Promise<{ newOffset: number }> {
+  const send = deps?.send ?? tg
+  const effectiveChatId = deps?.chatId ?? CHAT_ID
+  if (!deps?.send && !API) return { newOffset: offset }
+
+  try {
+    const data = await send('getUpdates', { offset, timeout: 5 })
+    if (!data?.ok || !Array.isArray(data.result)) return { newOffset: offset }
+
+    let newOffset = offset
+    for (const upd of data.result) {
+      newOffset = upd.update_id + 1
+      if (!upd.callback_query) continue
+      const cq = upd.callback_query
+      if (!effectiveChatId || String(cq.from?.id) !== String(effectiveChatId)) continue
+      const [action, featureId] = String(cq.data ?? '').split(':')
+      let answer = ''
+      if (action === 'approve') answer = approveGate(featureId)
+      else if (action === 'reject') { logReject(featureId ?? ''); answer = 'Rechazado — el gate queda en pausa.' }
+      if (answer) {
+        await send('answerCallbackQuery', { callback_query_id: cq.id, text: answer })
+        await send('sendMessage', { chat_id: effectiveChatId, text: answer })
+      }
+    }
+    return { newOffset }
+  } catch {
+    return { newOffset: offset }
+  }
+}
+
 /** Long-polling. Procesa botones (aprobar/rechazar) y texto libre (ideas → backlog). */
 export async function runTelegramListener(): Promise<void> {
   if (!API) { log('[telegram] TELEGRAM_BOT_TOKEN no configurado — bot deshabilitado.'); return }

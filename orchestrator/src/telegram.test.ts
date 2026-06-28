@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { OperatorState } from './operator-state.js'
-import { notifyGate, notifyDeployed, notifyReleaseFailed } from './telegram.js'
+import { notifyGate, notifyDeployed, notifyReleaseFailed, pollApprovalOnce } from './telegram.js'
+import { loadState, saveState } from './state.js'
 
 // log is a side-effect; suppress in tests
 vi.mock('./limits.js', () => ({ log: vi.fn(), sleepUntil: vi.fn() }))
 vi.mock('./state.js', () => ({ loadState: vi.fn().mockReturnValue(null), saveState: vi.fn() }))
+vi.mock('fs', () => ({ appendFileSync: vi.fn() }))
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -163,5 +165,100 @@ describe('notifyReleaseFailed', () => {
     expect(body.text).toContain('F-0003 NO se deployó')
     expect(body.text).not.toContain('tsc: error TS2345 que no debe aparecer')
     expect(body.text).not.toContain('Revisalo conmigo')
+  })
+})
+
+// ── pollApprovalOnce ───────────────────────────────────────────────────────────
+
+function makeActiveState(featureId = 'F-0042') {
+  return {
+    featureId,
+    needsHumanApproval: `Step 1: deploy ${featureId}`,
+    steps: [],
+    branch: `feat/${featureId}`,
+    merged: false,
+    pushed: false,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    pausedUntil: null,
+  } as any
+}
+
+describe('pollApprovalOnce', () => {
+  beforeEach(() => {
+    vi.mocked(loadState).mockReturnValue(null)
+    vi.mocked(saveState).mockClear()
+  })
+
+  it('no-op when no API configured (no deps.send)', async () => {
+    const result = await pollApprovalOnce(0)
+    expect(result.newOffset).toBe(0)
+  })
+
+  it('returns same offset when getUpdates returns empty result', async () => {
+    const send = vi.fn().mockResolvedValue({ ok: true, result: [] })
+    const result = await pollApprovalOnce(5, { send, chatId: CHAT_ID })
+    expect(result.newOffset).toBe(5)
+    expect(send).toHaveBeenCalledWith('getUpdates', { offset: 5, timeout: 5 })
+  })
+
+  it('approve: clears STATE.json and advances offset', async () => {
+    vi.mocked(loadState).mockReturnValue(makeActiveState('F-0042'))
+    const send = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        result: [{ update_id: 100, callback_query: { id: 'cq-1', from: { id: CHAT_ID }, data: 'approve:F-0042' } }],
+      })
+      .mockResolvedValue({ ok: true })
+
+    const result = await pollApprovalOnce(0, { send, chatId: CHAT_ID })
+
+    expect(result.newOffset).toBe(101)
+    expect(saveState).toHaveBeenCalledWith(expect.objectContaining({ needsHumanApproval: null }))
+    expect(send).toHaveBeenCalledWith('answerCallbackQuery', expect.objectContaining({ callback_query_id: 'cq-1' }))
+    const lastCall = send.mock.calls.find(([m]: [string]) => m === 'sendMessage')
+    expect(lastCall?.[1]?.text).toContain('Aprobado')
+  })
+
+  it('reject: logs to blocked.log, does not clear STATE.json', async () => {
+    const { appendFileSync } = await import('fs')
+    vi.mocked(loadState).mockReturnValue(makeActiveState('F-0042'))
+    const send = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        result: [{ update_id: 200, callback_query: { id: 'cq-2', from: { id: CHAT_ID }, data: 'reject:F-0042' } }],
+      })
+      .mockResolvedValue({ ok: true })
+
+    const result = await pollApprovalOnce(0, { send, chatId: CHAT_ID })
+
+    expect(result.newOffset).toBe(201)
+    expect(saveState).not.toHaveBeenCalled()
+    expect(appendFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('blocked.log'),
+      expect.stringContaining('F-0042'),
+      'utf-8',
+    )
+  })
+
+  it('ignores callback from unauthorized user', async () => {
+    vi.mocked(loadState).mockReturnValue(makeActiveState('F-0042'))
+    const send = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        result: [{ update_id: 300, callback_query: { id: 'cq-3', from: { id: '00000' }, data: 'approve:F-0042' } }],
+      })
+      .mockResolvedValue({ ok: true })
+
+    const result = await pollApprovalOnce(0, { send, chatId: CHAT_ID })
+
+    expect(result.newOffset).toBe(301)
+    expect(saveState).not.toHaveBeenCalled()
+  })
+
+  it('handles getUpdates network failure gracefully', async () => {
+    const send = vi.fn().mockRejectedValue(new Error('network error'))
+    const result = await pollApprovalOnce(10, { send, chatId: CHAT_ID })
+    expect(result.newOffset).toBe(10)
   })
 })

@@ -13,7 +13,7 @@ import { runQA } from './qa.js'
 import { runReviewer } from './reviewer.js'
 import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
-import { notifyDeployed, notifyReleaseFailed } from './telegram.js'
+import { notifyDeployed, notifyReleaseFailed, pollApprovalOnce } from './telegram.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
@@ -148,12 +148,14 @@ async function runLoop(state: OrchestratorState) {
 
   if (state.needsHumanApproval) {
     log(`[main] Esperando aprobación humana: ${state.needsHumanApproval}`)
-    log(`[main] Ejecutá: npm run approve`)
-    while (state.needsHumanApproval) {
-      await new Promise(r => setTimeout(r, 60_000))
-      const fresh = loadState()!
-      state = fresh
+    log(`[main] Ejecutá: npm run approve  (o aprobá desde Telegram)`)
+    let _tgOffset = 0
+    while (loadState()?.needsHumanApproval) {
+      const r = await pollApprovalOnce(_tgOffset)
+      _tgOffset = r.newOffset
+      if (loadState()?.needsHumanApproval) await new Promise(res => setTimeout(res, 3_000))
     }
+    state = loadState()!
     log('[main] Aprobación recibida. Continuando...')
   }
 
@@ -232,8 +234,11 @@ async function runLoop(state: OrchestratorState) {
       setHumanGate(state, `Step ${step.id}: ${step.desc}`)
       // Esperar aprobación inline y marcar el step como aprobado para NO re-gatear
       // el MISMO paso una y otra vez (bug del loop infinito).
+      let _tgOff2 = 0
       while (loadState()?.needsHumanApproval) {
-        await new Promise((r) => setTimeout(r, 60_000))
+        const r2 = await pollApprovalOnce(_tgOff2)
+        _tgOff2 = r2.newOffset
+        if (loadState()?.needsHumanApproval) await new Promise(res => setTimeout(res, 3_000))
       }
       state = loadState()!
       markStepStatus(state, step.id, 'pending', { humanApproved: true })
