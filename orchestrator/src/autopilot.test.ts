@@ -22,41 +22,45 @@ import type { LoopHeartbeat } from './loop-heartbeat.js'
 
 // Sistema items are Pipeline-2 scope — must NEVER be eligible for Pipeline-1 spawns.
 // Kredy/Spensiv/Argos are Pipeline-1 targets.
+// Ejecutor column added (S-030): only 'auto' items are picked; 'cc'/'manual'/missing → excluded.
 const BACKLOG_FIXTURE = `# Backlog — test
 
 ## Sistema
 
-| ID | P | Descripción | Estado |
-|----|---|-------------|--------|
-| S-001 | 1 | **Item de alta prioridad** — prioridad 1, excluido | pending |
-| S-002 | ✅ | **Item completado** | done 2026-06-01 |
-| S-003 | 2 | **Item P2 Sistema** — Pipeline 2, nunca elegible | pending |
-| S-004 | 3 | **Item con mutuo** — toca mutuo y dinero | pending |
-| S-005 | 2 | **Otro item P2 Sistema** | pending |
-| S-006 | 4 | **Item P4 Sistema limpio** | pending |
-| S-007 | 2 | **Item waiting** — en espera | waiting |
-| S-008 | 2 | **Item blocked** — bloqueado | blocked |
-| S-009 | 2 | **Item done** — ya terminado | done 2026-06-20 |
-| S-010 | 2 | **Item armado** — en proceso | armado (autopilot) 2026-06-26T00:00:00.000Z |
+| ID | P | Descripción | Estado | Ejecutor |
+|----|---|-------------|--------|----------|
+| S-001 | 1 | **Item de alta prioridad** — prioridad 1, excluido | pending | cc |
+| S-002 | ✅ | **Item completado** | done 2026-06-01 | cc |
+| S-003 | 2 | **Item P2 Sistema** — Pipeline 2, nunca elegible | pending | cc |
+| S-004 | 3 | **Item con mutuo** — toca mutuo y dinero | pending | manual |
+| S-005 | 2 | **Otro item P2 Sistema** | pending | cc |
+| S-006 | 4 | **Item P4 Sistema limpio** | pending | cc |
+| S-007 | 2 | **Item waiting** — en espera | waiting | cc |
+| S-008 | 2 | **Item blocked** — bloqueado | blocked | cc |
+| S-009 | 2 | **Item done** — ya terminado | done 2026-06-20 | cc |
+| S-010 | 2 | **Item armado** — en proceso | armado (autopilot) 2026-06-26T00:00:00.000Z | cc |
 
 ## Kredy
 
-| ID | P | Descripción | Estado |
-|----|---|-------------|--------|
-| KR-001 | 2 | **Feature Kredy limpia** | pending |
-| KR-002 | 2 | **Feature con producción** — deploy a prod | pending |
+| ID | P | Descripción | Estado | Ejecutor |
+|----|---|-------------|--------|----------|
+| KR-001 | 2 | **Feature Kredy limpia** | pending | auto |
+| KR-002 | 2 | **Feature con producción** — deploy a prod | pending | auto |
+| KR-003 | 2 | **Feature Kredy cc** | pending | cc |
 
 ## Spensiv
 
-| ID | P | Descripción | Estado |
-|----|---|-------------|--------|
-| SP-001 | 3 | **Seed data Spensiv** | pending |
+| ID | P | Descripción | Estado | Ejecutor |
+|----|---|-------------|--------|----------|
+| SP-001 | 3 | **Seed data Spensiv** | pending | auto |
+| SP-002 | 3 | **Feature Spensiv cc** | pending | cc |
 
 ## Argos
 
-| ID | P | Descripción | Estado |
-|----|---|-------------|--------|
-| AR-001 | 4 | **Feature Argos P4** | pending |
+| ID | P | Descripción | Estado | Ejecutor |
+|----|---|-------------|--------|----------|
+| AR-001 | 4 | **Feature Argos P4** | pending | auto |
+| AR-002 | 4 | **Feature Argos manual** | pending | manual |
 `
 
 const SLEEP_YAML = `mode: SLEEP
@@ -129,8 +133,33 @@ describe('parseEligibleBacklog', () => {
 
   it('excludes items with risk keywords in the line', () => {
     const rows = parseEligibleBacklog(backlogPath)
-    expect(rows.map(r => r.id)).not.toContain('S-004')   // 'mutuo'
-    expect(rows.map(r => r.id)).not.toContain('KR-002')  // 'deploy a prod'
+    // S-004: Sistema section (excluded by section) + manual ejecutor
+    expect(rows.map(r => r.id)).not.toContain('S-004')
+    // KR-002: auto ejecutor but 'deploy a prod' triggers secondary safety net
+    expect(rows.map(r => r.id)).not.toContain('KR-002')
+  })
+
+  it('excludes items with Ejecutor=cc', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    expect(rows.map(r => r.id)).not.toContain('KR-003')  // cc
+    expect(rows.map(r => r.id)).not.toContain('SP-002')  // cc
+  })
+
+  it('excludes items with Ejecutor=manual', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    expect(rows.map(r => r.id)).not.toContain('AR-002')  // manual
+  })
+
+  it('item without Ejecutor column defaults to manual (not picked)', () => {
+    const noCol = `## Kredy\n| ID | P | Descripción | Estado |\n|----|---|-------------|--------|\n| KR-099 | 2 | Feature sin columna | pending |\n`
+    const tmpFile = path.join(tmpDir, 'noExecutor.md')
+    writeFileSync(tmpFile, noCol, 'utf-8')
+    expect(parseEligibleBacklog(tmpFile)).toHaveLength(0)
+  })
+
+  it('all returned rows have ejecutor === "auto"', () => {
+    const rows = parseEligibleBacklog(backlogPath)
+    rows.forEach(r => expect(r.ejecutor).toBe('auto'))
   })
 
   // Bug A: Sistema is Pipeline-2 — all its items must be excluded regardless of priority/state
@@ -147,13 +176,18 @@ describe('parseEligibleBacklog', () => {
     expect(rows.every(r => r.target !== 'sistema')).toBe(true)
   })
 
-  it('includes P2+ pending items from Pipeline-1 sections without risk keywords', () => {
+  it('includes only Ejecutor=auto pending items from Pipeline-1 sections without risk keywords', () => {
     const rows = parseEligibleBacklog(backlogPath)
     const ids = rows.map(r => r.id)
+    // auto items from Pipeline-1 sections (no risk keywords)
     expect(ids).toContain('KR-001')
     expect(ids).toContain('SP-001')
     expect(ids).toContain('AR-001')
-    // Sistema items must NOT be included even though they look eligible
+    // cc/manual items must NOT be included even in eligible sections
+    expect(ids).not.toContain('KR-003')  // cc
+    expect(ids).not.toContain('SP-002')  // cc
+    expect(ids).not.toContain('AR-002')  // manual
+    // Sistema items must NOT be included (Pipeline-2 scope)
     expect(ids).not.toContain('S-003')
     expect(ids).not.toContain('S-005')
   })
@@ -181,10 +215,10 @@ describe('parseEligibleBacklog', () => {
     expect(ar001?.target).toBe('argos')
   })
 
-  it('RISK_KEYWORDS export is non-empty and case-insensitive checks work', () => {
+  it('RISK_KEYWORDS export is non-empty and safety net blocks auto items with risk keywords', () => {
     expect(RISK_KEYWORDS.length).toBeGreaterThan(0)
-    // Risk keyword on a Kredy row (valid section) still excluded
-    const custom = `## Kredy\n| ID | P | Descripción | Estado |\n|----|---|-------------|--------|\n| KR-099 | 2 | Manejar Dinero real | pending |\n`
+    // auto item with risk keyword → caught by secondary safety net → not picked
+    const custom = `## Kredy\n| ID | P | Descripción | Estado | Ejecutor |\n|----|---|-------------|--------|----------|\n| KR-099 | 2 | Manejar Dinero real | pending | auto |\n`
     const tmpFile = path.join(tmpDir, 'custom.md')
     writeFileSync(tmpFile, custom, 'utf-8')
     expect(parseEligibleBacklog(tmpFile)).toHaveLength(0)
@@ -557,7 +591,7 @@ describe('tryAutopilotPick', () => {
     const failingArch = async () => { throw new Error('timeout') }
     // Primera llamada: falla en KR-001 → queda 'failed', counter=1
     await tryAutopilotPick({ ...baseOpts(), runArchitectFn: failingArch })
-    // Segunda llamada: KR-001 ya no es 'pending' → toma SP-001, falla → counter=2
+    // Segunda llamada: KR-001 ya no es 'pending'; KR-002 tiene risk keyword (safety net) → SP-001 elegido, falla → counter=2
     await tryAutopilotPick({ ...baseOpts(), runArchitectFn: failingArch })
 
     const c = JSON.parse(readFileSync(counterPath, 'utf-8'))

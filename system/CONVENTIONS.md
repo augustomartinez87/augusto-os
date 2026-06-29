@@ -86,6 +86,30 @@ Si una referencia antigua cita "S-022 (rotación de logs)", apunta a lo que hoy 
 
 ---
 
+## 5. Clasificación de ejecutor por ítem de backlog
+
+Todo ítem del backlog lleva un campo `Ejecutor` con uno de tres valores:
+
+| Valor | Significado | ¿Autopilot lo toca? |
+|-------|-------------|---------------------|
+| `auto` | El loop autónomo puede tomarlo, construirlo y deployarlo sin supervisión | **Sí** — es el único que autopilot considera |
+| `cc` | Trabajo para Claude Code directo (orquestador, prompt de Augusto). No autopilot | No |
+| `manual` | Manos de Augusto (migraciones de prod, dinero real, legal). Nunca autopilot | No |
+
+**Fail-safe: `manual` por defecto.** Un ítem sin el campo `Ejecutor`, con valor vacío o con cualquier valor no reconocido se trata como `manual` y NUNCA corre solo.
+
+**Fuente de verdad:** `system/BACKLOG.md` (columna `Ejecutor` de la tabla). El campo se espeja a `orch_backlog.ejecutor` en Supabase para que el dashboard lo muestre.
+
+**Regla de allowlist del autopilot:**
+
+1. Elegibilidad primaria: `pending` + `Ejecutor=auto` (en una sección Pipeline-1: Kredy/Spensiv/Argos).
+2. Red de seguridad secundaria: si un ítem marcado `auto` contiene alguna keyword de riesgo (`dinero`, `prod`, `legal`, `migración`, etc.), el autopilot lo salta con un warning en lugar de ejecutarlo.
+3. Los guardrails existentes (cap 5/día, lock por heartbeat, modo SLEEP requerido) siguen activos para todos los ítems.
+
+**Clasificación conservadora:** ante cualquier ambigüedad, usar `manual`. Nada corre solo sin marca explícita `auto`. Los ítems existentes sin el campo NO se vuelven `auto` por omisión (implementado: fail-safe en `parseEligibleBacklog`).
+
+---
+
 ## 4. Portabilidad de modelo (por qué importa el punto 2)
 
 El diseño separa **rol** (Planner, Builder/Executor, Verifier, Reviewer) de **modelo** (hoy Opus para planificar, Sonnet headless para ejecutar). La memoria del sistema —ADR, BACKLOG, PROGRESS, CONVENTIONS— es texto plano, sin dependencia del modelo. Esto permite:

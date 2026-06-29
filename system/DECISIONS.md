@@ -23,6 +23,24 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ---
 ```
 
+## ADR-0037 · 2026-06-28 · S-030: clasificación de ejecutor del backlog + autopilot por allowlist
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Agregar columna `Ejecutor` (`auto` | `cc` | `manual`) a la tabla de `BACKLOG.md` como campo explícito de elegibilidad del autopilot. El autopilot (`parseEligibleBacklog`) cambia su filtro primario de lista negra por palabras a lista blanca: sólo toma ítems con `Ejecutor=auto`. Fail-safe: columna ausente o vacía → `manual`. Mantener el chequeo de keywords de riesgo como red de seguridad secundaria: si un ítem `auto` contiene dinero/prod/legal/migración, se salta con warning en lugar de ejecutarse. Campo espejado a `orch_backlog.ejecutor` en Supabase vía `sync.ts`. El backlog actual se clasificó con valores conservadores: todos los ítems de Sistema → `cc`; migraciones y features que tocan dinero/prod en Kredy → `manual`; setup dev sin riesgo de prod (Spensiv seed, Argos) → `cc`; ningún ítem promovido a `auto` (decisión de Augusto).
+
+**Contexto:** El autopilot (S-004) usaba una lista negra de keywords para excluir ítems riesgosos. Es frágil: puede dejar pasar algo peligroso que no use esas palabras, o bloquear algo seguro que las contenga accidentalmente. La inversión a allowlist garantiza que solo los ítems explícitamente aprobados por Augusto (`auto`) corran solos. Candidatos a `auto` identificados pero no promovidos aún (Augusto decide): AR-003 (polish de prompt), SPT-001 (seed data dev Spensiv), AR-004 (Supabase branch dev Argos).
+
+**Alternativas descartadas:** Mantener lista negra extendida (no resuelve el problema de cobertura incompleta). Campo en un YAML separado (más fricción que la columna inline en BACKLOG.md). Clasificación en Supabase como fuente de verdad (BACKLOG.md es la fuente de verdad per CONVENTIONS §1).
+
+**Consecuencias:** Ningún ítem corre en autopilot a menos que Augusto lo marque `auto` explícitamente. El dashboard puede mostrar el ejecutor de cada ítem (requiere `ALTER TABLE orch_backlog ADD COLUMN IF NOT EXISTS ejecutor text DEFAULT 'manual'` en Supabase). Los tests de `parseEligibleBacklog` actualizados: 256 tests verdes. El campo en `BacklogRow` es `ejecutor: string`; siempre `'auto'` en los ítems retornados.
+
+> S-030 · 2026-06-28
+
+---
+
 ## ADR-0036 · 2026-06-28 · S-025: retención de logs — disco 30 días, Supabase 7 días, throttle 1 hora
 
 **Estado:** aceptada

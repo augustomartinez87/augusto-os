@@ -206,7 +206,9 @@ function parseBacklog(): unknown[] {
     const bold = desc.match(/\*\*(.+?)\*\*/)
     let label = (bold ? bold[1] : desc).replace(/[*`]/g, '')
     label = label.split(/\s[—–-]\s| \(/)[0].trim().slice(0, 52)
-    rows.push({ item_id: id, project, priority: c[2], label, state: c[4], updated_at: new Date().toISOString() })
+    // Ejecutor: c[5] en formato nuevo (7+ celdas), 'manual' por defecto en filas sin columna
+    const ejecutor = (c.length >= 7 ? c[5] : 'manual').trim() || 'manual'
+    rows.push({ item_id: id, project, priority: c[2], label, state: c[4], ejecutor, updated_at: new Date().toISOString() })
   }
   return rows
 }

@@ -42,6 +42,7 @@ export interface BacklogRow {
   label: string
   fullLine: string
   state: string
+  ejecutor: string  // 'auto' | 'cc' | 'manual' — siempre 'auto' en los ítems que llegan a rows[]
 }
 
 // ── Backlog parsing ───────────────────────────────────────────────────────────
@@ -76,16 +77,25 @@ export function parseEligibleBacklog(backlogPath = DEFAULT_BACKLOG_PATH): Backlo
     const target = SECTION_TARGET_MAP[project]
     if (!target) continue
 
-    // Risk keyword denylist (against the full raw line)
+    // Allowlist: sólo ítems con Ejecutor=auto son elegibles.
+    // Fail-safe: columna ausente o vacía → 'manual' → nunca se autoejecutaa.
+    const ejecutor = (c.length >= 7 ? c[5] : '').trim().toLowerCase()
+    if (ejecutor !== 'auto') continue
+
+    // Red de seguridad secundaria: ítem marcado 'auto' pero con keywords de riesgo → warning + skip.
     const llower = ln.toLowerCase()
-    if (RISK_KEYWORDS.some(kw => llower.includes(kw.toLowerCase()))) continue
+    const hitKw = RISK_KEYWORDS.find(kw => llower.includes(kw.toLowerCase()))
+    if (hitKw) {
+      log(`[autopilot] ⚠ ${id} marcado 'auto' pero contiene keyword de riesgo "${hitKw}" — saltando.`)
+      continue
+    }
 
     const desc = c[3]
     const bold = desc.match(/\*\*(.+?)\*\*/)
     let label = (bold ? bold[1] : desc).replace(/[*`]/g, '')
     label = label.split(/\s[—–-]\s| \(/)[0].trim()
 
-    rows.push({ id, project, target, priority, label, fullLine: ln, state: c[4].trim() })
+    rows.push({ id, project, target, priority, label, fullLine: ln, state: c[4].trim(), ejecutor: 'auto' })
   }
 
   // Stable sort by priority ascending; Array.sort is stable in V8 → insertion order preserved for ties
@@ -314,7 +324,7 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     if (!picks.length) {
       const now = Date.now()
       if (now - lastEmptyLogAt >= EMPTY_LOG_INTERVAL_MS) {
-        log('[autopilot] SLEEP — no hay items elegibles en el backlog (P2+/pending/sin keywords de riesgo)')
+        log('[autopilot] SLEEP — no hay items elegibles en el backlog (Ejecutor=auto/pending/sin keywords de riesgo)')
         lastEmptyLogAt = now
       }
       return null
