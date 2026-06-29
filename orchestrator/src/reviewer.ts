@@ -3,7 +3,7 @@ import { log } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot } from './targets.js'
 import { loadSpecSections } from './executor.js'
-import { MODEL_REVIEWER } from './models.js'
+import { MODEL_REVIEWER, MAX_TURNS } from './models.js'
 
 export interface ReviewResult {
   approved: boolean
@@ -109,7 +109,7 @@ export function parseReviewOutput(raw: string): ReviewResult {
 async function defaultCallClaude(prompt: string, repoRoot: string): Promise<string> {
   const result = await execa('claude', [
     '--model', MODEL_REVIEWER,
-    '--max-turns', '1',
+    '--max-turns', String(MAX_TURNS),
     '--output-format', 'text',
     '--dangerously-skip-permissions',
     '--allowedTools', '',

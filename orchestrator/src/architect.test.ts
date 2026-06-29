@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { getNextFeatureId, buildArchitectPrompt, runArchitect } from './architect.js'
+import { MAX_TURNS } from './models.js'
 import type { IntakeResult } from './intake.js'
 
 const TEMPLATE_FIXTURE = `---
@@ -255,5 +256,23 @@ describe('runArchitect', () => {
 
     expect(capturedPrompt).toContain('agregar export csv para spensiv')
     expect(capturedPrompt).toContain('F-0008')
+  })
+
+  it('propagates error when callClaude throws (Reached max turns scenario)', async () => {
+    const callClaude = vi.fn().mockRejectedValue(
+      new Error('Architect (Claude) falló con código 1:\n[stderr]\nReached max turns (1)\n[stdout]\n(vacío)')
+    )
+
+    await expect(
+      runArchitect(BASE_INTAKE, { featuresDir, templatePath, callClaude })
+    ).rejects.toThrow('Reached max turns')
+  })
+})
+
+// ── MAX_TURNS sanity check ─────────────────────────────────────────────────────
+
+describe('MAX_TURNS', () => {
+  it('is at least 10 so a tool_use on turn 1 does not cut the loop', () => {
+    expect(MAX_TURNS).toBeGreaterThanOrEqual(10)
   })
 })

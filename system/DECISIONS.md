@@ -23,6 +23,21 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ---
 ```
 
+## ADR-0038 · 2026-06-29 · S-031: centralizar MAX_TURNS y fix visibilidad de errores del CLI
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** `MAX_TURNS = 15` exportado desde `models.ts` (junto a los `MODEL_*`). Los tres agentes LLM (`defaultCallClaude` de `architect.ts`, `planner.ts`, `reviewer.ts`) usan `String(MAX_TURNS)` en lugar del literal `'1'` que cortaba el loop cuando claude emitía un `tool_use` en el turno 1 antes de producir output final. Error de visibilidad: el `throw` de cada agente incluye ahora `stdout` además de `stderr`. `planFeature` refactorizado con `PlannerOpts.callClaude?` injectable, siguiendo el patrón de `architect.ts` y `reviewer.ts`, para hacer testeable el camino de error.
+**Contexto:** El autopilot fallaba en AR-005 con `Error: Reached max turns (1)`. El CLI de claude cambió de comportamiento: con prompts complejos el modelo emite un `tool_use` en el turno 1 antes de emitir el texto final, y con `--max-turns 1` el loop cortaba exactamente ahí → exit 1 → Architect nunca devolvía el spec. Cualquier valor > 1 hubiera bastado; se eligió 15 para dar margen a razonamientos que encadenan múltiples herramientas. El mismo problema aplica a Planner y Reviewer aunque sus prompts sean más simples: se arreglan por consistencia y prevención.
+**Alternativas descartadas:** `--max-turns 2` (hubiera resuelto el caso inmediato pero no prompts más largos de Architect). Sin tope (loops infinitos potenciales si el modelo no converge). Un tope por agente en vez de compartido (no hay razón para diferenciar; centralizar es más mantenible, siguiendo S-019).
+**Consecuencias:** Un agente que no converja en 15 turnos igualmente falla, pero es una condición anómala que indica un prompt problemático. AR-005 devuelto a `pending` para reintento. Campo `MAX_TURNS` en `models.ts` es el único punto de ajuste si en el futuro se quiere cambiar el tope.
+
+> S-031 · 2026-06-29
+
+---
+
 ## ADR-0037 · 2026-06-28 · S-030: clasificación de ejecutor del backlog + autopilot por allowlist
 
 **Estado:** aceptada

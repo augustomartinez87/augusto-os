@@ -6,7 +6,7 @@ import { log } from './limits.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 import { fileURLToPath } from 'url'
-import { MODEL_PLANNER } from './models.js'
+import { MODEL_PLANNER, MAX_TURNS } from './models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -23,7 +23,33 @@ const PlanSchema = z.object({
   }))
 })
 
-export async function planFeature(featureMd: string): Promise<PlanStep[]> {
+async function defaultCallClaude(prompt: string): Promise<string> {
+  const result = await execa('claude', [
+    '--model', MODEL_PLANNER,
+    '--max-turns', String(MAX_TURNS),
+    '--output-format', 'text',
+    '--dangerously-skip-permissions',
+    '--strict-mcp-config',
+    '-p', prompt,
+  ], {
+    cwd: getRepoRoot(),
+    reject: false,
+    stdin: 'ignore',
+    env: { ...process.env, ...getDbEnvOverride() },
+  })
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Planner (Claude) falló con código ${result.exitCode}:\n[stderr]\n${result.stderr || '(vacío)'}\n[stdout]\n${result.stdout || '(vacío)'}`)
+  }
+
+  return result.stdout
+}
+
+export interface PlannerOpts {
+  callClaude?: (prompt: string) => Promise<string>
+}
+
+export async function planFeature(featureMd: string, opts?: PlannerOpts): Promise<PlanStep[]> {
   log('[planner] Invocando Opus para descomponer feature...')
 
   const targetName = getActiveTargetName()
@@ -47,26 +73,11 @@ Respondé SOLO con JSON válido en este formato:
 SPEC DEL FEATURE:
 ${featureMd}`
 
-  const result = await execa('claude', [
-    '--model', MODEL_PLANNER,
-    '--max-turns', '1',
-    '--output-format', 'text',
-    '--dangerously-skip-permissions',
-    '--strict-mcp-config',
-    '-p', prompt,
-  ], {
-    cwd: getRepoRoot(),
-    reject: false,
-    stdin: 'ignore',
-    env: { ...process.env, ...getDbEnvOverride() },
-  })
+  const invoke = opts?.callClaude ?? defaultCallClaude
+  const raw = await invoke(prompt)
 
-  if (result.exitCode !== 0) {
-    throw new Error(`Planner falló: ${result.stderr}`)
-  }
-
-  const jsonMatch = result.stdout.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error(`Planner no devolvió JSON válido:\n${result.stdout}`)
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error(`Planner no devolvió JSON válido:\n${raw}`)
 
   const parsed = PlanSchema.safeParse(JSON.parse(jsonMatch[0]))
   if (!parsed.success) throw new Error(`JSON del planner inválido: ${parsed.error.message}`)

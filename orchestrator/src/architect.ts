@@ -2,7 +2,7 @@ import { execa } from 'execa'
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { MODEL_ARCHITECT } from './models.js'
+import { MODEL_ARCHITECT, MAX_TURNS } from './models.js'
 import type { IntakeResult } from './intake.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -106,7 +106,7 @@ export interface ArchitectOpts {
 async function defaultCallClaude(prompt: string): Promise<string> {
   const result = await execa('claude', [
     '--model', MODEL_ARCHITECT,
-    '--max-turns', '1',
+    '--max-turns', String(MAX_TURNS),
     '--output-format', 'text',
     '--dangerously-skip-permissions',
     '--strict-mcp-config',
@@ -118,7 +118,7 @@ async function defaultCallClaude(prompt: string): Promise<string> {
   })
 
   if (result.exitCode !== 0) {
-    throw new Error(`Architect (Claude) falló con código ${result.exitCode}:\n${result.stderr}`)
+    throw new Error(`Architect (Claude) falló con código ${result.exitCode}:\n[stderr]\n${result.stderr || '(vacío)'}\n[stdout]\n${result.stdout || '(vacío)'}`)
   }
 
   return result.stdout
