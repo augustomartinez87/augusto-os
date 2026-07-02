@@ -43,9 +43,14 @@ export function buildArchitectPrompt(
   template: string,
   featureId: string,
   relatedContent?: string,
+  research?: string,
 ): string {
   const relatedIds = [...intake.relatedAdrs, ...intake.relatedFeatures].join(', ') || 'ninguno identificado'
   const related = relatedContent?.trim() || 'Ninguno.'
+
+  const researchBlock = research
+    ? `\n## Investigación del repo (evidencia verificada contra filesystem)\n${research}\n\nNO explores el repo para redescubrir esto; estas rutas están verificadas. Preferí Grep/Glob sobre Read completo para lo que falte.\n`
+    : ''
 
   return `Sos el Architect agent de augusto-os. Tu tarea es escribir el spec completo de una feature NUEVA siguiendo exactamente el template y la Definition of Ready provistos.
 
@@ -59,7 +64,7 @@ ${intake.contextSummary}
 ADRs/features identificados por grep: ${relatedIds}
 
 ${related !== 'Ninguno.' ? `### Excerpts de features relacionados\n${related}` : ''}
-
+${researchBlock}
 ## Template a seguir
 ${template}
 
@@ -100,6 +105,7 @@ function extractMarkdownContent(raw: string): string {
 export interface ArchitectOpts {
   featuresDir?: string
   templatePath?: string
+  research?: string
   // Injectable for tests — receives the full prompt, returns raw Claude output
   callClaude?: (prompt: string) => Promise<string>
 }
@@ -143,12 +149,12 @@ async function defaultCallClaude(prompt: string, featureId: string): Promise<str
 export async function runArchitect(intake: IntakeResult, opts?: ArchitectOpts): Promise<string> {
   const featuresDir = opts?.featuresDir ?? FEATURES_DIR
   const templatePath = opts?.templatePath ?? TEMPLATE_PATH
-  const callClaude = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, featureId))
 
   const template = readFileSync(templatePath, 'utf-8')
   const featureId = getNextFeatureId(featuresDir)
   const relatedContent = loadRelatedContent(intake, featuresDir)
-  const prompt = buildArchitectPrompt(intake, template, featureId, relatedContent)
+  const callClaude = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, featureId))
+  const prompt = buildArchitectPrompt(intake, template, featureId, relatedContent, opts?.research)
 
   const raw = await callClaude(prompt)
   let content = extractMarkdownContent(raw)

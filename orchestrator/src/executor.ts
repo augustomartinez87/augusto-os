@@ -48,6 +48,7 @@ function buildPrompt(
   featureId: string,
   specSections: { fueraDeAlcance: string; restriccionesClave: string },
   priorError?: string,
+  research?: string,
 ): string {
   const targetName = getActiveTargetName()
   const stack = getTargetConfig().stack
@@ -58,11 +59,14 @@ function buildPrompt(
   const restriccionesBlock = specSections.restriccionesClave
     ? `\nRESTRICCIONES CLAVE (no romper):\n${specSections.restriccionesClave}\n`
     : ''
+  const researchBlock = research
+    ? `\n## Investigación del repo (evidencia verificada contra filesystem)\n${research}\n\nNO explores el repo para redescubrir esto; estas rutas están verificadas. Preferí Grep/Glob sobre Read completo para lo que falte.\n`
+    : ''
 
   const base = `Sos un agente de código implementando el step ${step.id} del feature ${featureId} en el repo "${targetName}" (stack: ${stack}).
 
 TAREA: ${step.desc}
-${alcanceBlock}${restriccionesBlock}
+${alcanceBlock}${restriccionesBlock}${researchBlock}
 RESTRICCIONES ABSOLUTAS:
 - NO corras "prisma migrate", "prisma db push", ni SQL destructivo.
 - NO deployés a Vercel.
@@ -115,9 +119,18 @@ export async function executeStep(
   step: Step,
   state: OrchestratorState,
   priorError?: string,
+  research?: string,
 ): Promise<ExecutorResult> {
+  // Load research from disk when not provided — ensures retries and fresh sessions always have context
+  let effectiveResearch = research
+  if (!effectiveResearch) {
+    const researchPath = path.join(FEATURES_DIR, `${state.featureId}.research.md`)
+    if (existsSync(researchPath)) {
+      try { effectiveResearch = readFileSync(researchPath, 'utf-8') } catch { /* non-fatal */ }
+    }
+  }
   const specSections = loadSpecSections(state.featureId)
-  const prompt = buildPrompt(step, state.featureId, specSections, priorError)
+  const prompt = buildPrompt(step, state.featureId, specSections, priorError, effectiveResearch)
 
   const args = [
     '--model', MODEL_BUILDER,
@@ -197,12 +210,13 @@ export async function executeStepWithRetry(
   step: Step,
   state: OrchestratorState,
   onVerifyFail: (errors: string) => string,
+  research?: string,
 ): Promise<{ ok: boolean; sessionId: string | null; finalError?: string; adrBlocks: AdrDraft[] }> {
   let priorError: string | undefined
   let sessionId = step.sessionId
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const result = await executeStep({ ...step, sessionId }, state, priorError)
+    const result = await executeStep({ ...step, sessionId }, state, priorError, research)
     sessionId = result.sessionId
 
     if (result.usageLimit) {

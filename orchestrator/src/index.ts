@@ -8,6 +8,7 @@ import {
 } from './state.js'
 import { planFeature, loadFeatureSpec } from './planner.js'
 import { executeStepWithRetry } from './executor.js'
+import { runScout } from './scout/index.js'
 import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
 import { runReviewer } from './reviewer.js'
@@ -23,6 +24,7 @@ import { appendProgress } from './progress.js'
 import { getOperatorState } from './operator-state.js'
 import { resolveBacklogId, markBacklogState, clearPick } from './autopilot.js'
 import { writeLoopHeartbeat } from './loop-heartbeat.js'
+import type { IntakeResult } from './intake.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', 'features')
@@ -106,6 +108,26 @@ async function main() {
   await runLoop(state)
 }
 
+async function loadOrRunScout(featureId: string, target: string, title: string, repoRoot: string): Promise<string | undefined> {
+  const researchPath = path.join(FEATURES_DIR, `${featureId}.research.md`)
+  if (existsSync(researchPath)) {
+    return readFileSync(researchPath, 'utf-8')
+  }
+  if (process.env.SCOUT_ENABLED !== 'true') return undefined
+  const syntheticIntake: IntakeResult = {
+    ideaText: title,
+    target,
+    classification: 'feature',
+    relatedAdrs: [],
+    relatedFeatures: [],
+    relatedBacklogIds: [],
+    contextSummary: `Target: ${target} | Feature: ${featureId}`,
+    needsArchitect: false,
+  }
+  const result = await runScout(syntheticIntake, repoRoot, featureId)
+  return result?.markdown
+}
+
 async function startFeature(featureId: string): Promise<OrchestratorState> {
   const specPath = path.join(FEATURES_DIR, `${featureId}.md`)
   if (!existsSync(specPath)) {
@@ -130,7 +152,12 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
 
   writeLoopHeartbeat(featureId, 'planning')
   const branch = await createFeatureBranch(featureId, title)
-  const planSteps = await planFeature(spec)
+
+  const { getRepoRoot } = await import('./targets.js')
+  const research = await loadOrRunScout(featureId, target, title, getRepoRoot())
+  if (research) log(`[main] Research del scout cargado para ${featureId} (${research.length} chars)`)
+
+  const planSteps = await planFeature(spec, { research })
   writeLoopHeartbeat(featureId, 'planned')
   log(`[main] Feature ${featureId}: ${planSteps.length} pasos planificados`)
 

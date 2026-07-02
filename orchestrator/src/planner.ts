@@ -63,6 +63,7 @@ async function defaultCallClaude(prompt: string, featureId: string): Promise<str
 
 export interface PlannerOpts {
   callClaude?: (prompt: string) => Promise<string>
+  research?: string
 }
 
 export async function planFeature(featureMd: string, opts?: PlannerOpts): Promise<PlanStep[]> {
@@ -73,6 +74,11 @@ export async function planFeature(featureMd: string, opts?: PlannerOpts): Promis
 
   const targetName = getActiveTargetName()
   const stack = getTargetConfig().stack
+
+  const researchBlock = opts?.research
+    ? `\n## Investigación del repo (evidencia verificada contra filesystem)\n${opts.research}\n\nNO explores el repo para redescubrir esto; estas rutas están verificadas. Preferí Grep/Glob sobre Read completo para lo que falte.\n`
+    : ''
+
   const prompt = `Sos el planner de un orquestador de código. Dada la siguiente spec de feature para el repo "${targetName}" (stack: ${stack}), descomponela en pasos atómicos e implementables por un agente de código.
 
 Reglas:
@@ -88,7 +94,7 @@ Respondé SOLO con JSON válido en este formato:
     { "desc": "otro paso", "ui": true }
   ]
 }
-
+${researchBlock}
 SPEC DEL FEATURE:
 ${featureMd}`
 
