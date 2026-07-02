@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { MODEL_ARCHITECT, MAX_TURNS } from './models.js'
+import { parseClaudeJson, recordInvocation } from './metrics.js'
 import type { IntakeResult } from './intake.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -103,11 +104,12 @@ export interface ArchitectOpts {
   callClaude?: (prompt: string) => Promise<string>
 }
 
-async function defaultCallClaude(prompt: string): Promise<string> {
+async function defaultCallClaude(prompt: string, featureId: string): Promise<string> {
+  const startMs = Date.now()
   const result = await execa('claude', [
     '--model', MODEL_ARCHITECT,
     '--max-turns', String(MAX_TURNS),
-    '--output-format', 'text',
+    '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--strict-mcp-config',
     '-p', prompt,
@@ -117,17 +119,31 @@ async function defaultCallClaude(prompt: string): Promise<string> {
     stdin: 'ignore',
   })
 
+  const { text, parsed } = parseClaudeJson(result.stdout ?? '')
+  try {
+    recordInvocation({
+      featureId,
+      role: 'architect',
+      model: MODEL_ARCHITECT,
+      inputTokens: parsed?.usage?.input_tokens ?? 0,
+      outputTokens: parsed?.usage?.output_tokens ?? 0,
+      costUsd: parsed?.total_cost_usd ?? 0,
+      durationMs: parsed?.duration_ms ?? (Date.now() - startMs),
+      exitCode: result.exitCode ?? 0,
+    })
+  } catch { /* métricas nunca tumban el pipeline */ }
+
   if (result.exitCode !== 0) {
     throw new Error(`Architect (Claude) falló con código ${result.exitCode}:\n[stderr]\n${result.stderr || '(vacío)'}\n[stdout]\n${result.stdout || '(vacío)'}`)
   }
 
-  return result.stdout
+  return text
 }
 
 export async function runArchitect(intake: IntakeResult, opts?: ArchitectOpts): Promise<string> {
   const featuresDir = opts?.featuresDir ?? FEATURES_DIR
   const templatePath = opts?.templatePath ?? TEMPLATE_PATH
-  const callClaude = opts?.callClaude ?? defaultCallClaude
+  const callClaude = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, featureId))
 
   const template = readFileSync(templatePath, 'utf-8')
   const featureId = getNextFeatureId(featuresDir)

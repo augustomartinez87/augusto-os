@@ -4,6 +4,7 @@ import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot } from './targets.js'
 import { loadSpecSections } from './executor.js'
 import { MODEL_REVIEWER, MAX_TURNS } from './models.js'
+import { parseClaudeJson, recordInvocation } from './metrics.js'
 
 export interface ReviewResult {
   approved: boolean
@@ -85,7 +86,7 @@ REVIEW: CHANGES_REQUESTED
 - <issue 1>
 - <issue 2>`
 
-  const invoke = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, root))
+  const invoke = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, root, state.featureId))
   const raw = await invoke(prompt)
   return parseReviewOutput(raw)
 }
@@ -106,11 +107,12 @@ export function parseReviewOutput(raw: string): ReviewResult {
   return { approved: false, feedback: text }
 }
 
-async function defaultCallClaude(prompt: string, repoRoot: string): Promise<string> {
+async function defaultCallClaude(prompt: string, repoRoot: string, featureId: string): Promise<string> {
+  const startMs = Date.now()
   const result = await execa('claude', [
     '--model', MODEL_REVIEWER,
     '--max-turns', String(MAX_TURNS),
-    '--output-format', 'text',
+    '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--allowedTools', '',
     '--strict-mcp-config',
@@ -122,9 +124,23 @@ async function defaultCallClaude(prompt: string, repoRoot: string): Promise<stri
     all: true,
   })
 
+  const { text, parsed } = parseClaudeJson(result.stdout ?? result.all ?? '')
+  try {
+    recordInvocation({
+      featureId,
+      role: 'reviewer',
+      model: MODEL_REVIEWER,
+      inputTokens: parsed?.usage?.input_tokens ?? 0,
+      outputTokens: parsed?.usage?.output_tokens ?? 0,
+      costUsd: parsed?.total_cost_usd ?? 0,
+      durationMs: parsed?.duration_ms ?? (Date.now() - startMs),
+      exitCode: result.exitCode ?? 0,
+    })
+  } catch { /* métricas nunca tumban el pipeline */ }
+
   if (result.exitCode !== 0) {
     throw new Error(`Reviewer (Claude) falló con código ${result.exitCode}:\n${result.all ?? result.stderr}`)
   }
 
-  return result.all ?? result.stdout ?? ''
+  return text
 }

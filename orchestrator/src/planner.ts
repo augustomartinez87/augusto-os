@@ -7,6 +7,7 @@ import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 import { fileURLToPath } from 'url'
 import { MODEL_PLANNER, MAX_TURNS } from './models.js'
+import { parseClaudeJson, recordInvocation } from './metrics.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -23,11 +24,12 @@ const PlanSchema = z.object({
   }))
 })
 
-async function defaultCallClaude(prompt: string): Promise<string> {
+async function defaultCallClaude(prompt: string, featureId: string): Promise<string> {
+  const startMs = Date.now()
   const result = await execa('claude', [
     '--model', MODEL_PLANNER,
     '--max-turns', String(MAX_TURNS),
-    '--output-format', 'text',
+    '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--strict-mcp-config',
     '-p', prompt,
@@ -38,11 +40,25 @@ async function defaultCallClaude(prompt: string): Promise<string> {
     env: { ...process.env, ...getDbEnvOverride() },
   })
 
+  const { text, parsed } = parseClaudeJson(result.stdout ?? '')
+  try {
+    recordInvocation({
+      featureId,
+      role: 'planner',
+      model: MODEL_PLANNER,
+      inputTokens: parsed?.usage?.input_tokens ?? 0,
+      outputTokens: parsed?.usage?.output_tokens ?? 0,
+      costUsd: parsed?.total_cost_usd ?? 0,
+      durationMs: parsed?.duration_ms ?? (Date.now() - startMs),
+      exitCode: result.exitCode ?? 0,
+    })
+  } catch { /* métricas nunca tumban el pipeline */ }
+
   if (result.exitCode !== 0) {
     throw new Error(`Planner (Claude) falló con código ${result.exitCode}:\n[stderr]\n${result.stderr || '(vacío)'}\n[stdout]\n${result.stdout || '(vacío)'}`)
   }
 
-  return result.stdout
+  return text
 }
 
 export interface PlannerOpts {
@@ -51,6 +67,9 @@ export interface PlannerOpts {
 
 export async function planFeature(featureMd: string, opts?: PlannerOpts): Promise<PlanStep[]> {
   log('[planner] Invocando Opus para descomponer feature...')
+
+  const featureIdMatch = featureMd.match(/^id:\s*(F-\d+)/m)
+  const featureId = featureIdMatch?.[1] ?? 'unknown'
 
   const targetName = getActiveTargetName()
   const stack = getTargetConfig().stack
@@ -73,7 +92,7 @@ Respondé SOLO con JSON válido en este formato:
 SPEC DEL FEATURE:
 ${featureMd}`
 
-  const invoke = opts?.callClaude ?? defaultCallClaude
+  const invoke = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, featureId))
   const raw = await invoke(prompt)
 
   const jsonMatch = raw.match(/\{[\s\S]*\}/)

@@ -8,6 +8,7 @@ import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 import { parseAdrBlocks, type AdrDraft } from './adr.js'
 import { MODEL_BUILDER } from './models.js'
+import { parseClaudeJson, recordInvocation } from './metrics.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGS_DIR = path.join(__dirname, '..', 'logs')
@@ -120,7 +121,7 @@ export async function executeStep(
 
   const args = [
     '--model', MODEL_BUILDER,
-    '--output-format', 'text',
+    '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--allowedTools', 'Read,Edit,Write,Bash,Glob,Grep',
     '--strict-mcp-config',
@@ -134,6 +135,7 @@ export async function executeStep(
     log(`[executor] Iniciando sesión nueva para step ${step.id}: ${step.desc}`)
   }
 
+  const startMs = Date.now()
   const result = await execa('claude', args, {
     cwd: getRepoRoot(),
     reject: false,
@@ -147,8 +149,30 @@ export async function executeStep(
   const logPath = writeStepLog(state.featureId, step.id, output)
   log(`[executor] Log completo en: ${logPath}`)
 
-  const sessionMatch = output.match(/session[_-]?id[:\s]+([a-z0-9-]+)/i)
-  const sessionId = sessionMatch?.[1] ?? step.sessionId ?? null
+  // Extract session_id from JSON (primary) then fall back to regex on all output
+  let sessionId: string | null = null
+  const { parsed } = parseClaudeJson(result.stdout ?? '')
+  if (parsed?.session_id) {
+    sessionId = parsed.session_id
+  } else {
+    const sessionMatch = output.match(/session[_-]?id[:\s]+([a-z0-9-]+)/i)
+    sessionId = sessionMatch?.[1] ?? null
+  }
+  sessionId = sessionId ?? step.sessionId ?? null
+
+  try {
+    recordInvocation({
+      featureId: state.featureId,
+      stepId: step.id,
+      role: 'executor',
+      model: MODEL_BUILDER,
+      inputTokens: parsed?.usage?.input_tokens ?? 0,
+      outputTokens: parsed?.usage?.output_tokens ?? 0,
+      costUsd: parsed?.total_cost_usd ?? 0,
+      durationMs: parsed?.duration_ms ?? (Date.now() - startMs),
+      exitCode: result.exitCode ?? 0,
+    })
+  } catch { /* métricas nunca tumban el pipeline */ }
 
   if (isUsageLimitError(output) || result.exitCode === 429) {
     log('[executor] Usage limit detectado')
