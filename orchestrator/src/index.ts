@@ -189,6 +189,12 @@ async function runLoop(state: OrchestratorState) {
     }
     state = loadState()!
     log('[main] Aprobación recibida. Continuando...')
+    // If a step was blocked while waiting (reviewer rejected twice), reset it so the loop retries it.
+    const blockedAfterApproval = getBlockedStep(state)
+    if (blockedAfterApproval) {
+      markStepStatus(state, blockedAfterApproval.id, 'pending')
+      state = loadState()!
+    }
   }
 
   while (true) {
