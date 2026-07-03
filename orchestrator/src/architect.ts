@@ -106,6 +106,10 @@ export interface ArchitectOpts {
   featuresDir?: string
   templatePath?: string
   research?: string
+  /** Pre-computed featureId — pass this to avoid a race between the caller's
+   *  scout invocation (which needs the id to name the research file) and the
+   *  internal getNextFeatureId() call. */
+  featureId?: string
   // Injectable for tests — receives the full prompt, returns raw Claude output
   callClaude?: (prompt: string) => Promise<string>
 }
@@ -151,7 +155,7 @@ export async function runArchitect(intake: IntakeResult, opts?: ArchitectOpts): 
   const templatePath = opts?.templatePath ?? TEMPLATE_PATH
 
   const template = readFileSync(templatePath, 'utf-8')
-  const featureId = getNextFeatureId(featuresDir)
+  const featureId = opts?.featureId ?? getNextFeatureId(featuresDir)
   const relatedContent = loadRelatedContent(intake, featuresDir)
   const callClaude = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, featureId))
   const prompt = buildArchitectPrompt(intake, template, featureId, relatedContent, opts?.research)

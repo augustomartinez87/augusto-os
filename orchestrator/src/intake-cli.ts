@@ -2,7 +2,9 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { runIntake } from './intake.js'
-import { runArchitect } from './architect.js'
+import { runArchitect, getNextFeatureId } from './architect.js'
+import { runScout } from './scout/index.js'
+import { setActiveTarget, getRepoRoot } from './targets.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INTAKE_FILE = path.join(__dirname, '..', '..', 'system', 'FEATURE-INTAKE.md')
@@ -80,7 +82,19 @@ async function main(): Promise<void> {
   }
 
   console.log('\n[intake] Invocando Architect (Opus)... esto puede tardar ~30-60s')
-  const filePath = await runArchitect(result)
+  const featureId = getNextFeatureId()
+  let research: string | undefined
+  if (result.target !== 'unknown') {
+    try {
+      setActiveTarget(result.target)
+      const repoRoot = getRepoRoot()
+      const scoutResult = await runScout(result, repoRoot, featureId)
+      research = scoutResult?.markdown
+    } catch (e) {
+      console.warn('[intake] Scout omitido:', (e as Error).message)
+    }
+  }
+  const filePath = await runArchitect(result, { research, featureId })
 
   console.log(`\n[intake] Spec escrito en: ${filePath}`)
   console.log('[intake] Revisá el spec antes de correr: npm start <feature-id>')

@@ -5,7 +5,9 @@ import { execa } from 'execa'
 import { getOperatorState } from './operator-state.js'
 import { STATE_PATH } from './state.js'
 import { runIntake, type IntakeResult } from './intake.js'
-import { runArchitect } from './architect.js'
+import { runArchitect, getNextFeatureId, type ArchitectOpts } from './architect.js'
+import { runScout } from './scout/index.js'
+import { setActiveTarget, getRepoRoot } from './targets.js'
 import { appendAdr, DECISIONS_PATH } from './adr.js'
 import { log } from './limits.js'
 import { readLoopHeartbeat, isLoopHeartbeatFresh, LOOP_HB_PATH } from './loop-heartbeat.js'
@@ -271,7 +273,12 @@ function defaultSpawnLoop(featureId: string): void {
 
 export interface AutopilotPickOpts {
   runIntakeFn?: (text: string) => IntakeResult
-  runArchitectFn?: (intake: IntakeResult) => Promise<string>
+  runArchitectFn?: (intake: IntakeResult, opts?: ArchitectOpts) => Promise<string>
+  /** Injectable for tests: replaces the production setActiveTarget+getRepoRoot+runScout chain.
+   *  Return null to skip research (scout disabled or failed). */
+  runScoutFn?: (intake: IntakeResult, featureId: string) => Promise<{ markdown: string } | null>
+  /** Injectable featuresDir for getNextFeatureId — lets tests control which ID is assigned. */
+  featuresDir?: string
   spawnLoop?: (featureId: string) => void
   backlogPath?: string
   decisionsPath?: string
@@ -340,13 +347,30 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
     marked = markBacklogState(pick.id, `armado (autopilot) ${isoNow}`, opts?.backlogPath)
     incrementCounter(counterPath)
 
-    // 7. Intake + Architect (no LLM for picking — both steps are injectable for tests)
+    // 7. Intake + Scout + Architect (no LLM for picking — all steps are injectable for tests)
     const intakeFn = opts?.runIntakeFn ?? runIntake
     const intake = intakeFn(pick.label)
     intake.target = pick.target as typeof intake.target  // override: section already tells us the target
 
+    // Pre-compute featureId so scout writes the research file with the correct name and
+    // architect uses that same id — prevents a race between the two getNextFeatureId() calls.
+    const assignedId = getNextFeatureId(opts?.featuresDir)
+    let research: string | undefined
+    try {
+      if (opts?.runScoutFn) {
+        const scoutResult = await opts.runScoutFn(intake, assignedId)
+        research = scoutResult?.markdown ?? undefined
+      } else {
+        // Production path: resolve repo root from active target, then run scout
+        setActiveTarget(intake.target)
+        const repoRoot = getRepoRoot()
+        const scoutResult = await runScout(intake, repoRoot, assignedId)
+        research = scoutResult?.markdown ?? undefined
+      }
+    } catch { /* scout errors never block the pipeline */ }
+
     const architectFn = opts?.runArchitectFn ?? runArchitect
-    const featureFilePath = await architectFn(intake)
+    const featureFilePath = await architectFn(intake, { research, featureId: assignedId })
     const featureId = path.basename(featureFilePath, '.md')
     pickedFeatureId = featureId  // captured so catch can clean up the map entry
 

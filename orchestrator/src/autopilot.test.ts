@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
+import type { ArchitectOpts } from './architect.js'
 import {
   parseEligibleBacklog,
   markBacklogState,
@@ -421,6 +422,7 @@ describe('tryAutopilotPick', () => {
   let statePath: string
   let operatorStatePath: string
   let decisionsPath: string
+  let featuresDir: string  // controls getNextFeatureId → F-0099 in tests
 
   const mockIntake = (text: string) => ({
     ideaText: text,
@@ -433,7 +435,8 @@ describe('tryAutopilotPick', () => {
     needsArchitect: true,
   })
 
-  const mockArchitect = async (_intake: unknown) => path.join(tmpDir, 'F-0099.md')
+  const mockArchitect = async (_intake: unknown, _opts?: ArchitectOpts) =>
+    path.join(tmpDir, `${_opts?.featureId ?? 'F-0099'}.md`)
 
   beforeEach(() => {
     tmpDir = mkdtempSync(path.join(tmpdir(), 'autopilot-pick-'))
@@ -449,6 +452,10 @@ describe('tryAutopilotPick', () => {
     writeFileSync(backlogPath, BACKLOG_FIXTURE, 'utf-8')
     writeFileSync(operatorStatePath, SLEEP_YAML, 'utf-8')
     writeFileSync(decisionsPath, '# ADR\n', 'utf-8')
+    // Seed featuresDir with F-0098.md so getNextFeatureId returns 'F-0099'
+    featuresDir = path.join(tmpDir, 'features')
+    mkdirSync(featuresDir)
+    writeFileSync(path.join(featuresDir, 'F-0098.md'), '', 'utf-8')
   })
 
   afterEach(() => { rmSync(tmpDir, { recursive: true }) })
@@ -462,8 +469,10 @@ describe('tryAutopilotPick', () => {
     statePath,
     operatorStatePath,
     decisionsPath,
+    featuresDir,
     runIntakeFn: mockIntake,
     runArchitectFn: mockArchitect,
+    runScoutFn: async () => null,  // no-op scout; avoids setActiveTarget in tests
     spawnLoop: (_fid: string) => { /* no-op */ },
   })
 
@@ -680,5 +689,35 @@ describe('tryAutopilotPick', () => {
     const content = readFileSync(backlogPath, 'utf-8')
     const kr001line = content.split('\n').find(l => l.includes('KR-001'))
     expect(kr001line).toMatch(/armado \(autopilot\)/)
+  })
+
+  // ── Scout integration (Phase 2) ───────────────────────────────────────────────
+  it('passes scout research to architect when runScoutFn returns markdown', async () => {
+    let capturedOpts: ArchitectOpts | undefined
+    const result = await tryAutopilotPick({
+      ...baseOpts(),
+      runScoutFn: async () => ({ markdown: '## Investigación\nAlgo encontrado', reports: [] }),
+      runArchitectFn: async (_intake, opts) => {
+        capturedOpts = opts
+        return path.join(tmpDir, `${opts?.featureId ?? 'F-0099'}.md`)
+      },
+    })
+    expect(result).not.toBeNull()
+    expect(capturedOpts?.research).toBe('## Investigación\nAlgo encontrado')
+    expect(capturedOpts?.featureId).toBe('F-0099')
+  })
+
+  it('still calls architect when runScoutFn returns null (fallback intact)', async () => {
+    let architectCalled = false
+    const result = await tryAutopilotPick({
+      ...baseOpts(),
+      runScoutFn: async () => null,
+      runArchitectFn: async (_intake, opts) => {
+        architectCalled = true
+        return path.join(tmpDir, `${opts?.featureId ?? 'F-0099'}.md`)
+      },
+    })
+    expect(result).not.toBeNull()
+    expect(architectCalled).toBe(true)
   })
 })
