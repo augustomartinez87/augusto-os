@@ -104,3 +104,21 @@
 [2026-07-03T19:57:19.520Z] [qa] FAIL: 1 errores
 [2026-07-03T19:57:19.520Z]   NO_SERVER: http://localhost:3000 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
 [2026-07-03T19:57:19.520Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-07-03T19:57:50.407Z] [reviewer] APPROVED step 3
+[2026-07-03T19:57:50.586Z] [git] Commit f81b5aa1: step 3
+[2026-07-03T19:57:50.588Z] [adr] ADR-0041 registrado (origen: )
+[2026-07-03T19:57:50.589Z] [main] Step 3 completado y commiteado (f81b5aa1)
+[2026-07-03T19:57:50.589Z] 
+[main] === Step 4/6: Construir dentro de #p-flujos el segundo diagrama inline "Deploy / release en verde": verde (tsc·lint·tests) → review → auto-deploy → aviso Telegram, con rama de fallo hacia release failed y su acción. Sin dependencias externas. ===
+[2026-07-03T19:57:50.591Z] [executor] Iniciando sesión nueva para step 4: Construir dentro de #p-flujos el segundo diagrama inline "Deploy / release en verde": verde (tsc·lint·tests) → review → auto-deploy → aviso Telegram, con rama de fallo hacia release failed y su acción. Sin dependencias externas.
+[2026-07-03T19:58:59.183Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0011-step4.log
+[2026-07-03T19:58:59.185Z] [verifier] Corriendo typecheck...
+[2026-07-03T19:59:01.606Z] [verifier] Corriendo lint...
+[2026-07-03T19:59:02.489Z] [verifier] WARNING: target sin script "lint" — omitido
+[2026-07-03T19:59:02.489Z] [verifier] Corriendo tests...
+[2026-07-03T19:59:06.595Z] [verifier] OK: typecheck + lint + tests
+[2026-07-03T19:59:06.721Z] [qa] Navegando http://localhost:3000/
+[2026-07-03T19:59:09.092Z] [qa] SKIP: servidor no disponible en http://localhost:3000
+[2026-07-03T19:59:09.132Z] [qa] FAIL: 1 errores
+[2026-07-03T19:59:09.132Z]   NO_SERVER: http://localhost:3000 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-07-03T19:59:09.133Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.

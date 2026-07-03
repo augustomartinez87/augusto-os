@@ -256,6 +256,53 @@
         </div>
 
       </div>
+
+      <!-- ── Diagrama 2: Deploy / release en verde ── -->
+      <p style="font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;
+                letter-spacing:1.4px;margin:22px 0 10px 0">Deploy / release en verde</p>
+
+      <div class="flow-diagram">
+
+        <div class="flow-node flow-node--cap">push / merge a main</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--ok">tsc · lint · tests</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-diamond">
+          <div class="flow-diamond-txt">¿Todo verde?</div>
+        </div>
+
+        <div class="flow-branches">
+          <div class="flow-branch">
+            <div class="flow-label flow-label--y">Sí</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Code review</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Auto-deploy</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">
+              Aviso Telegram<br>
+              <span style="font-size:11px;color:var(--mut)">deploy exitoso notificado</span>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✓</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-label flow-label--n">No</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">Release failed</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">
+              Pipeline se detiene<br>
+              <span style="font-size:11px;color:var(--coral)">Telegram alerta al operador</span>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✗</div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 

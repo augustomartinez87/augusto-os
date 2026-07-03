@@ -7,6 +7,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0041 · 2026-07-03 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0011 · step 3
+
+---
 ## ADR-0040 · 2026-06-29 · arancelCostoTNA é informativo — não subtrai do spread
 
 **Estado:** aceptada
