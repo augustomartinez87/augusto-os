@@ -87,6 +87,7 @@ contexto: <por qué surgió>
 alternativas: <qué se descartó, o "ninguna">
 consecuencias: <qué queda abierto, o "ninguna">
 ===END ADR===
+Escribí el ADR SIEMPRE en español, independientemente del idioma del código del repo.
 Clasificá origen: "Instrucción de Augusto" si la decisión deriva del spec del feature o de una orden explícita; "Supuesto del agente" si la elegiste por criterio propio. Steps mecánicos (rename, fix de typecheck, cambios obvios) NO generan ADR — en ese caso no emitas ningún bloque.`
 
   if (priorError) {
