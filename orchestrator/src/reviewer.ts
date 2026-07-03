@@ -94,13 +94,26 @@ REVIEW: CHANGES_REQUESTED
 export function parseReviewOutput(raw: string): ReviewResult {
   const text = raw.trim()
 
+  // Primary: starts with the verdict (model followed instructions)
   if (text.startsWith('REVIEW: APPROVED')) {
+    return { approved: true, feedback: '' }
+  }
+
+  // Fallback: model added preamble before the verdict — check last non-empty line
+  const lastLine = text.split('\n').filter(l => l.trim()).pop()?.trim() ?? ''
+  if (lastLine === 'REVIEW: APPROVED') {
     return { approved: true, feedback: '' }
   }
 
   const changesMatch = /^REVIEW: CHANGES_REQUESTED\n([\s\S]*)$/.exec(text)
   if (changesMatch) {
     return { approved: false, feedback: changesMatch[1].trim() }
+  }
+
+  // Fallback: CHANGES_REQUESTED with preamble
+  if (text.includes('REVIEW: CHANGES_REQUESTED')) {
+    const after = text.split('REVIEW: CHANGES_REQUESTED').pop()?.trim() ?? ''
+    return { approved: false, feedback: after || text }
   }
 
   // Fail-safe: unrecognized format → don't approve silently
