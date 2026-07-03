@@ -50,3 +50,40 @@
 [2026-07-03T19:40:27.216Z] [qa] FAIL: 1 errores
 [2026-07-03T19:40:27.216Z]   NO_SERVER: http://localhost:3000 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
 [2026-07-03T19:40:27.216Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-07-03T19:41:31.432Z] [reviewer] APPROVED step 1
+[2026-07-03T19:41:31.640Z] [git] Commit d9eeb195: step 1
+[2026-07-03T19:41:31.641Z] [main] Step 1 completado y commiteado (d9eeb195)
+[2026-07-03T19:41:31.641Z] 
+[main] === Step 2/6: En el bloque `<style>` de dashboard/index.html, agregar clases `.flow-*` (nodo, conector/flecha, rama de decisión, etiqueta) que tomen colores y tipografía de las CSS vars ya definidas (--teal, --mut, --mut2, --panel, badges b-*), sin hex nuevos hardcodeados. ===
+[2026-07-03T19:41:31.642Z] [executor] Iniciando sesión nueva para step 2: En el bloque `<style>` de dashboard/index.html, agregar clases `.flow-*` (nodo, conector/flecha, rama de decisión, etiqueta) que tomen colores y tipografía de las CSS vars ya definidas (--teal, --mut, --mut2, --panel, badges b-*), sin hex nuevos hardcodeados.
+[2026-07-03T19:44:01.143Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0011-step2.log
+[2026-07-03T19:44:01.145Z] [verifier] Corriendo typecheck...
+[2026-07-03T19:44:03.520Z] [verifier] Corriendo lint...
+[2026-07-03T19:44:04.398Z] [verifier] WARNING: target sin script "lint" — omitido
+[2026-07-03T19:44:04.399Z] [verifier] Corriendo tests...
+[2026-07-03T19:44:08.226Z] [verifier] OK: typecheck + lint + tests
+[2026-07-03T19:44:41.577Z] [reviewer] CHANGES_REQUESTED en step 2:
+- `.flow-node--ok` y `.flow-node--err` hardcodean los colores del theme como literales `rgba(47,212,205,.4)` y `rgba(229,97,106,.4)`, que son exactamente el RGB de `--teal` (#2FD4CD) y `--coral` (#E5616A). Esto viola la restricción clave del step ("sin hex nuevos hardcodeados" / colores desde las CSS vars): si el theme cambia sus colores, estos bordes quedan desincronizados. Derivarlos de las vars, p.ej. `border-color:color-mix(in srgb, var(--teal) 40%, transparent)` (o `rgb(from var(--teal) r g b / .4)`), manteniendo el single-file offline-safe.
+[2026-07-03T19:44:41.578Z] [executor] Resumiendo sesión 527dee30-4808-45a5-93c1-7d2ae13acdc7 para step 2
+[2026-07-03T19:45:10.619Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0011-step2.log
+[2026-07-03T19:45:10.620Z] [verifier] Corriendo typecheck...
+[2026-07-03T19:45:12.959Z] [verifier] Corriendo lint...
+[2026-07-03T19:45:13.820Z] [verifier] WARNING: target sin script "lint" — omitido
+[2026-07-03T19:45:13.821Z] [verifier] Corriendo tests...
+[2026-07-03T19:45:17.638Z] [verifier] OK: typecheck + lint + tests
+[2026-07-03T19:45:48.427Z] 
+[gates] *** PAUSA: requiere aprobación humana ***
+[2026-07-03T19:45:48.427Z] [gates] Detalle: Step 2: reviewer rechaza tras segunda corrección
+[2026-07-03T19:45:48.427Z] [gates] Ejecutá: npm run approve  (o aprobá desde Telegram)
+[2026-07-03T19:45:48.429Z] [main] Esperando aprobación humana: Step 2: reviewer rechaza tras segunda corrección
+[2026-07-03T19:45:48.429Z] [main] Ejecutá: npm run approve  (o aprobá desde Telegram)
+[2026-07-03T19:53:32.710Z] [main] Aprobación recibida. Continuando...
+[2026-07-03T19:53:32.712Z] 
+[main] === Step 2/6: En el bloque `<style>` de dashboard/index.html, agregar clases `.flow-*` (nodo, conector/flecha, rama de decisión, etiqueta) que tomen colores y tipografía de las CSS vars ya definidas (--teal, --mut, --mut2, --panel, badges b-*), sin hex nuevos hardcodeados. ===
+[2026-07-03T19:53:32.713Z] [executor] Resumiendo sesión 527dee30-4808-45a5-93c1-7d2ae13acdc7 para step 2
+[2026-07-03T19:54:22.437Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0011-step2.log
+[2026-07-03T19:54:22.438Z] [verifier] Corriendo typecheck...
+[2026-07-03T19:54:24.799Z] [verifier] Corriendo lint...
+[2026-07-03T19:54:25.686Z] [verifier] WARNING: target sin script "lint" — omitido
+[2026-07-03T19:54:25.687Z] [verifier] Corriendo tests...
+[2026-07-03T19:54:29.514Z] [verifier] OK: typecheck + lint + tests
