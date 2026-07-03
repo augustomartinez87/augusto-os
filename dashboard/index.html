@@ -209,7 +209,54 @@
       <div id="ideas" class="card"><span class="empty">—</span></div>
     </div>
     <div class="panel" id="p-log"><div id="log">—</div></div>
-    <div class="panel" id="p-flujos"></div>
+    <div class="panel" id="p-flujos">
+
+      <!-- ── Diagrama 1: Gate falla → aprobación humana ── -->
+      <p style="font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;
+                letter-spacing:1.4px;margin:14px 0 10px 0">Gate falla → aprobación humana</p>
+
+      <div class="flow-diagram">
+
+        <div class="flow-node flow-node--cap">inicio del ciclo</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--err">Gate falla<br>
+          <span style="font-size:11px;color:var(--coral)">verifier detecta error</span>
+        </div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--err">Builder → <strong>blocked</strong></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node">
+          Notificación al operador<br>
+          <span style="font-size:11px;color:var(--mut)">canal según OPERATOR_STATE</span>
+        </div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-diamond">
+          <div class="flow-diamond-txt">¿Aprueba el operador?</div>
+        </div>
+
+        <div class="flow-branches">
+          <div class="flow-branch">
+            <div class="flow-label flow-label--y">Aprobar</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Pipeline reanuda</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✓</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-label flow-label--n">Rechazar</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">Queda en blocked</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✗</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div>
 
   <!-- ░░ ROSTER · presente: quién está vivo y qué hace ahora ░░ -->

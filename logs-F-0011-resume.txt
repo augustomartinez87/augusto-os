@@ -87,3 +87,20 @@
 [2026-07-03T19:54:25.686Z] [verifier] WARNING: target sin script "lint" — omitido
 [2026-07-03T19:54:25.687Z] [verifier] Corriendo tests...
 [2026-07-03T19:54:29.514Z] [verifier] OK: typecheck + lint + tests
+[2026-07-03T19:55:00.129Z] [reviewer] APPROVED step 2
+[2026-07-03T19:55:00.306Z] [git] Commit 66d43da1: step 2
+[2026-07-03T19:55:00.307Z] [main] Step 2 completado y commiteado (66d43da1)
+[2026-07-03T19:55:00.307Z] 
+[main] === Step 3/6: Construir dentro de #p-flujos el diagrama inline (SVG o HTML/CSS autocontenido) del flujo "Gate falla → aprobación humana": estado blocked → notificación según modo OPERATOR_STATE → decisión aprobar/rechazar → reanuda o queda en blocked. Sin dependencias externas. ===
+[2026-07-03T19:55:00.308Z] [executor] Iniciando sesión nueva para step 3: Construir dentro de #p-flujos el diagrama inline (SVG o HTML/CSS autocontenido) del flujo "Gate falla → aprobación humana": estado blocked → notificación según modo OPERATOR_STATE → decisión aprobar/rechazar → reanuda o queda en blocked. Sin dependencias externas.
+[2026-07-03T19:57:09.929Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0011-step3.log
+[2026-07-03T19:57:09.931Z] [verifier] Corriendo typecheck...
+[2026-07-03T19:57:12.308Z] [verifier] Corriendo lint...
+[2026-07-03T19:57:13.202Z] [verifier] WARNING: target sin script "lint" — omitido
+[2026-07-03T19:57:13.203Z] [verifier] Corriendo tests...
+[2026-07-03T19:57:16.988Z] [verifier] OK: typecheck + lint + tests
+[2026-07-03T19:57:17.113Z] [qa] Navegando http://localhost:3000/
+[2026-07-03T19:57:19.477Z] [qa] SKIP: servidor no disponible en http://localhost:3000
+[2026-07-03T19:57:19.520Z] [qa] FAIL: 1 errores
+[2026-07-03T19:57:19.520Z]   NO_SERVER: http://localhost:3000 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-07-03T19:57:19.520Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
