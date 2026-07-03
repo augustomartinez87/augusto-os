@@ -258,7 +258,7 @@ describe('runScout fallback', () => {
     process.env.SCOUT_ENABLED = 'false'
     try {
       const intake = {
-        ideaText: 'test', target: 'spensiv', classification: 'feature' as const,
+        ideaText: 'test', target: 'spensiv' as const, classification: 'feature' as const,
         relatedAdrs: [], relatedFeatures: [], relatedBacklogIds: [],
         contextSummary: '', needsArchitect: true,
       }
@@ -278,7 +278,7 @@ describe('runScout fallback', () => {
     delete process.env.DEEPSEEK_API_KEY
     try {
       const intake = {
-        ideaText: 'test', target: 'spensiv', classification: 'feature' as const,
+        ideaText: 'test', target: 'spensiv' as const, classification: 'feature' as const,
         relatedAdrs: [], relatedFeatures: [], relatedBacklogIds: [],
         contextSummary: '', needsArchitect: true,
       }

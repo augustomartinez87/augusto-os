@@ -44,6 +44,16 @@
       "prodDbPatterns": [
         "wwzocpcolgdzkvcigchj"
       ]
+    },
+    "sistema": {
+      "path": "C:/Users/Augusto/Downloads/Proyectos/augusto-os/orchestrator",
+      "description": "Orquestador y dashboard de control — trabajo sobre el propio sistema (no un repo target de features). path=orchestrator/ para que tsc/vitest funcionen; el executor accede a ../dashboard/ con rutas relativas.",
+      "stack": "node+tsx+vitest",
+      "dbModel": "none",
+      "verifyCmd": "npx tsc --noEmit",
+      "lintCmd": "",
+      "testCmd": "npm test",
+      "qaBaseUrl": ""
     }
   }
 }

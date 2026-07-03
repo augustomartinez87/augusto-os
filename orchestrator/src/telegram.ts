@@ -14,13 +14,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INBOX = path.join(__dirname, '..', '..', 'system', 'FEATURE-INTAKE.md')
 const BLOCKED_LOG = path.join(__dirname, '..', 'blocked.log')
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID
-const API = TOKEN ? `https://api.telegram.org/bot${TOKEN}` : null
+// Lazy getters — read env at call time so tests can stub TELEGRAM_BOT_TOKEN
+function getApi(): string | null {
+  const t = process.env.TELEGRAM_BOT_TOKEN
+  return t ? `https://api.telegram.org/bot${t}` : null
+}
+function getDefaultChatId(): string | undefined {
+  return process.env.TELEGRAM_CHAT_ID
+}
 
 async function tg(method: string, body: Record<string, unknown>): Promise<any> {
-  if (!API) return null
-  const res = await fetch(`${API}/${method}`, {
+  const api = getApi()
+  if (!api) return null
+  const res = await fetch(`${api}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -29,7 +35,8 @@ async function tg(method: string, body: Record<string, unknown>): Promise<any> {
 }
 
 function allowed(id: unknown): boolean {
-  return CHAT_ID != null && CHAT_ID !== '' && String(id) === String(CHAT_ID)
+  const chatId = getDefaultChatId()
+  return chatId != null && chatId !== '' && String(id) === String(chatId)
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
@@ -49,9 +56,9 @@ function pickText(full: string, short: string, mode: OperatorMode, style: Respon
 
 /** Sends text with retry. Accepts optional test deps to inject send/chatId. */
 async function tgSendRetry(text: string, deps?: Pick<TgDeps, 'send' | 'chatId'>): Promise<void> {
-  if (!deps?.send && (!API || !CHAT_ID)) return
+  if (!deps?.send && (!getApi() || !getDefaultChatId())) return
   const send = deps?.send ?? tg
-  const chatId = deps?.chatId ?? CHAT_ID
+  const chatId = deps?.chatId ?? getDefaultChatId()
   const body = { chat_id: chatId!, text }
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
@@ -76,10 +83,10 @@ export async function notifyGate(detail: string, featureId: string, _deps?: TgDe
     return
   }
 
-  if (!_deps?.send && (!API || !CHAT_ID)) return
+  if (!_deps?.send && (!getApi() || !getDefaultChatId())) return
 
   const send = _deps?.send ?? tg
-  const chatId = _deps?.chatId ?? CHAT_ID
+  const chatId = _deps?.chatId ?? getDefaultChatId()
 
   const fullText = `🔔 Gate de *${featureId}*\n\n${detail}`
   const shortText = `🔔 Gate *${featureId}* — ${detail.split('\n')[0]}`
@@ -157,22 +164,23 @@ const MENU =
   '(Cualquier otro texto no hace nada — usá /idea para no perder nada.)'
 
 async function handleText(t: string): Promise<void> {
-  if (!CHAT_ID) return
+  const chatId = getDefaultChatId()
+  if (!chatId) return
   if (t === '/start' || t === '/help') {
-    await tg('sendMessage', { chat_id: CHAT_ID, text: MENU })
+    await tg('sendMessage', { chat_id: chatId, text: MENU })
     return
   }
   if (t.toLowerCase().startsWith('/idea')) {
     const idea = t.slice(5).trim()
     if (!idea) {
-      await tg('sendMessage', { chat_id: CHAT_ID, text: 'Mandá /idea seguido de tu idea. Ej: /idea agregar export CSV a Kredy' })
+      await tg('sendMessage', { chat_id: chatId, text: 'Mandá /idea seguido de tu idea. Ej: /idea agregar export CSV a Kredy' })
       return
     }
     saveIdea(idea)
-    await tg('sendMessage', { chat_id: CHAT_ID, text: 'Idea anotada 📝 (FEATURE-INTAKE.md)' })
+    await tg('sendMessage', { chat_id: chatId, text: 'Idea anotada 📝 (FEATURE-INTAKE.md)' })
     return
   }
-  await tg('sendMessage', { chat_id: CHAT_ID, text: '¿Qué querés hacer? Para anotar una idea: /idea <tu idea>. Cuando haya algo para aprobar, te aviso yo. /help para ver las opciones.' })
+  await tg('sendMessage', { chat_id: chatId, text: '¿Qué querés hacer? Para anotar una idea: /idea <tu idea>. Cuando haya algo para aprobar, te aviso yo. /help para ver las opciones.' })
 }
 
 function logReject(featureId: string): void {
@@ -198,8 +206,8 @@ export async function pollApprovalOnce(
   deps?: Pick<TgDeps, 'send' | 'chatId'>,
 ): Promise<{ newOffset: number }> {
   const send = deps?.send ?? tg
-  const effectiveChatId = deps?.chatId ?? CHAT_ID
-  if (!deps?.send && !API) return { newOffset: offset }
+  const effectiveChatId = deps?.chatId ?? getDefaultChatId()
+  if (!deps?.send && !getApi()) return { newOffset: offset }
 
   try {
     const data = await send('getUpdates', { offset, timeout: 5 })
@@ -228,8 +236,8 @@ export async function pollApprovalOnce(
 
 /** Long-polling. Procesa botones (aprobar/rechazar) y texto libre (ideas → backlog). */
 export async function runTelegramListener(): Promise<void> {
-  if (!API) { log('[telegram] TELEGRAM_BOT_TOKEN no configurado — bot deshabilitado.'); return }
-  if (!CHAT_ID) { log('[telegram] TELEGRAM_CHAT_ID no configurado — completá tu chat_id en .env.'); return }
+  if (!getApi()) { log('[telegram] TELEGRAM_BOT_TOKEN no configurado — bot deshabilitado.'); return }
+  if (!getDefaultChatId()) { log('[telegram] TELEGRAM_CHAT_ID no configurado — completá tu chat_id en .env.'); return }
 
   log('[telegram] Bot AlantORCH escuchando (Aprobar/Rechazar gates + cola de ideas)...')
 
@@ -256,7 +264,8 @@ export async function runTelegramListener(): Promise<void> {
           if (action === 'approve') answer = approveGate(featureId)
           else if (action === 'reject') { logReject(featureId ?? ''); answer = 'Rechazado — el gate queda en pausa.' }
           await tg('answerCallbackQuery', { callback_query_id: cq.id, text: answer })
-          if (answer) await tg('sendMessage', { chat_id: CHAT_ID, text: answer })
+          const chatId = getDefaultChatId()
+          if (answer && chatId) await tg('sendMessage', { chat_id: chatId, text: answer })
           continue
         }
 

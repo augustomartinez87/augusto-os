@@ -116,7 +116,7 @@ async function loadOrRunScout(featureId: string, target: string, title: string, 
   if (process.env.SCOUT_ENABLED !== 'true') return undefined
   const syntheticIntake: IntakeResult = {
     ideaText: title,
-    target,
+    target: target as IntakeResult['target'],
     classification: 'feature',
     relatedAdrs: [],
     relatedFeatures: [],

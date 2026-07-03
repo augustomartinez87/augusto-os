@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import path from 'path'
 import {
   getNextPendingStep, getBlockedStep, markStepStatus, archiveState,
-  STATE_PATH, type OrchestratorState, type Step,
+  type OrchestratorState, type Step,
 } from './state.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -26,19 +28,17 @@ function makeState(steps: Step[]): OrchestratorState {
   }
 }
 
-// Save/restore STATE.json around tests that call markStepStatus (which writes to disk).
-let savedState: string | null = null
+// Use a temp directory for STATE.json writes so the running loop's STATE.json is never touched.
+let tmpDir: string
+let tmpStatePath: string
 
 beforeEach(() => {
-  savedState = existsSync(STATE_PATH) ? readFileSync(STATE_PATH, 'utf-8') : null
+  tmpDir = mkdtempSync(path.join(tmpdir(), 'state-test-'))
+  tmpStatePath = path.join(tmpDir, 'STATE.json')
 })
 
 afterEach(() => {
-  if (savedState !== null) {
-    writeFileSync(STATE_PATH, savedState, 'utf-8')
-  } else if (existsSync(STATE_PATH)) {
-    unlinkSync(STATE_PATH)
-  }
+  rmSync(tmpDir, { recursive: true, force: true })
 })
 
 // ── getNextPendingStep ────────────────────────────────────────────────────────
@@ -96,20 +96,20 @@ describe('getBlockedStep', () => {
 describe('markStepStatus', () => {
   it('updates the step status in memory', () => {
     const state = makeState([makeStep(1, 'pending')])
-    markStepStatus(state, 1, 'done')
+    markStepStatus(state, 1, 'done', undefined, tmpStatePath)
     expect(state.steps[0].status).toBe('done')
   })
 
   it('merges extra fields into the step', () => {
     const state = makeState([makeStep(1, 'running')])
-    markStepStatus(state, 1, 'done', { commit: 'abc123' })
+    markStepStatus(state, 1, 'done', { commit: 'abc123' }, tmpStatePath)
     expect(state.steps[0].commit).toBe('abc123')
     expect(state.steps[0].status).toBe('done')
   })
 
   it('throws for an unknown step id', () => {
     const state = makeState([makeStep(1, 'pending')])
-    expect(() => markStepStatus(state, 99, 'done')).toThrow('Step 99 not found')
+    expect(() => markStepStatus(state, 99, 'done', undefined, tmpStatePath)).toThrow('Step 99 not found')
   })
 })
 
@@ -117,8 +117,7 @@ describe('markStepStatus', () => {
 
 describe('archiveState', () => {
   it('is a no-op when STATE.json does not exist', () => {
-    // savedState guard already covers cleanup; just verify no throw when file absent
-    if (existsSync(STATE_PATH)) unlinkSync(STATE_PATH)
-    expect(() => archiveState('F-GHOST')).not.toThrow()
+    // tmpStatePath was never created → archiveState should return early without throwing
+    expect(() => archiveState('F-GHOST', tmpStatePath)).not.toThrow()
   })
 })
