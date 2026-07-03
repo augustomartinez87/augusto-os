@@ -7,6 +7,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0040 · 2026-06-29 · arancelCostoTNA é informativo — não subtrai do spread
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** O campo `arancelCostoTNA` é exibido na tabela como dado informativo; `spreadPesos` e `spreadPorcentaje` não são ajustados por ele.
+**Contexto:** O spec diz "integrar a chamada a arancelTNA para obter o costo do arancel em TNA" mas não especifica se o arancel deve descontar do spread. A metodologia existente (`spreadPesos = gananciaFCI - intereses`) não foi tocada.
+**Alternativas descartadas:** Subtrair o custo do arancel (em pesos: `arancelMonto + arancelPct×capital`) do `spreadPesos` para mostrar spread líquido real.
+**Consecuencias / riesgo residual:** Se o usuário quiser ver spread NET-of-fees, é uma iteração separada; atualmente a coluna de arancel serve como referência visual para comparar com o spread bruto.
+
+> Generado por el loop · feature F-0009 · step 3
+
+---
+## ADR-0039 · 2026-06-29 · arancelPct se interpreta como fracción decimal, no como porcentaje
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** `arancelPct` recibe un valor en fracción (0.005 = 0.5%), no en porcentaje (0.5 = 0.5%). La multiplicación directa `arancelPct × capital` ya produce el monto en pesos sin conversión adicional.
+**Contexto:** El spec dice "arancelPct × capital" sin especificar la escala del parámetro. En `caucionTNA`, `tna_real` está almacenado como porcentaje (19.24) y se divide por 100 antes de operar. Para `arancelPct`, al ser un input fresco (no persistido en DB), elegí la convención decimal por coherencia con la salida de la propia función (que devuelve 0.05 para 5%) y con el resto de las tasas que circulan dentro de `src/lib/finance/` como decimales.
+**Alternativas descartadas:** Usar porcentaje (e.g. 0.5 = 0.5%) como `tna_real` en DB; requeriría dividir por 100 internamente, lo que invierte la legibilidad respecto a otros parámetros del motor.
+**Consecuencias / riesgo residual:** La UI / caller debe pasar `arancelPct` como fracción decimal. Si en pasos futuros se expone este campo en un formulario con "%" en la etiqueta, el componente debe hacer la conversión `/100` antes de llamar a `arancelTNA`.
+
+> Generado por el loop · feature F-0009 · step 1
+
+---
 ## ADR-0033 · 2026-06-27 · S-027: heartbeat del loop de build + lock por liveness
 
 **Estado:** aceptada
