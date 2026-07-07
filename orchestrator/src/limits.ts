@@ -16,7 +16,7 @@ export function isUsageLimitError(output: string): boolean {
   return (
     output.includes('rate limit') ||
     output.includes('usage limit') ||
-    output.includes('429') ||
+    /\b429\b/.test(output) ||
     output.includes('too many requests') ||
     output.toLowerCase().includes('usage_limit_reached')
   )
