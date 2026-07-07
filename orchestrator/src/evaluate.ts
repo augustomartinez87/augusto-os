@@ -1,7 +1,10 @@
+import { execa } from 'execa'
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { z } from 'zod'
+import { MODEL_ARCHITECT, MAX_TURNS } from './models.js'
+import { parseClaudeJson, recordInvocation } from './metrics.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.join(__dirname, '..', '..')
@@ -71,4 +74,72 @@ const VALID_LABELS = new Set(EvaluateLabel.options)
 export function normalizeLabel(raw: string): EvaluateLabel {
   if (VALID_LABELS.has(raw as EvaluateLabel)) return raw as EvaluateLabel
   return 'IGNORAR'
+}
+
+export interface EvaluateOpts {
+  callClaude?: (prompt: string) => Promise<string>
+}
+
+async function defaultCallClaude(prompt: string): Promise<string> {
+  const result = await execa('claude', [
+    '--model', MODEL_ARCHITECT,
+    '--max-turns', String(MAX_TURNS),
+    '--output-format', 'json',
+    '--dangerously-skip-permissions',
+    '--strict-mcp-config',
+    '-p', prompt,
+  ], {
+    cwd: REPO_ROOT,
+    reject: false,
+    stdin: 'ignore',
+  })
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Evaluator (Claude) falló con código ${result.exitCode}:\n[stderr]\n${result.stderr || '(vacío)'}\n[stdout]\n${result.stdout || '(vacío)'}`)
+  }
+
+  return result.stdout ?? ''
+}
+
+export async function runEvaluate(postText: string, opts?: EvaluateOpts): Promise<EvaluateResult> {
+  const callClaude = opts?.callClaude ?? defaultCallClaude
+  const systemContext = readSystemContext()
+  const prompt = buildEvaluatePrompt(postText, systemContext)
+
+  const startMs = Date.now()
+  const raw = await callClaude(prompt)
+
+  const { text, parsed } = parseClaudeJson(raw)
+
+  try {
+    recordInvocation({
+      featureId: 'evaluate',
+      role: 'evaluator',
+      model: MODEL_ARCHITECT,
+      inputTokens: parsed?.usage?.input_tokens ?? 0,
+      outputTokens: parsed?.usage?.output_tokens ?? 0,
+      costUsd: parsed?.total_cost_usd ?? 0,
+      durationMs: parsed?.duration_ms ?? (Date.now() - startMs),
+      exitCode: 0,
+    })
+  } catch { /* métricas nunca tumban el flujo */ }
+
+  let inner: unknown
+  try {
+    inner = JSON.parse(text)
+  } catch {
+    throw new Error(`Evaluator no devolvió JSON válido. Primeros 300 chars:\n${text.slice(0, 300)}`)
+  }
+
+  if (typeof inner !== 'object' || inner === null) {
+    throw new Error(`Evaluator devolvió un valor no-objeto: ${String(inner).slice(0, 100)}`)
+  }
+
+  const obj = inner as Record<string, unknown>
+  const withNormalized = {
+    ...obj,
+    etiqueta: normalizeLabel(String(obj['etiqueta'] ?? '')),
+  }
+
+  return EvaluateResultSchema.parse(withNormalized)
 }
