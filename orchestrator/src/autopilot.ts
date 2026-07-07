@@ -7,7 +7,7 @@ import { STATE_PATH } from './state.js'
 import { runIntake, type IntakeResult } from './intake.js'
 import { runArchitect, getNextFeatureId, type ArchitectOpts } from './architect.js'
 import { runScout } from './scout/index.js'
-import { setActiveTarget, getRepoRoot } from './targets.js'
+import { setActiveTarget, getScoutRoot } from './targets.js'
 import { appendAdr, DECISIONS_PATH } from './adr.js'
 import { log } from './limits.js'
 import { readLoopHeartbeat, isLoopHeartbeatFresh, LOOP_HB_PATH } from './loop-heartbeat.js'
@@ -274,7 +274,7 @@ function defaultSpawnLoop(featureId: string): void {
 export interface AutopilotPickOpts {
   runIntakeFn?: (text: string) => IntakeResult
   runArchitectFn?: (intake: IntakeResult, opts?: ArchitectOpts) => Promise<string>
-  /** Injectable for tests: replaces the production setActiveTarget+getRepoRoot+runScout chain.
+  /** Injectable for tests: replaces the production setActiveTarget+getScoutRoot+runScout chain.
    *  Return null to skip research (scout disabled or failed). */
   runScoutFn?: (intake: IntakeResult, featureId: string) => Promise<{ markdown: string } | null>
   /** Injectable featuresDir for getNextFeatureId — lets tests control which ID is assigned. */
@@ -363,8 +363,7 @@ export async function tryAutopilotPick(opts?: AutopilotPickOpts): Promise<{ feat
       } else {
         // Production path: resolve repo root from active target, then run scout
         setActiveTarget(intake.target)
-        const repoRoot = getRepoRoot()
-        const scoutResult = await runScout(intake, repoRoot, assignedId)
+        const scoutResult = await runScout(intake, getScoutRoot(), assignedId)
         research = scoutResult?.markdown ?? undefined
       }
     } catch { /* scout errors never block the pipeline */ }

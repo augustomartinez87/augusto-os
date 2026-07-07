@@ -108,7 +108,7 @@ async function main() {
   await runLoop(state)
 }
 
-async function loadOrRunScout(featureId: string, target: string, title: string, repoRoot: string): Promise<string | undefined> {
+async function loadOrRunScout(featureId: string, target: string, title: string, scoutRoot: string): Promise<string | undefined> {
   const researchPath = path.join(FEATURES_DIR, `${featureId}.research.md`)
   if (existsSync(researchPath)) {
     return readFileSync(researchPath, 'utf-8')
@@ -124,7 +124,7 @@ async function loadOrRunScout(featureId: string, target: string, title: string, 
     contextSummary: `Target: ${target} | Feature: ${featureId}`,
     needsArchitect: false,
   }
-  const result = await runScout(syntheticIntake, repoRoot, featureId)
+  const result = await runScout(syntheticIntake, scoutRoot, featureId)
   return result?.markdown
 }
 
@@ -153,8 +153,8 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
   writeLoopHeartbeat(featureId, 'planning')
   const branch = await createFeatureBranch(featureId, title)
 
-  const { getRepoRoot } = await import('./targets.js')
-  const research = await loadOrRunScout(featureId, target, title, getRepoRoot())
+  const { getScoutRoot } = await import('./targets.js')
+  const research = await loadOrRunScout(featureId, target, title, getScoutRoot())
   if (research) log(`[main] Research del scout cargado para ${featureId} (${research.length} chars)`)
 
   const planSteps = await planFeature(spec, { research })

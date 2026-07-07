@@ -18,6 +18,7 @@ export interface Target {
   devDirectUrl?: string
   prodDbPatterns?: string[]
   baseBranch?: string   // override manual de la rama default (main/master/...). Si no está seteado, se detecta en runtime vía origin/HEAD.
+  scoutRoot?: string    // raíz alternativa para el sandbox del Scout (list_tree/read_file/grep). Default = path. Usar cuando el target es un subdirectorio (ej. 'sistema' = orchestrator/, pero el Scout necesita ver todo el monorepo incluyendo system/).
 }
 
 interface TargetsFile {
@@ -45,6 +46,19 @@ export function getRepoRoot(): string {
   const target = file.targets[activeTarget]
   if (!target) throw new Error(`Target "${activeTarget}" ya no existe en targets.json`)
   return target.path
+}
+
+// Raíz del sandbox del Scout. Default = getRepoRoot() (mismo valor, cero cambio para
+// kredy/spensiv/argos). Separado de getRepoRoot() porque ese valor también es el cwd
+// de verifyCmd/testCmd — un target puede necesitar que el Scout vea más que lo que
+// tsc/test necesitan como cwd (ej. 'sistema': path=orchestrator/ para tsc/test,
+// scoutRoot=raíz del monorepo para que el Scout vea system/+dashboard/ también).
+export function getScoutRoot(): string {
+  if (!activeTarget) throw new Error('No hay target activo — llamá setActiveTarget() primero')
+  const file: TargetsFile = JSON.parse(readFileSync(TARGETS_JSON, 'utf-8'))
+  const target = file.targets[activeTarget]
+  if (!target) throw new Error(`Target "${activeTarget}" ya no existe en targets.json`)
+  return target.scoutRoot ?? target.path
 }
 
 function expandEnvVars(value: string | undefined): string | undefined {

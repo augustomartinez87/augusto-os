@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url'
 import { runIntake } from './intake.js'
 import { runArchitect, getNextFeatureId } from './architect.js'
 import { runScout } from './scout/index.js'
-import { setActiveTarget, getRepoRoot } from './targets.js'
+import { setActiveTarget, getScoutRoot } from './targets.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INTAKE_FILE = path.join(__dirname, '..', '..', 'system', 'FEATURE-INTAKE.md')
@@ -87,8 +87,7 @@ async function main(): Promise<void> {
   if (result.target !== 'unknown') {
     try {
       setActiveTarget(result.target)
-      const repoRoot = getRepoRoot()
-      const scoutResult = await runScout(result, repoRoot, featureId)
+      const scoutResult = await runScout(result, getScoutRoot(), featureId)
       research = scoutResult?.markdown
     } catch (e) {
       console.warn('[intake] Scout omitido:', (e as Error).message)
