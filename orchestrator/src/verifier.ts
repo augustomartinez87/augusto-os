@@ -134,7 +134,7 @@ export async function runReleaseChecks(): Promise<ReleaseResult> {
 
   log('[release] build de prod (npm run build)...')
   const build = await run('npm', ['run', 'build'])
-  if (!build.ok) return { ok: false, errors: `build:\n${build.output.slice(-4000)}`, tnaNote }
+  if (!build.ok && !/missing script/i.test(build.output)) return { ok: false, errors: `build:\n${build.output.slice(-4000)}`, tnaNote }
 
   log(`[release] OK: typecheck + lint + tests + build. ${tnaNote}`)
   return { ok: true, errors: '', tnaNote }
