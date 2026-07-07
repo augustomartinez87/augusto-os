@@ -53,14 +53,39 @@ Métricas completas en `logs/metrics-F-0010.json`:
 
 **Conclusión:** hace falta una segunda corrida de baseline — 1 feature más, bajo riesgo, con `SCOUT_ENABLED` todavía apagado pero con S-032/S-033 ya activos **desde el arranque** — para tener un número limpio antes de tocar DeepSeek.
 
+## Resultado — primera medición real (F-0012, 2026-07-06)
+
+**Scout funciona y supera el criterio.** F-0012 (S-024, evaluador de posts de X, target `sistema`) corrió con `SCOUT_ENABLED=true` tras 5 rondas de fixes reales en el scout (ver "Bugs encontrados" abajo): 7/7 steps, **0 retries, 0 rechazos del Reviewer** — contraste directo con F-0011 (baseline, scout apagado), que necesitó 8 corridas de Executor solo en step 1 y varios `CHANGES_REQUESTED`.
+
+| | F-0011 (baseline, scout off) | F-0012 (scout, corrida limpia) | F-0012 (all-in, incl. debugging de esta sesión) |
+|---|---|---|---|
+| TOTAL | $6.481 | $4.110 (**-37%**) | $5.068 (**-22%**) |
+
+El número que importa para proyectar a futuro es **-37%** (corrida limpia): el costo de debugging fue de una sola vez (bugs ya fixeados para siempre), no un costo recurrente por feature. Ambos superan o rozan el criterio de diseño de -25%. Lo más importante no es el %, es la caída de reintentos a cero — exactamente el mecanismo que Scout estaba diseñado para lograr (specs mejor fundamentadas → menos adivinar → menos vueltas).
+
+**Caveat:** `sistema` es un target atípico (cruza el límite del repo hacia `system/`, requirió el fix de `scoutRoot`). Antes de dar la conclusión final hace falta repetir con 1-2 features de kredy/spensiv/argos (repos autocontenidos, caso típico).
+
+## Bugs encontrados y fixeados en el scout durante esta validación (deepseek.ts/tools.ts)
+
+Todos verificados con tests/typecheck, ninguno pendiente:
+
+1. Conteo de tokens sumaba en vez de tomar el último valor (`prompt_tokens` ya es acumulado) → disparaba el corte de "~200k" prematuramente y de forma engañosa.
+2. Historial de mensajes nunca se podaba → crecimiento sin límite con cada tool result.
+3. Cap de 150 líneas de `read_file` no aplicaba si el modelo pasaba `toLine` explícito.
+4. Fix del pruning: podar `list_tree`/`grep` agresivo, pero **nunca** `read_file` (ya acotado por #3) — podar parejo causaba que el modelo releyera archivos ya vistos en loop infinito.
+5. Señal de turno en vivo (mensaje "Turno N de MAX" en cada llamada, imperativo de cierre en los últimos 3) — la instrucción de cierre en el system prompt inicial no alcanzaba, el modelo no tenía forma de saber en qué turno estaba.
+6. Prompt de evidencia más estricto: un símbolo = un identificador literal copiable, nunca una frase con "+" — bajó el ratio de `[NO VERIFICADO]` de 21/22 a 1/12 sin tocar `validateEvidence` (que ya funcionaba bien, el problema era el formato de entrada del modelo).
+7. **Seguridad:** `tools.ts` no excluía `.env`/secretos de `list_tree`/`read_file`/`grep` — cualquier scout sobre `target: sistema` podía en teoría leer `orchestrator/.env` (DEEPSEEK_API_KEY, SUPABASE_SERVICE_KEY, etc.) y mandarlo a la API de DeepSeek. Fixeado con exclusión explícita, misma prioridad que el guard anti path-traversal.
+8. `targets.json`: `sistema.path` apunta a `orchestrator/` (necesario para que `tsc`/`test` encuentren `package.json`/`tsconfig.json`), pero el scout necesitaba ver `system/` un nivel arriba. Fix: campo nuevo `scoutRoot` (default = `path`, cero cambio para kredy/spensiv/argos), `sistema.scoutRoot` = raíz del monorepo.
+
 ## Estado y próximos pasos (pendientes)
 
 1. [x] Fase 2 commiteada (`876bff8`) + fix ADR-idioma (`40fd493`). 304/304 tests verdes.
-2. [x] Primera corrida de baseline (F-0010) — **descartada como número de referencia**, ver arriba.
-3. [ ] Correr una segunda baseline limpia: 1 feature P3 de bajo riesgo del backlog (ej. `S-016`, `S-024` o `AR-003` en `system/BACKLOG.md` — evitar `SPT-001`/`S-000c`, ya cubiertos o redundantes con F-0010), scout apagado, bugs ya fixeados desde el inicio.
-4. [ ] Cargar USD 10 en platform.deepseek.com, setear `DEEPSEEK_API_KEY` y `SCOUT_ENABLED=true`.
-5. [ ] Primer feature con scout: revisar manualmente `features/F-XXXX.research.md` (calidad) y cuántas entradas descarta `validateEvidence` (si descarta muchas → ajustar prompt del scout antes de medir en serio).
-6. [ ] Comparar baseline limpia vs. scout en `logs/metrics-*.json`: tokens por rol, retries/step, % aprobación a la primera, costo USD. Criterio: −25% costo sin caída de aprobación; si no, apagar `SCOUT_ENABLED`.
+2. [x] Baseline limpia: F-0011 ($6.481 total, 4 roles, 0 scout).
+3. [x] Scout activado, 8 bugs encontrados y fixeados, primera corrida real exitosa (F-0012, -37%/-22%).
+4. [ ] Repetir con 1-2 features de kredy/spensiv/argos (target típico, sin la complejidad de `system/`) para confirmar que el resultado generaliza más allá de `sistema`.
+5. [ ] Decidir sobre F-0012: branch `feat/F-0012-evaluador-de-posts-de-x-contra-la-arquit` completo (7 commits + fix de un bug de rate-limit, 322/322 tests) pero sin mergear — bloqueado por el mismo tipo de residuo de `LOOP_HEARTBEAT.json` sin commitear que vimos en F-0011. Pendiente: confirmar que no incluye el script temporal de debugging (`scout-retry-temp.ts`) antes de mergear.
+6. [ ] Con 3-5 features medidos, comparar `logs/metrics-*.json` en conjunto y cerrar el criterio de -25% de forma robusta (no solo con el caso atípico de `sistema`).
 
 ## Diferido a propósito (no hacer sin métricas)
 
