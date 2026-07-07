@@ -17,6 +17,7 @@ export interface Target {
   devDatabaseUrl?: string
   devDirectUrl?: string
   prodDbPatterns?: string[]
+  baseBranch?: string   // override manual de la rama default (main/master/...). Si no está seteado, se detecta en runtime vía origin/HEAD.
 }
 
 interface TargetsFile {

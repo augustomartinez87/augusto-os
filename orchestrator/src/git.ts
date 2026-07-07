@@ -15,6 +15,27 @@ export async function currentBranch(): Promise<string> {
   return git(['rev-parse', '--abbrev-ref', 'HEAD'])
 }
 
+/**
+ * Detecta la rama default real del remoto (origin/HEAD) en vez de asumir 'main'.
+ * Fallback a `git remote show origin` (repopula origin/HEAD si no estaba seteado)
+ * y como último recurso a 'main', logueando que se usó el fallback.
+ */
+export async function getDefaultBranch(cwd?: string): Promise<string> {
+  const root = cwd ?? getRepoRoot()
+  const symbolicRef = await execa('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: root, reject: false })
+  if (symbolicRef.exitCode === 0) {
+    const branch = symbolicRef.stdout.trim().replace(/^refs\/remotes\/origin\//, '')
+    if (branch) return branch
+  }
+  const remoteShow = await execa('git', ['remote', 'show', 'origin'], { cwd: root, reject: false })
+  if (remoteShow.exitCode === 0) {
+    const match = remoteShow.stdout.match(/HEAD branch:\s*(\S+)/)
+    if (match) return match[1]
+  }
+  log(`[git] No se pudo detectar la rama default de origin (repo: ${root}) — usando 'main' como fallback`)
+  return 'main'
+}
+
 export async function createFeatureBranch(featureId: string, title: string): Promise<string> {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
   const branch = `feat/${featureId}-${slug}`
@@ -57,7 +78,7 @@ export async function hasUncommittedChanges(): Promise<boolean> {
  * El push a main y el deploy quedan como acción manual de Augusto (gates de prod).
  * Devuelve true si mergeó, false si no pudo (ej. conflicto) — el caller decide.
  */
-export async function mergeIntoMain(branch: string, baseBranch = 'main'): Promise<boolean> {
+export async function mergeIntoMain(branch: string, baseBranch: string): Promise<boolean> {
   const checkout = await execa('git', ['checkout', baseBranch], { cwd: getRepoRoot(), reject: false })
   if (checkout.exitCode !== 0) {
     log(`[git] No se pudo cambiar a ${baseBranch}: ${checkout.stderr}`)
@@ -81,7 +102,7 @@ export async function mergeIntoMain(branch: string, baseBranch = 'main'): Promis
  * Acción de prod → solo se llama DESPUÉS del OK humano y de pasar todas las verificaciones.
  * Aborta si HEAD no está en baseBranch para evitar pushear contenido equivocado a prod.
  */
-export async function pushMain(baseBranch = 'main'): Promise<boolean> {
+export async function pushMain(baseBranch: string): Promise<boolean> {
   let current: string
   try {
     current = (await currentBranch()).trim()

@@ -12,12 +12,12 @@ import { runScout } from './scout/index.js'
 import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
 import { runReviewer } from './reviewer.js'
-import { commitStep, createFeatureBranch, mergeIntoMain, pushMain } from './git.js'
+import { commitStep, createFeatureBranch, mergeIntoMain, pushMain, getDefaultBranch } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { notifyDeployed, notifyReleaseFailed, pollApprovalOnce } from './telegram.js'
 import { isBotAlive } from './bot-heartbeat.js'
 import { log, sleepUntil } from './limits.js'
-import { setActiveTarget } from './targets.js'
+import { setActiveTarget, getTargetConfig } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta } from './adr.js'
 import { appendProgress } from './progress.js'
@@ -212,7 +212,8 @@ async function runLoop(state: OrchestratorState) {
       // 1. Merge a main (local, una sola vez)
       if (!state.merged) {
         writeLoopHeartbeat(state.featureId, 'merging')
-        const merged = await mergeIntoMain(state.branch)
+        const baseBranch = getTargetConfig().baseBranch ?? await getDefaultBranch()
+        const merged = await mergeIntoMain(state.branch, baseBranch)
         state.merged = merged
         saveState(state)
         if (!merged) {
@@ -234,7 +235,8 @@ async function runLoop(state: OrchestratorState) {
           break
         }
         log('[main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...')
-        const ok = await pushMain()
+        const baseBranch = getTargetConfig().baseBranch ?? await getDefaultBranch()
+        const ok = await pushMain(baseBranch)
         if (!ok) {
           log('[main] Push falló. main local quedó mergeada; revisá credenciales/remoto y reintentá con `npm start ' + state.featureId + '`.')
           void notifyReleaseFailed(state.featureId, 'El push a main falló (credenciales/remoto). La branch ya está mergeada en main local; reintentá el release.')
