@@ -7,6 +7,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 ## Template (copiar para cada ADR nuevo)
 
 ```
+## ADR-0043 · 2026-07-07 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0012 · step 2
+
+---
 ## ADR-0042 · 2026-07-03 · 
 
 **Estado:** aceptada

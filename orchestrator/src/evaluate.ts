@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { z } from 'zod'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.join(__dirname, '..', '..')
@@ -54,4 +55,20 @@ Reglas para la etiqueta:
 - \`IMPLEMENTAR\`: no existe aún, tiene valor concreto y vale la pena hacerla.
 - \`BAIT\`: suena atractivo pero introduce complejidad innecesaria, no aplica al contexto, o desvía el foco sin beneficio claro.
 - \`IGNORAR\`: no aplica al sistema, es irrelevante, o no hay información suficiente para evaluarla.`
+}
+
+export const EvaluateLabel = z.enum(['YA-EXISTE', 'IMPLEMENTAR', 'BAIT', 'IGNORAR'])
+export type EvaluateLabel = z.infer<typeof EvaluateLabel>
+
+export const EvaluateResultSchema = z.object({
+  etiqueta: EvaluateLabel,
+  resumen: z.string(),
+})
+export type EvaluateResult = z.infer<typeof EvaluateResultSchema>
+
+const VALID_LABELS = new Set(EvaluateLabel.options)
+
+export function normalizeLabel(raw: string): EvaluateLabel {
+  if (VALID_LABELS.has(raw as EvaluateLabel)) return raw as EvaluateLabel
+  return 'IGNORAR'
 }
