@@ -48,9 +48,9 @@ export function loadState(): OrchestratorState | null {
   return parsed.data
 }
 
-export function saveState(state: OrchestratorState): void {
+export function saveState(state: OrchestratorState, statePath = STATE_PATH): void {
   state.updatedAt = new Date().toISOString()
-  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), 'utf-8')
+  writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8')
 }
 
 export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds' | 'humanApproved'>[]): OrchestratorState {
@@ -79,11 +79,11 @@ export function initState(featureId: string, branch: string, steps: Omit<Step, '
   return state
 }
 
-export function markStepStatus(state: OrchestratorState, stepId: number, status: Step['status'], extra?: Partial<Step>): void {
+export function markStepStatus(state: OrchestratorState, stepId: number, status: Step['status'], extra?: Partial<Step>, statePath = STATE_PATH): void {
   const step = state.steps.find(s => s.id === stepId)
   if (!step) throw new Error(`Step ${stepId} not found`)
   Object.assign(step, { status, ...extra })
-  saveState(state)
+  saveState(state, statePath)
 }
 
 export function getNextPendingStep(state: OrchestratorState): Step | null {
@@ -102,8 +102,8 @@ export function getBlockedStep(state: OrchestratorState): Step | null {
  * Al completar un feature, archiva STATE.json a STATE.<featureId>.archived.json
  * para que el próximo `npm start <otroFeature>` arranque limpio en vez de resumir el viejo.
  */
-export function archiveState(featureId: string): void {
-  if (!existsSync(STATE_PATH)) return
-  const archived = path.join(__dirname, '..', `STATE.${featureId}.archived.json`)
-  renameSync(STATE_PATH, archived)
+export function archiveState(featureId: string, statePath = STATE_PATH): void {
+  if (!existsSync(statePath)) return
+  const archived = path.join(path.dirname(statePath), `STATE.${featureId}.archived.json`)
+  renameSync(statePath, archived)
 }

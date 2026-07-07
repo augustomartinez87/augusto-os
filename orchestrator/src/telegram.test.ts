@@ -191,8 +191,15 @@ describe('pollApprovalOnce', () => {
   })
 
   it('no-op when no API configured (no deps.send)', async () => {
-    const result = await pollApprovalOnce(0)
-    expect(result.newOffset).toBe(0)
+    // Clear token so getApi() returns null — telegram.ts reads env lazily
+    const savedToken = process.env.TELEGRAM_BOT_TOKEN
+    delete process.env.TELEGRAM_BOT_TOKEN
+    try {
+      const result = await pollApprovalOnce(0)
+      expect(result.newOffset).toBe(0)
+    } finally {
+      if (savedToken !== undefined) process.env.TELEGRAM_BOT_TOKEN = savedToken
+    }
   })
 
   it('returns same offset when getUpdates returns empty result', async () => {

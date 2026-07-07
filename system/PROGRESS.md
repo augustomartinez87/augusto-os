@@ -277,3 +277,43 @@ Auditoría de higiene del backlog. Sin cambios a código del orquestador.
 - **Regla append-only documentada:** nueva sección CONVENTIONS §3 — los IDs son inmutables, nunca se reusan ni renumeran, el próximo ítem toma max(IDs)+1.
 - **Huecos S-011/S-012:** documentados en CONVENTIONS §3 como huecos históricos (la secuencia saltó S-010→S-013 sin asignarlos).
 - **IDs ausentes de cualquier fuente:** ninguno — todos los S-XXX en BACKLOG tienen confirmación de estado real.
+
+## 2026-06-29 — F-0009 completado
+
+## Feature F-0009
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `src/lib/finance/arancelTNA.ts` con la función pura `arancelTNA({ capital, dias, arancelMonto?, arancelPct? })` que calcule el costo total del arancel (monto fijo + arancelPct × capital) y lo anualice con la convención nominal del motor `costo / (capital × dias) × 365` usando `decimal.js` (`Decimal`), reutilizando el patrón de `caucionTNA` (efectiva_periodo / `annualizeNominalTNA`). Devuelve un decimal (0.05 = 5%) sin compounding/TEA. Bordes: capital 0 o dias ≤ 0 → 0 (nunca NaN/Infinity). Exporta tipos de input. Debe typechequear. (7523f1d7)
+- [x] Step 2: Agregar `src/lib/finance/__tests__/arancelTNA.test.ts` (vitest, siguiendo el patrón de `carryCalculations.test.ts`) cubriendo: caso monto fijo, caso porcentaje, caso combinado (monto + pct sumados) y los bordes (capital 0, dias 0), comparando contra valores de TNA calculados a mano. Tests + typecheck pasan. (85ced375)
+- [x] Step 3: Definir la tasa/monto de arancel como constante o input client-side en memoria (sin persistir ni escribir contra Supabase) accesible desde la vista de carry/operaciones, e integrar la llamada a `arancelTNA(...)` con el capital y días de cada caución para obtener el costo del arancel en TNA. Typecheck y lint. (c5793e09)
+- [x] Step 4: Surfacing en la vista de carry/operaciones: mostrar el valor 'Arancel (TNA)' junto al costo de caución y al spread existentes, formateado como porcentaje es-AR usando los formatters de `src/utils/formatters.ts` (mismo estilo que la TNA de caución), con etiqueta clara. Typecheck y lint. (c5793e09)
+- [x] Step 5: Exponer de forma aditiva el arancel en TNA dentro del resultado por caución para poder mostrar un 'spread neto de arancel' (spreadPorcentaje − arancelTNA) como campo nuevo, sin alterar ni reescribir los campos/lógica existentes de `calcularSpreadPorCaucion`/`calcularSpreadsTodasCauciones`. Typecheck, lint y tests. (95fa706a)
+
+### Decisiones (ADR)
+- ADR-0039 — arancelPct se interpreta como fracción decimal, no como porcentaje [Supuesto del agente] **⚠ REVISAR**
+- ADR-0040 — arancelCostoTNA é informativo — não subtrai do spread [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0009/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-03 — F-0010 completado
+
+## Feature F-0010
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `prisma/seed-guard.ts` exportando una función pura `assertNotProdDatabaseUrl(url?: string): void` que lance un Error claro si `url` es falsy/vacía o contiene el patrón de prod `ep-floral-mud`, y no haga nada si la URL es válida de dev. Sin I/O ni imports de DB; debe typechequear solo. (5d39ca07)
+- [x] Step 2: Crear `prisma/seed-data.ts` con builders puros (sin I/O) tipados contra `@prisma/client`, que devuelvan los objetos a insertar usando los nombres de campo reales del schema: usuario demo (email `demo@spensiv.dev`, clerkId `seed_demo_user`), su `UserPreferences`, ≥3 `Category` cada una con ≥1 `SubCategory`, 2 `CreditCard` con `closingDay`/`dueDay` en rango 1-28 y `holderType`, ≥10 `Transaction` cada una con `id` explícito determinista (p. ej. `seed-tx-01`) y montos como `Decimal` (decimal.js) compatibles con `@db.Decimal(12,2)`` y `categoryId`/`cardId` coherentes, e ≥3 `Income`. Usar `date-fns` para fechas coherentes. Typechea solo. (966b2a91)
+- [x] Step 3: Crear `prisma/seed.ts` que (a) llame a `assertNotProdDatabaseUrl(process.env.DATABASE_URL)` antes de tocar nada, (b) dentro de una transacción Prisma inserte los datos de los builders de forma idempotente vía `upsert` con claves deterministas (`User` por email/clerkId, `Category` por `@@unique([userId,name])`, `SubCategory`, `CreditCard`/`Transaction`/`Income` por `id` fijo) —o borrando primero los datos del usuario demo y recreándolos—, (c) loguee un resumen de registros creados y cierre la conexión. Reusar el singleton de `lib/prisma.ts` o instanciar `PrismaClient`. Typechea solo. (e9d9368b)
+- [x] Step 4: Actualizar `package.json` agregando el bloque `"prisma": { "seed": "tsx prisma/seed.ts" }`, un script `"db:seed": "prisma db seed"`, y `tsx` como devDependency, sin modificar ni romper los scripts existentes (`dev`, `build`, `db:push`, etc.). Typecheck y lint. (9dee3a81)
+- [x] Step 5: Agregar `prisma/__tests__/seed.test.ts` (vitest) que verifique, SIN tocar la DB: (a) el guard rechaza URLs con `ep-floral-mud` y las falsy/vacías, y acepta una URL de dev válida; (b) los builders de `seed-data.ts` producen registros con los campos requeridos por el schema — `Transaction.id` no vacío, `closingDay`/`dueDay` en rango 1-28, montos parseables como `Decimal`, y `name` de `Category` único por usuario. Tests + typecheck. (c044968a)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0010/`
+
+> Revisar con Claude in Chrome para validación de UX.

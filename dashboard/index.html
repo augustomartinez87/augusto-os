@@ -132,11 +132,53 @@
   .skel{background:var(--line);border-radius:6px;height:14px;margin-bottom:9px;animation:sk 1.8s ease-in-out infinite}
   .skel.w-full{width:100%}.skel.w-75{width:75%}.skel.w-55{width:55%}.skel.w-40{width:40%}
 
+  /* ── flow diagrams (pestaña Flujos) ── */
+  .flow-diagram{display:flex;flex-direction:column;align-items:center;gap:0;padding:12px 0}
+
+  /* nodo estándar */
+  .flow-node{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:9px 16px;color:var(--txt);font-size:13px;text-align:center;
+    width:100%;max-width:260px;line-height:1.35}
+  /* nodo cápsula: inicio / fin */
+  .flow-node--cap{border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.5px;
+    text-transform:uppercase;background:var(--card2);color:var(--mut);border-color:var(--line-soft)}
+  /* nodo resaltado (paso ok / activo) */
+  .flow-node--ok{border-color:color-mix(in srgb,var(--teal) 40%,transparent)}
+  /* nodo en error / bloqueado */
+  .flow-node--err{border-color:color-mix(in srgb,var(--coral) 40%,transparent);color:var(--coral)}
+
+  /* conector vertical con punta de flecha */
+  .flow-arrow{width:2px;height:22px;background:var(--mut2);position:relative;align-self:center;flex:none}
+  .flow-arrow::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
+    border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--mut2)}
+
+  /* diamante: nodo de decisión (cuadrado rotado 45°) */
+  .flow-diamond{width:76px;height:76px;background:var(--card);border:1px solid var(--line);
+    transform:rotate(45deg);display:flex;align-items:center;justify-content:center;flex:none}
+  .flow-diamond-txt{transform:rotate(-45deg);font-size:11px;color:var(--txt);
+    text-align:center;line-height:1.2;max-width:58px}
+
+  /* contenedor de ramas que salen de un diamante */
+  .flow-branches{display:flex;gap:12px;align-items:flex-start;justify-content:center;
+    width:100%;flex-wrap:wrap}
+  /* rama individual (Sí / No) */
+  .flow-branch{display:flex;flex-direction:column;align-items:center;gap:0;flex:1;
+    min-width:120px;max-width:180px}
+
+  /* etiqueta sobre conector o rama */
+  .flow-label{font-size:11px;color:var(--mut2);text-align:center;padding:2px 6px}
+  .flow-label--y{color:var(--teal)}
+  .flow-label--n{color:var(--coral)}
+
   @media(max-width:560px){
     body{padding:18px 14px 36px}
     .roster{grid-template-columns:repeat(2,1fr)}
     .hero-stage{font-size:25px}
     .hero{padding:22px 18px}
+  }
+  @media(max-width:480px){
+    .flow-branches{flex-direction:column;align-items:center}
+    .flow-branch{min-width:0;max-width:260px;width:100%}
   }
 </style>
 </head>
@@ -160,6 +202,7 @@
       <button class="sec-link" data-t="backlog">Backlog</button>
       <button class="sec-link" data-t="ideas">Ideas</button>
       <button class="sec-link" data-t="log">Log crudo</button>
+      <button class="sec-link" data-t="flujos">Flujos</button>
     </div>
     <div class="panel" id="p-backlog"><div id="backlog"><span class="empty">—</span></div></div>
     <div class="panel" id="p-ideas">
@@ -170,6 +213,101 @@
       <div id="ideas" class="card"><span class="empty">—</span></div>
     </div>
     <div class="panel" id="p-log"><div id="log">—</div></div>
+    <div class="panel" id="p-flujos">
+
+      <!-- ── Diagrama 1: Gate falla → aprobación humana ── -->
+      <p style="font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;
+                letter-spacing:1.4px;margin:14px 0 10px 0">Gate falla → aprobación humana</p>
+
+      <div class="flow-diagram">
+
+        <div class="flow-node flow-node--cap">inicio del ciclo</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--err">Gate falla<br>
+          <span style="font-size:11px;color:var(--coral)">verifier detecta error</span>
+        </div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--err">Builder → <strong>blocked</strong></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node">
+          Notificación al operador<br>
+          <span style="font-size:11px;color:var(--mut)">canal según OPERATOR_STATE</span>
+        </div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-diamond">
+          <div class="flow-diamond-txt">¿Aprueba el operador?</div>
+        </div>
+
+        <div class="flow-branches">
+          <div class="flow-branch">
+            <div class="flow-label flow-label--y">Aprobar</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Pipeline reanuda</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✓</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-label flow-label--n">Rechazar</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">Queda en blocked</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✗</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Diagrama 2: Deploy / release en verde ── -->
+      <p style="font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;
+                letter-spacing:1.4px;margin:22px 0 10px 0">Deploy / release en verde</p>
+
+      <div class="flow-diagram">
+
+        <div class="flow-node flow-node--cap">push / merge a main</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-node flow-node--ok">tsc · lint · tests</div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-diamond">
+          <div class="flow-diamond-txt">¿Todo verde?</div>
+        </div>
+
+        <div class="flow-branches">
+          <div class="flow-branch">
+            <div class="flow-label flow-label--y">Sí</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Code review</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">Auto-deploy</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--ok">
+              Aviso Telegram<br>
+              <span style="font-size:11px;color:var(--mut)">deploy exitoso notificado</span>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✓</div>
+          </div>
+          <div class="flow-branch">
+            <div class="flow-label flow-label--n">No</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">Release failed</div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--err">
+              Pipeline se detiene<br>
+              <span style="font-size:11px;color:var(--coral)">Telegram alerta al operador</span>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-node flow-node--cap">fin ✗</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div>
 
   <!-- ░░ ROSTER · presente: quién está vivo y qué hace ahora ░░ -->
