@@ -12,6 +12,7 @@ orchestrator/AUTOPILOT_COUNTER.json
 orchestrator/AUTOPILOT_MAP.json
 orchestrator/AUTOPILOT.lock
 orchestrator/STATE.*.archived.json
+orchestrator/LOOP_HEARTBEAT.json
 orchestrator/blocked.log
 orchestrator/orchestrator.log
 orchestrator/qa-artifacts/
