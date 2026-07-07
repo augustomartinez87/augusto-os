@@ -1,10 +1,11 @@
 import { mkdirSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { runDeepSeekAgent } from './deepseek.js'
+import { runDeepSeekAgent, DeepSeekInsufficientBalanceError } from './deepseek.js'
 import { validateEvidence, type ScoutReport } from './report.js'
 import type { ScoutTask } from './provider.js'
 import type { IntakeResult } from '../intake.js'
+import { log } from '../limits.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FEATURES_DIR = path.join(__dirname, '..', '..', 'features')
@@ -100,14 +101,25 @@ export async function runScout(
     focus,
   }))
 
+  // S-034: las 3 investigaciones comparten un AbortController. Apenas UNA detecta 402
+  // (sin saldo), aborta las otras dos de inmediato en vez de dejar que cada una intente
+  // y falle por separado — no tiene sentido gastar tiempo/turnos si ya sabemos la causa.
+  const controller = new AbortController()
   const settled = await Promise.allSettled(
     tasks.map(task =>
       withTimeout(
-        runDeepSeekAgent(task, apiKey, featureId),
+        runDeepSeekAgent(task, apiKey, featureId, controller.signal),
         SCOUT_TIMEOUT_MS,
         task.focus,
-      )
+      ).catch(e => {
+        if (e instanceof DeepSeekInsufficientBalanceError) controller.abort()
+        throw e
+      })
     )
+  )
+
+  const insufficientBalance = settled.some(
+    r => r.status === 'rejected' && r.reason instanceof DeepSeekInsufficientBalanceError
   )
 
   const reports: ScoutReport[] = []
@@ -121,9 +133,14 @@ export async function runScout(
         )
       }
       reports.push(report)
-    } else {
+    } else if (!insufficientBalance) {
       console.warn(`[scout] Investigación "${focuses[i]}" falló: ${result.reason}`)
     }
+  }
+
+  if (insufficientBalance) {
+    log('[scout] omitido: sin saldo en DeepSeek (HTTP 402) — usando fallback sin research')
+    return null
   }
 
   if (reports.length === 0) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { ScoutReportSchema, validateEvidence } from './report.js'
@@ -461,5 +461,169 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     await expect(
       runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
     ).rejects.toThrow(/máximo de \d+ turns/)
+  })
+
+  it('classifies HTTP 402 explicitly as DeepSeekInsufficientBalanceError, not a generic error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: async () => 'Insufficient Balance',
+    }))
+
+    const { runDeepSeekAgent, DeepSeekInsufficientBalanceError } = await import('./deepseek.js')
+    await expect(
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    ).rejects.toBeInstanceOf(DeepSeekInsufficientBalanceError)
+  })
+
+  it('does NOT classify a 402 by substring-matching response text (regression: same class of bug as the 429 false positive)', async () => {
+    // A response that happens to mention "402" in its body but has a DIFFERENT real
+    // status code must NOT be misclassified — only the actual HTTP status counts.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'Internal error while charging account 402-9911',
+    }))
+
+    const { runDeepSeekAgent, DeepSeekInsufficientBalanceError } = await import('./deepseek.js')
+    await expect(
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    ).rejects.not.toBeInstanceOf(DeepSeekInsufficientBalanceError)
+  })
+})
+
+// ── fetchDeepSeekBalance ────────────────────────────────────────────────────────
+
+describe('fetchDeepSeekBalance', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('parses is_available and total_balance from balance_infos[0]', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        is_available: true,
+        balance_infos: [{ currency: 'USD', total_balance: '8.42' }],
+      }),
+    }))
+    const { fetchDeepSeekBalance } = await import('./deepseek.js')
+    const balance = await fetchDeepSeekBalance('test-key')
+    expect(balance).toEqual({ isAvailable: true, totalBalance: '8.42', currency: 'USD' })
+  })
+
+  it('reflects is_available=false when out of balance', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        is_available: false,
+        balance_infos: [{ currency: 'USD', total_balance: '0.00' }],
+      }),
+    }))
+    const { fetchDeepSeekBalance } = await import('./deepseek.js')
+    const balance = await fetchDeepSeekBalance('test-key')
+    expect(balance?.isAvailable).toBe(false)
+  })
+
+  it('returns null on non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+    const { fetchDeepSeekBalance } = await import('./deepseek.js')
+    expect(await fetchDeepSeekBalance('bad-key')).toBeNull()
+  })
+
+  it('returns null on network error (never throws)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    const { fetchDeepSeekBalance } = await import('./deepseek.js')
+    await expect(fetchDeepSeekBalance('test-key')).resolves.toBeNull()
+  })
+
+  it('returns null when balance_infos is missing or empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ is_available: true, balance_infos: [] }),
+    }))
+    const { fetchDeepSeekBalance } = await import('./deepseek.js')
+    expect(await fetchDeepSeekBalance('test-key')).toBeNull()
+  })
+})
+
+// ── shouldRunBalanceCheck ────────────────────────────────────────────────────────
+
+describe('shouldRunBalanceCheck', () => {
+  it('runs on the first check (lastCheckAtMs=0)', async () => {
+    const { shouldRunBalanceCheck } = await import('./deepseek.js')
+    expect(shouldRunBalanceCheck(0, Date.now())).toBe(true)
+  })
+
+  it('does not run again immediately after a check', async () => {
+    const { shouldRunBalanceCheck } = await import('./deepseek.js')
+    const now = Date.now()
+    expect(shouldRunBalanceCheck(now - 1000, now)).toBe(false)
+  })
+
+  it('runs again once the interval has elapsed', async () => {
+    const { shouldRunBalanceCheck, BALANCE_CHECK_INTERVAL_MS } = await import('./deepseek.js')
+    const now = Date.now()
+    expect(shouldRunBalanceCheck(now - BALANCE_CHECK_INTERVAL_MS - 1, now)).toBe(true)
+  })
+
+  it('does not run just before the interval elapses', async () => {
+    const { shouldRunBalanceCheck, BALANCE_CHECK_INTERVAL_MS } = await import('./deepseek.js')
+    const now = Date.now()
+    expect(shouldRunBalanceCheck(now - BALANCE_CHECK_INTERVAL_MS + 100, now)).toBe(false)
+  })
+})
+
+// ── runScout: 402 aborts the other in-flight investigations ────────────────────
+
+describe('runScout with insufficient DeepSeek balance', () => {
+  let tmpDir: string
+  const origEnabled = process.env.SCOUT_ENABLED
+  const origKey = process.env.DEEPSEEK_API_KEY
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'scout-402-'))
+    process.env.SCOUT_ENABLED = 'true'
+    process.env.DEEPSEEK_API_KEY = 'test-key'
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true })
+    vi.restoreAllMocks()
+    if (origEnabled === undefined) delete process.env.SCOUT_ENABLED
+    else process.env.SCOUT_ENABLED = origEnabled
+    if (origKey === undefined) delete process.env.DEEPSEEK_API_KEY
+    else process.env.DEEPSEEK_API_KEY = origKey
+    // Defensive: runScout's FEATURES_DIR is the real orchestrator/features/, not
+    // relative to tmpDir. Clean up in case a bug ever causes it to write anyway.
+    rmSync(path.join('features', 'F-402-TEST.research.md'), { force: true })
+    rmSync(path.join('features', 'F-402-TEST.research.json'), { force: true })
+  })
+
+  it('returns null and writes no research files when one investigation hits 402 — does not wait for the others to fail independently', async () => {
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
+      callCount++
+      if (callCount === 1) {
+        // First in-flight request: out of balance immediately.
+        return Promise.resolve({ ok: false, status: 402, text: async () => 'Insufficient Balance' })
+      }
+      // The other two: only resolve once aborted (simulates them being cut short
+      // instead of independently running their own turns to eventual failure).
+      return new Promise((resolve, reject) => {
+        const signal = opts?.signal
+        if (signal?.aborted) { reject(Object.assign(new Error('aborted'), { name: 'AbortError' })); return }
+        signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+      })
+    }))
+
+    const { runScout } = await import('./index.js')
+    const intake = {
+      ideaText: 'test idea', target: 'sistema' as const, classification: 'feature' as const,
+      relatedAdrs: [], relatedFeatures: [], relatedBacklogIds: [],
+      contextSummary: '', needsArchitect: true,
+    }
+    const result = await runScout(intake, tmpDir, 'F-402-TEST')
+
+    expect(result).toBeNull()
+    expect(existsSync(path.join('features', 'F-402-TEST.research.md'))).toBe(false)
   })
 })

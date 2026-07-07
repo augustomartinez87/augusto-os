@@ -5,6 +5,7 @@ import type { ScoutTask } from './provider.js'
 import { recordInvocation } from '../metrics.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
+const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance'
 const DEEPSEEK_MODEL = 'deepseek-v4-flash'
 const MAX_LOOP_TURNS = 15
 const MAX_INPUT_TOKENS = 200_000
@@ -16,6 +17,20 @@ const DEEPSEEK_COST_PER_M_OUTPUT_USD = 0.28
 const MAX_KEPT_EXPLORATION_RESULTS = 2
 const EXPLORATION_TOOLS = new Set(['list_tree', 'grep'])
 const PRUNE_PLACEHOLDER = '[resultado ya leído, omitido para ahorrar contexto]'
+
+// S-034: cachea unos minutos el chequeo proactivo de saldo — no golpear de más la API.
+export const BALANCE_CHECK_INTERVAL_MS = 7 * 60 * 1000  // 7 min, dentro del rango 5-10 pedido
+
+// Clasificación explícita de "sin saldo" — nunca inferida por substring del texto del
+// error (esa clase de bug ya nos mordió con el 429 falso positivo en limits.ts). Se
+// dispara únicamente por el status code HTTP real (402 Insufficient Balance, doc oficial
+// de DeepSeek: https://api-docs.deepseek.com/quick_start/error_codes).
+export class DeepSeekInsufficientBalanceError extends Error {
+  constructor() {
+    super('DeepSeek: sin saldo (HTTP 402 Insufficient Balance)')
+    this.name = 'DeepSeekInsufficientBalanceError'
+  }
+}
 
 const TOOL_DEFINITIONS = [
   {
@@ -166,7 +181,7 @@ function pruneToolHistory(messages: ChatMessage[]): void {
   }
 }
 
-export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureId: string): Promise<ScoutReport> {
+export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureId: string, signal?: AbortSignal): Promise<ScoutReport> {
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(task) },
     { role: 'user', content: `Explorá el repo y respondé con el JSON de investigación para: "${task.objetivo}" (foco: ${task.focus})` },
@@ -206,7 +221,12 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
           tool_choice: 'auto',
           max_tokens: 4096,
         }),
+        signal,
       })
+
+      if (response.status === 402) {
+        throw new DeepSeekInsufficientBalanceError()
+      }
 
       if (!response.ok) {
         const errText = await response.text()
@@ -273,5 +293,43 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
       durationMs: Date.now() - startedAt,
       exitCode,
     })
+  }
+}
+
+// ── S-034: chequeo proactivo de saldo (orch-sync) ──────────────────────────────
+
+export interface DeepSeekBalance {
+  isAvailable: boolean
+  totalBalance: string
+  currency: string
+}
+
+interface DeepSeekBalanceResponse {
+  is_available?: boolean
+  balance_infos?: Array<{ currency?: string; total_balance?: string }>
+}
+
+/** Pure — fácil de testear sin side-effects, mismo patrón que shouldRunCleanup. */
+export function shouldRunBalanceCheck(lastCheckAtMs: number, nowMs = Date.now()): boolean {
+  return nowMs - lastCheckAtMs >= BALANCE_CHECK_INTERVAL_MS
+}
+
+/** Devuelve null ante cualquier fallo (red, parseo, API key ausente) — nunca tumba el caller. */
+export async function fetchDeepSeekBalance(apiKey: string): Promise<DeepSeekBalance | null> {
+  try {
+    const res = await fetch(DEEPSEEK_BALANCE_URL, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json() as DeepSeekBalanceResponse
+    const info = data.balance_infos?.[0]
+    if (!info) return null
+    return {
+      isAvailable: data.is_available ?? false,
+      totalBalance: info.total_balance ?? '0',
+      currency: info.currency ?? 'USD',
+    }
+  } catch {
+    return null
   }
 }

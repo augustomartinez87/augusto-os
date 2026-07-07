@@ -49,6 +49,18 @@
   .stage.blocked .stage-state{color:var(--coral)}
   .stage-time{font-size:11px;color:var(--mut2);margin-top:auto}
 
+  /* ── scout status (S-034): saldo DeepSeek ── */
+  .scout-status{background:var(--card2);border:1px solid var(--line-soft);border-radius:12px;
+    padding:12px 14px;margin-bottom:30px}
+  .scout-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .scout-row + .scout-row{margin-top:8px}
+  .scout-label{font-size:12px;font-weight:600;color:var(--mut)}
+  .scout-status-pill{font-size:11px;font-weight:600}
+  .scout-bar{height:5px;border-radius:3px;background:var(--line);overflow:hidden;margin:9px 0}
+  .scout-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
+  .scout-balance{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--txt)}
+  .scout-time{font-size:11px;color:var(--mut2)}
+
   /* ── loop hero ── */
   .hero{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 24px;margin-bottom:30px}
   .hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
@@ -319,6 +331,9 @@
     <div class="stage"><div class="stage-top"><span class="stage-name">Deploy</span></div><div class="skel w-55"></div></div>
   </div>
 
+  <!-- ░░ SCOUT · saldo DeepSeek (S-034) ░░ -->
+  <div class="scout-status" id="scoutStatus"><div class="skel w-full"></div></div>
+
   <!-- ░░ LOOP HERO · quién tiene la posta ░░ -->
   <div class="hero" id="hero">
     <div class="skel w-40"></div>
@@ -471,6 +486,35 @@
     }).join("");
   }
 
+  // ── renderScoutStatus (S-034): saldo DeepSeek del Scout KGL. Barra de referencia
+  //    visual sobre USD 10 (el monto que Augusto carga en platform.deepseek.com,
+  //    ver system/SCOUT-KGL-HANDOFF.md) — el número exacto siempre va como texto,
+  //    la barra es solo un vistazo rápido, nunca la fuente de verdad.
+  const SCOUT_BALANCE_REFERENCE_USD = 10;
+  function renderScoutStatus(row){
+    const el = $("scoutStatus");
+    if(!row){
+      el.innerHTML = `<div class="scout-row"><span class="scout-label">Scout · DeepSeek</span><span class="empty">sin datos</span></div>`;
+      return;
+    }
+    const available = !!row.is_available;
+    const balance = Number(row.total_balance ?? 0);
+    const currency = row.currency || "USD";
+    const pct = Math.max(0, Math.min(100, (balance / SCOUT_BALANCE_REFERENCE_USD) * 100));
+    const color = available ? "var(--teal)" : "var(--coral)";
+    const statusTxt = available ? "disponible" : "sin saldo · fallback a Claude";
+    el.innerHTML = `
+      <div class="scout-row">
+        <span class="scout-label">Scout · DeepSeek</span>
+        <span class="scout-status-pill" style="color:${color}">${statusTxt}</span>
+      </div>
+      <div class="scout-bar"><div class="scout-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="scout-row">
+        <span class="scout-balance">$${balance.toFixed(2)} ${esc(currency)}</span>
+        <span class="scout-time">${timeAgo(row.checked_at)}</span>
+      </div>`;
+  }
+
   function renderHero(run, posta){
     if(!run || !posta){
       $("hero").className = "hero rest";
@@ -574,7 +618,7 @@
 
   async function refresh(){
     try{
-      const [runs, steps, logs, ideas, bl, opState, presR] = await Promise.all([
+      const [runs, steps, logs, ideas, bl, opState, presR, scoutR] = await Promise.all([
         db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
         db.from("orch_steps").select("*"),
         db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(60),
@@ -582,6 +626,7 @@
         db.from("orch_backlog").select("*"),
         db.from("orch_operator_state").select("mode").eq("id", 1).maybeSingle(),
         db.from("orch_presence").select("*"),
+        db.from("orch_scout_status").select("*").eq("id", 1).maybeSingle(),
       ]);
       const allRuns = runs.data || [];
       const allSteps = steps.data || [];
@@ -593,6 +638,7 @@
       const presenceMap = presRows.length ? presRows.reduce((m,r)=>({...m,[r.role]:r}),{}) : null;
 
       renderRoster(posta, presenceMap);
+      renderScoutStatus(scoutR.data || null);
       renderHero(live, posta);
       renderFeed(allRuns, allSteps);
       renderBacklog(bl.data || []);

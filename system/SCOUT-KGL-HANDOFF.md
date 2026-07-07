@@ -57,11 +57,15 @@ Métricas completas en `logs/metrics-F-0010.json`:
 
 **Scout funciona y supera el criterio.** F-0012 (S-024, evaluador de posts de X, target `sistema`) corrió con `SCOUT_ENABLED=true` tras 5 rondas de fixes reales en el scout (ver "Bugs encontrados" abajo): 7/7 steps, **0 retries, 0 rechazos del Reviewer** — contraste directo con F-0011 (baseline, scout apagado), que necesitó 8 corridas de Executor solo en step 1 y varios `CHANGES_REQUESTED`.
 
-| | F-0011 (baseline, scout off) | F-0012 (scout, corrida limpia) | F-0012 (all-in, incl. debugging de esta sesión) |
+| | F-0011 (baseline, scout off) | F-0012 (un solo pase limpio) | F-0012 (total real gastado esta sesión) |
 |---|---|---|---|
-| TOTAL | $6.481 | $4.110 (**-37%**) | $5.068 (**-22%**) |
+| TOTAL | $6.481 | $4.110 (**-37%**) | $8.981 (**+39%**) |
 
-El número que importa para proyectar a futuro es **-37%** (corrida limpia): el costo de debugging fue de una sola vez (bugs ya fixeados para siempre), no un costo recurrente por feature. Ambos superan o rozan el criterio de diseño de -25%. Lo más importante no es el %, es la caída de reintentos a cero — exactamente el mecanismo que Scout estaba diseñado para lograr (specs mejor fundamentadas → menos adivinar → menos vueltas).
+**Importante — no confundir estas dos columnas de F-0012:** el total real de la sesión ($8.981) es más caro que la baseline, no más barato. La causa NO es Scout: un bug operativo separado (`TaskStop` no mataba de verdad un proceso en background, solo dejaba de trackearlo; el proceso zombie — dormido por el bug ya fixeado del falso-positivo "429" — se despertó solo y re-corrió los steps 1-6 desde cero con sesiones nuevas mientras CC hacía otro trabajo en el mismo repo) duplicó gasto real de Executor/Reviewer. El estado final convergió sano (322/322 tests, deploy en Vercel confirmado) pero el costo quedó inflado por partida doble.
+
+**El número que vale para la decisión de Scout es -37% (un solo pase limpio)**, que es la métrica real del primer y único pase exitoso (7/7 steps, 0 retries, 0 rechazos) — no una estimación, es el filtrado correcto del log NDJSON compartido para excluir las entradas del segundo pase duplicado. El +39% es "cuánto costó esta sesión de debugging + un incidente operativo", un dato distinto que no debería pesar en si Scout se apaga o no.
+
+Pendiente para más adelante (no bloqueante): investigar por qué el mecanismo de stop de procesos en background no mata el árbol completo — mismo patrón sospechoso que el bug de `orch-sync`/pm2 (un wrapper que spawnea un proceso interno que escapa al control del padre).
 
 **Caveat:** `sistema` es un target atípico (cruza el límite del repo hacia `system/`, requirió el fix de `scoutRoot`). Antes de dar la conclusión final hace falta repetir con 1-2 features de kredy/spensiv/argos (repos autocontenidos, caso típico).
 

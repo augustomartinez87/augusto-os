@@ -93,3 +93,17 @@ create table if not exists orch_presence (
 );
 alter table orch_presence enable row level security;
 create policy "anon read presence" on orch_presence for select to anon using (true);
+
+-- S-034: fila única de saldo DeepSeek (Scout KGL). orch-sync la actualiza cada
+-- BALANCE_CHECK_INTERVAL_MS (7 min) vía GET /user/balance. El dashboard la lee para
+-- mostrar la barra de saldo y si el scout está en modo fallback (is_available=false).
+create table if not exists orch_scout_status (
+  id            int primary key default 1,
+  is_available  boolean,
+  total_balance text,             -- string: DeepSeek la devuelve con decimales fijos, no castear a float
+  currency      text,
+  checked_at    timestamptz default now(),
+  constraint single_row_scout check (id = 1)
+);
+alter table orch_scout_status enable row level security;
+create policy "anon read scout_status" on orch_scout_status for select to anon using (true);

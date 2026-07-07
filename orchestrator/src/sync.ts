@@ -11,6 +11,7 @@ import { tryAutopilotPick } from './autopilot.js'
 import { MODEL_PLANNER, MODEL_BUILDER } from './models.js'
 import { readLoopHeartbeat } from './loop-heartbeat.js'
 import { shouldRunCleanup, cleanDiskLogs, cleanSupabaseLogs } from './log-cleanup.js'
+import { shouldRunBalanceCheck, fetchDeepSeekBalance } from './scout/deepseek.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORCH_DIR = path.join(__dirname, '..')
@@ -136,6 +137,25 @@ function currentStep(s: OrchestratorState): number {
   return pend ? pend.id : s.steps.length
 }
 
+// S-034: chequeo proactivo de saldo DeepSeek, cacheado unos minutos (ver
+// BALANCE_CHECK_INTERVAL_MS en deepseek.ts) — no golpear de más su API en cada tick de 5s.
+let lastBalanceCheckAt = 0
+async function pushDeepSeekBalance(): Promise<void> {
+  if (!shouldRunBalanceCheck(lastBalanceCheckAt)) return
+  lastBalanceCheckAt = Date.now()
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey) return
+  const balance = await fetchDeepSeekBalance(apiKey)
+  if (!balance) return
+  await upsert('orch_scout_status', [{
+    id: 1,
+    is_available: balance.isAvailable,
+    total_balance: balance.totalBalance,
+    currency: balance.currency,
+    checked_at: new Date().toISOString(),
+  }])
+}
+
 let lastCleanupAt = 0  // corre en el primer tick (0 → diff = Inf) y luego cada hora
 let logOffset = -1
 async function pushLogTail(featureId: string): Promise<void> {
@@ -259,6 +279,7 @@ async function tick(): Promise<void> {
   await pushIntakeIdeas()
   await pullWebIdeas()
   await pullOperatorState()
+  try { await pushDeepSeekBalance() } catch (e) { log(`[sync] balance DeepSeek: ${(e as Error).message}`) }
   try { await tryAutopilotPick() } catch (e) { log(`[autopilot] error en tick: ${(e as Error).message}`) }
 
   if (shouldRunCleanup(lastCleanupAt)) {
