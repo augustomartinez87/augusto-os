@@ -103,7 +103,7 @@ export async function runScout(
   const settled = await Promise.allSettled(
     tasks.map(task =>
       withTimeout(
-        runDeepSeekAgent(task, apiKey),
+        runDeepSeekAgent(task, apiKey, featureId),
         SCOUT_TIMEOUT_MS,
         task.focus,
       )

@@ -2,11 +2,20 @@ import path from 'path'
 import { ScoutReportSchema, type ScoutReport } from './report.js'
 import { list_tree, read_file, grep } from './tools.js'
 import type { ScoutTask } from './provider.js'
+import { recordInvocation } from '../metrics.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEEPSEEK_MODEL = 'deepseek-v4-flash'
 const MAX_LOOP_TURNS = 15
 const MAX_INPUT_TOKENS = 200_000
+const DEEPSEEK_COST_PER_M_INPUT_USD = 0.14
+const DEEPSEEK_COST_PER_M_OUTPUT_USD = 0.28
+// read_file nunca se poda: ya viene topeado a MAX_READ_LINES por llamada (barato) y
+// es la evidencia que el modelo necesita citar en el research final. list_tree/grep
+// son solo para decidir dónde mirar — se podan agresivo, no hace falta que sobrevivan.
+const MAX_KEPT_EXPLORATION_RESULTS = 2
+const EXPLORATION_TOOLS = new Set(['list_tree', 'grep'])
+const PRUNE_PLACEHOLDER = '[resultado ya leído, omitido para ahorrar contexto]'
 
 const TOOL_DEFINITIONS = [
   {
@@ -117,6 +126,9 @@ function buildSystemPrompt(task: ScoutTask): string {
 FOCO: ${focusInstructions[task.focus]}
 
 Tenés acceso a tres herramientas: list_tree, read_file, grep. Úsalas para explorar el repo antes de responder.
+
+Tenés un máximo de ${MAX_LOOP_TURNS} turnos. A partir del turno ${MAX_LOOP_TURNS - 3} de ${MAX_LOOP_TURNS}, dejá de llamar tools y escribí tu respuesta final en JSON con la evidencia que ya tenés — marcá como [NO VERIFICADO] en la explicación lo que no llegaste a confirmar. Una respuesta parcial y honesta es mejor que ninguna.
+
 Cuando hayas terminado la investigación, devolvé un JSON con este schema exacto:
 {
   "objetivo": string,
@@ -126,7 +138,7 @@ Cuando hayas terminado la investigación, devolvé un JSON con este schema exact
   "riesgos": string[],       // riesgos o restricciones encontrados
   "evidencia": [{
     "path": string,          // ruta relativa al archivo
-    "simbolo": string,       // función/tipo/variable exacta encontrada
+    "simbolo": string,       // UN identificador literal y copiable — el nombre exacto de una función, variable, tipo o clave, tal cual aparece en el archivo. Nunca una frase descriptiva ni varios identificadores unidos con "+" o "y". Si hay varios símbolos relevantes en el mismo lugar, generá una entrada de evidencia separada por cada uno.
     "lineas": string,        // número de líneas, ej: "42-58"
     "explicacion": string,   // por qué es relevante
     "confianza": number      // 0.0-1.0
@@ -137,80 +149,129 @@ Cuando hayas terminado la investigación, devolvé un JSON con este schema exact
 NO incluyas texto fuera del JSON en tu respuesta final.`
 }
 
-export async function runDeepSeekAgent(task: ScoutTask, apiKey: string): Promise<ScoutReport> {
+// Poda solo list_tree/grep (exploración descartable, mantiene las últimas
+// MAX_KEPT_EXPLORATION_RESULTS). read_file nunca se toca — el mensaje 'assistant' que
+// disparó cada tool call (con name+arguments) tampoco, así el modelo sigue viendo qué
+// ya llamó y no repite lecturas que aún tiene completas en contexto.
+function pruneToolHistory(messages: ChatMessage[]): void {
+  const explorationIndexes = messages.reduce<number[]>((acc, m, i) => {
+    if (m.role === 'tool' && m.name && EXPLORATION_TOOLS.has(m.name)) acc.push(i)
+    return acc
+  }, [])
+  const toPrune = explorationIndexes.slice(0, Math.max(0, explorationIndexes.length - MAX_KEPT_EXPLORATION_RESULTS))
+  for (const i of toPrune) {
+    if (messages[i].content !== PRUNE_PLACEHOLDER) {
+      messages[i] = { ...messages[i], content: PRUNE_PLACEHOLDER }
+    }
+  }
+}
+
+export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureId: string): Promise<ScoutReport> {
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(task) },
     { role: 'user', content: `Explorá el repo y respondé con el JSON de investigación para: "${task.objetivo}" (foco: ${task.focus})` },
   ]
 
   let totalInputTokens = 0
+  let totalOutputTokens = 0
+  let exitCode = 1
+  const startedAt = Date.now()
 
-  for (let turn = 0; turn < MAX_LOOP_TURNS; turn++) {
-    if (totalInputTokens > MAX_INPUT_TOKENS) {
-      throw new Error(`[deepseek] Límite de tokens de input (~${MAX_INPUT_TOKENS}) alcanzado en turn ${turn}`)
-    }
-
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        messages,
-        tools: TOOL_DEFINITIONS,
-        tool_choice: 'auto',
-        max_tokens: 4096,
-      }),
-    })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`[deepseek] API error ${response.status}: ${errText.slice(0, 500)}`)
-    }
-
-    const data: ChatResponse = await response.json() as ChatResponse
-    totalInputTokens += data.usage?.prompt_tokens ?? 0
-
-    const choice = data.choices[0]
-    if (!choice) throw new Error('[deepseek] Respuesta vacía de la API')
-
-    const assistantMsg = choice.message
-    messages.push({
-      role: 'assistant',
-      content: assistantMsg.content,
-      tool_calls: assistantMsg.tool_calls,
-    })
-
-    if (choice.finish_reason === 'tool_calls' && assistantMsg.tool_calls?.length) {
-      for (const toolCall of assistantMsg.tool_calls) {
-        let args: Record<string, unknown> = {}
-        try { args = JSON.parse(toolCall.function.arguments) as Record<string, unknown> } catch { /* ignore */ }
-        const toolResult = dispatchTool(toolCall.function.name, args, task.repoRoot)
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: toolCall.function.name,
-          content: toolResult,
-        })
+  try {
+    for (let turn = 0; turn < MAX_LOOP_TURNS; turn++) {
+      if (totalInputTokens > MAX_INPUT_TOKENS) {
+        throw new Error(`[deepseek] Límite de tokens de input (~${MAX_INPUT_TOKENS}) alcanzado en turn ${turn}`)
       }
-      continue
+
+      // Señal de turno en vivo: el system prompt inicial no alcanza porque el modelo
+      // no tiene forma de saber en qué turno está mientras la conversación avanza.
+      // Este mensaje se repite CADA turno para que el corte cerca del final sea accionable.
+      const turnsRemaining = MAX_LOOP_TURNS - turn
+      let turnNotice = `Turno ${turn + 1} de ${MAX_LOOP_TURNS}.`
+      if (turn >= MAX_LOOP_TURNS - 3) {
+        turnNotice += ` Te quedan ${turnsRemaining} turnos. DEJÁ DE LLAMAR TOOLS y respondé ahora con el JSON final, marcando como [NO VERIFICADO] lo que no llegaste a confirmar.`
+      }
+      messages.push({ role: 'user', content: turnNotice })
+
+      const response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: DEEPSEEK_MODEL,
+          messages,
+          tools: TOOL_DEFINITIONS,
+          tool_choice: 'auto',
+          max_tokens: 4096,
+        }),
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        throw new Error(`[deepseek] API error ${response.status}: ${errText.slice(0, 500)}`)
+      }
+
+      const data: ChatResponse = await response.json() as ChatResponse
+      // prompt_tokens ya es el tamaño acumulado del historial en este turno — asignar,
+      // no sumar (sumar cuenta el mismo historial varias veces y dispara el límite antes de tiempo).
+      totalInputTokens = data.usage?.prompt_tokens ?? totalInputTokens
+      totalOutputTokens += data.usage?.completion_tokens ?? 0
+
+      const choice = data.choices[0]
+      if (!choice) throw new Error('[deepseek] Respuesta vacía de la API')
+
+      const assistantMsg = choice.message
+      messages.push({
+        role: 'assistant',
+        content: assistantMsg.content,
+        tool_calls: assistantMsg.tool_calls,
+      })
+
+      if (choice.finish_reason === 'tool_calls' && assistantMsg.tool_calls?.length) {
+        for (const toolCall of assistantMsg.tool_calls) {
+          let args: Record<string, unknown> = {}
+          try { args = JSON.parse(toolCall.function.arguments) as Record<string, unknown> } catch { /* ignore */ }
+          const toolResult = dispatchTool(toolCall.function.name, args, task.repoRoot)
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: toolResult,
+          })
+        }
+        pruneToolHistory(messages)
+        continue
+      }
+
+      // Model finished — extract JSON from the response
+      const content = assistantMsg.content ?? ''
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
+      }
+
+      const parsed = ScoutReportSchema.safeParse(JSON.parse(jsonMatch[0]))
+      if (!parsed.success) {
+        throw new Error(`[deepseek] JSON del scout inválido: ${parsed.error.message}`)
+      }
+      exitCode = 0
+      return parsed.data
     }
 
-    // Model finished — extract JSON from the response
-    const content = assistantMsg.content ?? ''
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
-    }
-
-    const parsed = ScoutReportSchema.safeParse(JSON.parse(jsonMatch[0]))
-    if (!parsed.success) {
-      throw new Error(`[deepseek] JSON del scout inválido: ${parsed.error.message}`)
-    }
-    return parsed.data
+    throw new Error(`[deepseek] Agente superó el máximo de ${MAX_LOOP_TURNS} turns sin respuesta final`)
+  } finally {
+    recordInvocation({
+      featureId,
+      role: `scout:${task.focus}`,
+      model: DEEPSEEK_MODEL,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      costUsd: (totalInputTokens / 1_000_000) * DEEPSEEK_COST_PER_M_INPUT_USD
+        + (totalOutputTokens / 1_000_000) * DEEPSEEK_COST_PER_M_OUTPUT_USD,
+      durationMs: Date.now() - startedAt,
+      exitCode,
+    })
   }
-
-  throw new Error(`[deepseek] Agente superó el máximo de ${MAX_LOOP_TURNS} turns sin respuesta final`)
 }

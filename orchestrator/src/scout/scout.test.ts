@@ -206,6 +206,64 @@ describe('read_file', () => {
   })
 })
 
+// ── tools: secret files (read_file/list_tree/grep deny access) ────────────────
+
+describe('secret file exclusion', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'scout-secrets-'))
+    writeFileSync(path.join(tmpDir, '.env'), 'DEEPSEEK_API_KEY=sk-fake-secret\n', 'utf-8')
+    writeFileSync(path.join(tmpDir, '.env.local'), 'SECRET=fake\n', 'utf-8')
+    writeFileSync(path.join(tmpDir, 'server.pem'), 'FAKE PEM CONTENT\n', 'utf-8')
+    writeFileSync(path.join(tmpDir, 'credentials.json'), '{"token":"fake"}\n', 'utf-8')
+    writeFileSync(path.join(tmpDir, 'id_rsa'), 'FAKE PRIVATE KEY\n', 'utf-8')
+    writeFileSync(path.join(tmpDir, 'safe.ts'), 'export const ok = true\n', 'utf-8')
+  })
+
+  afterEach(() => rmSync(tmpDir, { recursive: true }))
+
+  it('read_file denies access to .env', () => {
+    expect(() => read_file('.env', tmpDir)).toThrow('Acceso denegado')
+  })
+
+  it('read_file denies access to .env.local', () => {
+    expect(() => read_file('.env.local', tmpDir)).toThrow('Acceso denegado')
+  })
+
+  it('read_file denies access to .pem files', () => {
+    expect(() => read_file('server.pem', tmpDir)).toThrow('Acceso denegado')
+  })
+
+  it('read_file denies access to credentials.json', () => {
+    expect(() => read_file('credentials.json', tmpDir)).toThrow('Acceso denegado')
+  })
+
+  it('read_file denies access to SSH private keys', () => {
+    expect(() => read_file('id_rsa', tmpDir)).toThrow('Acceso denegado')
+  })
+
+  it('read_file still allows non-secret files', () => {
+    expect(() => read_file('safe.ts', tmpDir)).not.toThrow()
+  })
+
+  it('list_tree excludes secret files entirely (not even the name is exposed)', () => {
+    const entries = list_tree(tmpDir, tmpDir)
+    const names = entries.map(e => e.path)
+    expect(names).not.toContain('.env')
+    expect(names).not.toContain('.env.local')
+    expect(names).not.toContain('server.pem')
+    expect(names).not.toContain('credentials.json')
+    expect(names).not.toContain('id_rsa')
+    expect(names).toContain('safe.ts')
+  })
+
+  it('grep never reads or matches inside secret files', () => {
+    const matches = grep('fake', '*', tmpDir)
+    expect(matches.every(m => !m.path.includes('.env') && !m.path.includes('.pem') && !m.path.includes('credentials') && !m.path.includes('id_rsa'))).toBe(true)
+  })
+})
+
 // ── tools: grep ──────────────────────────────────────────────────────────────
 
 describe('grep', () => {
@@ -328,7 +386,7 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     }))
 
     const { runDeepSeekAgent } = await import('./deepseek.js')
-    const report = await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key')
+    const report = await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
 
     expect(report.objetivo).toBe('Investigar el repo')
     expect(report.archivos).toContain('index.ts')
@@ -364,7 +422,7 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     }))
 
     const { runDeepSeekAgent } = await import('./deepseek.js')
-    const report = await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'detective' }, 'test-key')
+    const report = await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'detective' }, 'test-key', 'F-TEST')
 
     expect(callCount).toBe(2)
     expect(report.objetivo).toBe('Investigar el repo')
@@ -379,7 +437,7 @@ describe('runDeepSeekAgent with mocked fetch', () => {
 
     const { runDeepSeekAgent } = await import('./deepseek.js')
     await expect(
-      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'riesgos' }, 'bad-key')
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'riesgos' }, 'bad-key', 'F-TEST')
     ).rejects.toThrow('401')
   })
 
@@ -401,7 +459,7 @@ describe('runDeepSeekAgent with mocked fetch', () => {
 
     const { runDeepSeekAgent } = await import('./deepseek.js')
     await expect(
-      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key')
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
     ).rejects.toThrow(/máximo de \d+ turns/)
   })
 })

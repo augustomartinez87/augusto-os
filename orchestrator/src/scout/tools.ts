@@ -5,6 +5,27 @@ const IGNORED_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '.git'])
 const MAX_READ_LINES = 150
 const MAX_GREP_MATCHES = 50
 
+// Misma prioridad que el guard anti path-traversal: el Scout nunca debe poder leer
+// secretos, ni siquiera de forma indirecta vía grep. Denegar acceso, no solo ocultar
+// del listado — list_tree igual los excluye para no revelar ni el nombre del archivo.
+const SECRET_PATH_PATTERNS: RegExp[] = [
+  /(^|[\\/])\.env(\.[^\\/]*)?$/,                       // .env, .env.local, .env.bak-rename, etc.
+  /(^|[\\/])[^\\/]*\.(pem|key|pfx|p12)$/i,             // certificados/llaves privadas
+  /(^|[\\/])credentials[^\\/]*$/i,                     // credentials.json, credentials.yaml, etc.
+  /(^|[\\/])id_(rsa|dsa|ed25519|ecdsa)(\.[^\\/]*)?$/,  // llaves SSH
+]
+
+function isSecretPath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, '/')
+  return SECRET_PATH_PATTERNS.some(p => p.test(normalized))
+}
+
+function assertNotSecret(relPath: string): void {
+  if (isSecretPath(relPath)) {
+    throw new Error(`Acceso denegado: "${relPath}" matchea un patrón de archivo de secretos`)
+  }
+}
+
 function assertSafe(repoRoot: string, targetPath: string): void {
   const resolved = path.resolve(targetPath)
   const rootResolved = path.resolve(repoRoot)
@@ -34,6 +55,7 @@ export function list_tree(dir: string, repoRoot: string, maxDepth = 3): TreeEntr
       if (IGNORED_DIRS.has(entry)) continue
       const fullPath = path.join(current, entry)
       const rel = path.relative(repoRoot, fullPath)
+      if (isSecretPath(rel)) continue
       let stat
       try { stat = statSync(fullPath) } catch { continue }
       if (stat.isDirectory()) {
@@ -52,11 +74,12 @@ export function list_tree(dir: string, repoRoot: string, maxDepth = 3): TreeEntr
 export function read_file(filePath: string, repoRoot: string, fromLine = 1, toLine?: number): string {
   assertSafe(repoRoot, path.resolve(repoRoot, filePath))
   const absPath = path.resolve(repoRoot, filePath)
+  assertNotSecret(path.relative(repoRoot, absPath))
   if (!existsSync(absPath)) throw new Error(`Archivo no encontrado: ${filePath}`)
   const content = readFileSync(absPath, 'utf-8')
   const lines = content.split('\n')
   const start = Math.max(0, fromLine - 1)
-  const end = Math.min(lines.length, toLine ?? start + MAX_READ_LINES)
+  const end = Math.min(lines.length, start + MAX_READ_LINES, toLine ?? Infinity)
   return lines.slice(start, end).join('\n')
 }
 
@@ -92,6 +115,7 @@ export function grep(pattern: string, glob: string, repoRoot: string): GrepMatch
         walkAndMatch(fullPath)
       } else {
         if (isExtFilter && !entry.endsWith('.' + ext)) continue
+        if (isSecretPath(path.relative(repoRoot, fullPath))) continue
         let content: string
         try { content = readFileSync(fullPath, 'utf-8') } catch { continue }
         const lines = content.split('\n')
