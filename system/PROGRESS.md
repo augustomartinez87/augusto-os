@@ -317,3 +317,23 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0010/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-07 — F-0012 completado
+
+## Feature F-0012
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear orchestrator/src/evaluate.ts con readSystemContext(): lee system/ARQUITECTURA-ACTUAL.md y system/BACKLOG.md con existsSync/readFileSync (rutas relativas a REPO_ROOT como en architect.ts), recorta cada archivo a un máximo de chars y devuelve un string; si falta alguno, inserta un marcador [no disponible] en vez de crashear. (4777d030)
+- [x] Step 2: En orchestrator/src/evaluate.ts definir buildEvaluatePrompt(postText, systemContext) como función pura calcada de buildArchitectPrompt: arma el prompt de evaluación pidiendo prosa corta (¿ya implementado y dónde? ¿vale la pena y qué beneficio? ¿es bait y por qué?) y la etiqueta de conjunto cerrado devuelta en un campo JSON (etiqueta, resumen). (4c896931)
+- [x] Step 3: En orchestrator/src/evaluate.ts definir con zod EvaluateResultSchema { etiqueta: enum['YA-EXISTE','IMPLEMENTAR','BAIT','IGNORAR'], resumen: string } y normalizeLabel() que mapea cualquier valor fuera del set a IGNORAR. (c24493ac)
+- [x] Step 4: En orchestrator/src/evaluate.ts definir EvaluateOpts con callClaude inyectable y defaultCallClaude (execa a claude con las mismas flags que architect.ts: --model MODEL_ARCHITECT, --max-turns MAX_TURNS, --output-format json, --dangerously-skip-permissions, --strict-mcp-config, -p prompt), y runEvaluate(postText, opts) que lee contexto, construye el prompt, invoca callClaude, parsea con parseClaudeJson, valida con EvaluateResultSchema aplicando normalizeLabel, y llama recordInvocation({ role: 'evaluator', ... }) dentro de un try/catch que nunca tumba el flujo. (788a77a1)
+- [x] Step 5: Crear orchestrator/src/evaluate-cli.ts calcado de intake-cli.ts: toma el texto del post desde process.argv[2] (o stdin si no hay arg), invoca runEvaluate, imprime la etiqueta destacada + resumen, y usa exit code distinto de 0 solo ante error real. (d17e8f1b)
+- [x] Step 6: Agregar el script "evaluar": "tsx --env-file=.env src/evaluate-cli.ts" a scripts en orchestrator/package.json. (1058b8a7)
+- [x] Step 7: Crear orchestrator/src/evaluate.test.ts con vitest: ejercita runEvaluate con un callClaude mockeado (sin red) para una salida con etiqueta válida y otra con etiqueta inválida, y verifica que runEvaluate siempre devuelve una etiqueta dentro del set cerrado y no realiza llamadas de red. (1058b8a7)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0012/`
+
+> Revisar con Claude in Chrome para validación de UX.
