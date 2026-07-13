@@ -14,7 +14,7 @@ import { runQA } from './qa.js'
 import { runReviewer } from './reviewer.js'
 import { commitStep, createFeatureBranch, mergeIntoMain, pushMain, getDefaultBranch } from './git.js'
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
-import { notifyDeployed, notifyReleaseFailed, pollApprovalOnce } from './telegram.js'
+import { notifyDeployed, notifyReleaseFailed, notifyStepBlocked, pollApprovalOnce } from './telegram.js'
 import { isBotAlive } from './bot-heartbeat.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget, getTargetConfig } from './targets.js'
@@ -164,6 +164,19 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
   return initState(featureId, branch, planSteps)
 }
 
+/**
+ * ADR-0019: sin gates humanos por-step. Cuando retries/verifier/QA/reviewer se
+ * agotan, el step ya quedó marcado 'blocked' por el caller — esto corta el loop
+ * (sin esperar `npm run approve`) y avisa por Telegram a modo informativo.
+ * Augusto arregla a mano y re-corre `npm start <feature>` cuando quiera.
+ */
+async function haltBlocked(state: OrchestratorState, detail: string): Promise<void> {
+  log(`[main] Step BLOQUEADO — ejecución detenida (no requiere aprobación; requiere fix manual).`)
+  log(`[main] Motivo: ${detail}`)
+  log(`[main] Corregí el problema y re-ejecutá \`npm start ${state.featureId}\` para reintentar.`)
+  await notifyStepBlocked(state.featureId, detail)
+}
+
 async function runLoop(state: OrchestratorState) {
   if (state.pausedUntil) {
     const until = new Date(state.pausedUntil)
@@ -304,8 +317,7 @@ async function runLoop(state: OrchestratorState) {
       step.retries = (step.retries ?? 0) + 1
       if (step.retries >= 3) {
         markStepStatus(state, step.id, 'blocked', { error: execResult.finalError })
-        setHumanGate(state, `Step ${step.id} bloqueado tras 3 reintentos: ${execResult.finalError?.slice(0, 200)}`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id} bloqueado tras 3 reintentos: ${execResult.finalError?.slice(0, 200)}`)
         return
       }
       markStepStatus(state, step.id, 'pending', { retries: step.retries })
@@ -321,24 +333,21 @@ async function runLoop(state: OrchestratorState) {
       step.retries = (step.retries ?? 0) + 1
       if (step.retries >= 3) {
         markStepStatus(state, step.id, 'blocked', { error: verify.errors })
-        setHumanGate(state, `Step ${step.id} bloqueado: verifier sigue fallando`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id} bloqueado: verifier sigue fallando`)
         return
       }
       markStepStatus(state, step.id, 'pending', { retries: step.retries })
       const fix = await executeStepWithRetry(step, state, () => verify.errors)
       if (!fix.ok) {
         markStepStatus(state, step.id, 'blocked')
-        setHumanGate(state, `Step ${step.id}: no pasa verifier`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: no pasa verifier`)
         return
       }
       pendingAdrBlocks = fix.adrBlocks
       const verify2 = await runVerifier()
       if (!verify2.ok) {
         markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
-        setHumanGate(state, `Step ${step.id}: verifier falla tras corrección`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: verifier falla tras corrección`)
         return
       }
     }
@@ -357,8 +366,7 @@ async function runLoop(state: OrchestratorState) {
           markStepStatus(state, step.id, 'pending', { retries: step.retries })
           if (step.retries >= 3) {
             markStepStatus(state, step.id, 'blocked', { error: qa.errors.join('\n') })
-            setHumanGate(state, `Step ${step.id}: QA gate falla — ver screenshots en ${qa.screenshotDir}`)
-            await runLoop(state)
+            await haltBlocked(state, `Step ${step.id}: QA gate falla — ver screenshots en ${qa.screenshotDir}`)
             return
           }
           continue
@@ -372,31 +380,27 @@ async function runLoop(state: OrchestratorState) {
       step.retries = (step.retries ?? 0) + 1
       if (step.retries >= 3) {
         markStepStatus(state, step.id, 'blocked', { error: review.feedback })
-        setHumanGate(state, `Step ${step.id}: Reviewer rechazó el diff 3 veces`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: Reviewer rechazó el diff 3 veces`)
         return
       }
       markStepStatus(state, step.id, 'pending', { retries: step.retries })
       const fix = await executeStepWithRetry(step, state, () => review.feedback)
       if (!fix.ok) {
         markStepStatus(state, step.id, 'blocked')
-        setHumanGate(state, `Step ${step.id}: no pasa review tras fix`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: no pasa review tras fix`)
         return
       }
       pendingAdrBlocks = fix.adrBlocks
       const verify2 = await runVerifier()
       if (!verify2.ok) {
         markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
-        setHumanGate(state, `Step ${step.id}: verifier falla tras corrección de reviewer`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: verifier falla tras corrección de reviewer`)
         return
       }
       const review2 = await runReviewer(step, state)
       if (!review2.approved) {
         markStepStatus(state, step.id, 'blocked', { error: review2.feedback })
-        setHumanGate(state, `Step ${step.id}: reviewer rechaza tras segunda corrección`)
-        await runLoop(state)
+        await haltBlocked(state, `Step ${step.id}: reviewer rechaza tras segunda corrección`)
         return
       }
     }
@@ -409,6 +413,7 @@ async function runLoop(state: OrchestratorState) {
     if (pendingAdrBlocks.length && !(step.adrIds?.length)) {
       for (const block of pendingAdrBlocks) {
         const id = appendAdr(block, state.featureId, step.id)
+        if (id === null) continue
         adrIds.push(id)
         log(`[adr] ADR-${String(id).padStart(4, '0')} registrado (origen: ${block.origen})`)
       }

@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { parseAdrBlocks, appendAdr, type AdrDraft } from './adr.js'
+import { parseClaudeJson } from './metrics.js'
 
 const FIXTURE = `# ADR — Architecture Decision Records · augusto-os
 
@@ -152,6 +153,64 @@ decision:   Decisión con espacios
   })
 })
 
+// ── S-038: regresión — executor.ts debe parsear el .result de parseClaudeJson, ───
+// ── no el output crudo de `claude --output-format json` ─────────────────────────
+
+describe('parseAdrBlocks vs parseClaudeJson (S-038 regression)', () => {
+  const resultText = `Listo, implementé el step.
+
+===ADR===
+target: kredy
+origen: Instrucción de Augusto
+titulo: Elegí X sobre Y
+decision: Se decidió usar X para el cálculo de intereses.
+contexto: Surgió al implementar el endpoint de simulación.
+alternativas: Y fue descartado por complejidad.
+consecuencias: ninguna
+===END ADR===
+`
+
+  // Simula el stdout real de `claude --output-format json`: un único string JSON
+  // sin saltos de línea reales — los \n del resultText quedan escapados como
+  // literal backslash+n dentro del JSON serializado.
+  const rawStdout = JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    result: resultText,
+    session_id: 'sess-abc123',
+    total_cost_usd: 0.0123,
+    usage: { input_tokens: 100, output_tokens: 200 },
+    duration_ms: 4200,
+  })
+
+  it('parseAdrBlocks(text) — sobre el .text de parseClaudeJson — extrae los campos correctamente', () => {
+    const { text } = parseClaudeJson(rawStdout)
+    const blocks = parseAdrBlocks(text)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toEqual({
+      target:        'kredy',
+      origen:        'Instrucción de Augusto',
+      titulo:        'Elegí X sobre Y',
+      decision:      'Se decidió usar X para el cálculo de intereses.',
+      contexto:      'Surgió al implementar el endpoint de simulación.',
+      alternativas:  'Y fue descartado por complejidad.',
+      consecuencias: 'ninguna',
+    })
+  })
+
+  it('parseAdrBlocks(rawStdout) — sobre el JSON crudo, sin pasar por parseClaudeJson — da campos vacíos (bug reproducido)', () => {
+    const blocks = parseAdrBlocks(rawStdout)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].titulo).toBe('')
+    expect(blocks[0].decision).toBe('')
+    expect(blocks[0].target).toBe('')
+    expect(blocks[0].origen).toBe('')
+    expect(blocks[0].contexto).toBe('')
+    expect(blocks[0].alternativas).toBe('')
+    expect(blocks[0].consecuencias).toBe('')
+  })
+})
+
 // ── appendAdr ─────────────────────────────────────────────────────────────────
 
 describe('appendAdr', () => {
@@ -262,5 +321,29 @@ describe('appendAdr', () => {
     const content = readFileSync(tmpFile, 'utf-8')
     // The fence block with ADR-XXXX must still be intact
     expect(content).toContain('```\n## ADR-XXXX')
+  })
+
+  // ── S-038: defensa contra bloques ADR vacíos (mismo bug que generó ADR-0075..0078) ──
+
+  it('returns null and does NOT write when titulo and decision are both empty', () => {
+    const emptyDraft: AdrDraft = {
+      target: 'sistema', origen: 'Supuesto del agente',
+      titulo: '', decision: '', contexto: '', alternativas: '', consecuencias: '',
+    }
+    const before = readFileSync(tmpFile, 'utf-8')
+    const id = appendAdr(emptyDraft, 'F-0011', 1, tmpFile)
+    const after = readFileSync(tmpFile, 'utf-8')
+    expect(id).toBeNull()
+    expect(after).toBe(before)
+  })
+
+  it('does not burn an ID for an empty block — the next real ADR still gets max+1', () => {
+    const emptyDraft: AdrDraft = {
+      target: 'sistema', origen: 'Supuesto del agente',
+      titulo: '', decision: '', contexto: '', alternativas: '', consecuencias: '',
+    }
+    appendAdr(emptyDraft, 'F-0011', 1, tmpFile)
+    const id = appendAdr(baseDraft, 'F-0011', 2, tmpFile)
+    expect(id).toBe(11)
   })
 })

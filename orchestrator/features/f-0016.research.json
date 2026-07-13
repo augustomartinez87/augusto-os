@@ -1,0 +1,276 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: 3 Salteñas — Módulo Ventas",
+    "archivos": [
+      "src/app/ventas/page.tsx",
+      "src/server/api/routers/venta.ts",
+      "src/server/api/root.ts",
+      "prisma/schema.prisma",
+      "src/trpc/react.tsx",
+      "src/server/api/trpc.ts",
+      "src/app/compras/page.tsx",
+      "src/app/produccion/page.tsx",
+      "src/lib/db.ts",
+      "src/lib/lotes.ts",
+      "src/lib/compras.ts",
+      "prisma/seed.ts",
+      "SPEC-MVP.md",
+      "package.json",
+      "src/app/api/trpc/[trpc]/route.ts"
+    ],
+    "patrones": [
+      "Patrón de formulario con useState + handleSubmit + parseLocalDate (ver src/app/compras/page.tsx)",
+      "Patrón de useMutation con invalidación de queries en onSuccess (utils.venta.list.invalidate())",
+      "Patrón de router tRPC con create y list (ver src/server/api/routers/compra.ts como referencia)",
+      "Patrón de parseLocalDate para fechas desde input type='date' (ver compras/page.tsx líneas ~26-29)",
+      "Patrón de seed en prisma/seed.ts con upsert para IDs fijos"
+    ],
+    "dependencias": [
+      "next",
+      "react",
+      "react-dom",
+      "@trpc/server",
+      "@trpc/client",
+      "@trpc/react-query",
+      "@tanstack/react-query",
+      "@prisma/client",
+      "zod",
+      "superjson",
+      "@clerk/nextjs",
+      "vitest (testing)"
+    ],
+    "riesgos": [
+      "El router venta.ts está vacío (sin procedimientos create/list) — hay que implementarlos desde cero",
+      "La página ventas/page.tsx es un placeholder ('Módulo pendiente') — hay que construir la UI completa",
+      "El precioUnitario se guarda por venta (no hardcodeado) para soportar promos futuras según SPEC §4 — no asumir que siempre es $1500 aunque hoy sea el único valor",
+      "La lógica de ingresoTotal debe calcularse en el servidor (no confiar en el cliente) siguiendo el patrón de loteRouter que calcula costos server-side",
+      "No hay tests existentes para venta — hay que crearlos siguiendo el patrón de compra.test.ts y lote.test.ts",
+      "El módulo Dashboard (page.tsx) también está placeholder — las ventas deben alimentar el dashboard posteriormente",
+      "parseLocalDate no está extraída a un helper compartido — está duplicada en compras/page.tsx y produccion/page.tsx; considerar centralizarla"
+    ],
+    "evidencia": [
+      {
+        "path": "src/app/ventas/page.tsx",
+        "simbolo": "VentasPage",
+        "lineas": "1-6",
+        "explicacion": "Página del módulo Ventas — actualmente es un placeholder que muestra 'Módulo pendiente'. Es el archivo donde se debe construir la UI de registro de ventas.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/venta.ts",
+        "simbolo": "ventaRouter",
+        "lineas": "1-4",
+        "explicacion": "Router tRPC del módulo Ventas — existe pero está vacío (sin procedimientos). El implementador debe agregar procedimientos create y list siguiendo el patrón de compraRouter o loteRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "venta: ventaRouter",
+        "lineas": "11",
+        "explicacion": "El router ventaRouter ya está registrado en appRouter en root.ts — no hace falta modificar este archivo, solo implementar el contenido de ventaRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model Venta",
+        "lineas": "65-75",
+        "explicacion": "Modelo Prisma Venta ya definido completo con: id, fecha, productoId (FK a Producto), cantidadVendida (Int), precioUnitario (Float), ingresoTotal (Float), createdAt. No requiere migración nueva.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "ventas Venta[]",
+        "lineas": "56",
+        "explicacion": "[NO VERIFICADO] Relación inversa desde Producto hacia Venta — ya existe en el modelo Producto, permitiendo queries con include.",
+        "confianza": 0
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter",
+        "lineas": "5-50",
+        "explicacion": "Referencia de implementación: compraRouter tiene procedimientos create (mutation con validación Zod y transacción Prisma) y list (query). Patrón a replicar en ventaRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "parseLocalDate",
+        "lineas": "28-31",
+        "explicacion": "Helper para parsear fechas locales desde input type='date' — evita el bug UTC vs local. El implementador debe usarlo en la página de ventas (o idealmente extraerlo a un helper compartido).",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "createMutation",
+        "lineas": "18-23",
+        "explicacion": "Patrón de useMutation con invalidación de queries en onSuccess y reseteo de formulario — debe replicarse en la página de ventas.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "precioVenta: 1500",
+        "lineas": "17",
+        "explicacion": "Seed que crea el producto 'Empanada JyQ' con precioVenta=1500. Es el precio actual único, pero el módulo Ventas debe guardar precioUnitario por venta (no hardcodeado).",
+        "confianza": 1
+      },
+      {
+        "path": "src/trpc/react.tsx",
+        "simbolo": "trpc",
+        "lineas": "11",
+        "explicacion": "Cliente tRPC tipado con AppRouter — exporta `trpc` hook para usar en componentes client-side. El implementador usará `trpc.venta.create.useMutation()` y `trpc.venta.list.useQuery()`.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "16",
+        "explicacion": "Procedimiento público de tRPC — todos los endpoints del MVP son públicos (sin auth más allá de Clerk). Se usa en todos los routers existentes.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Venta",
+        "lineas": "36-37",
+        "explicacion": "Especificación de la entidad Venta en §4: fecha, productoId, cantidadVendida, precioUnitario, ingresoTotal (calc.). Precio único hoy ($1500) pero se guarda por venta para promos futuras.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/compras.test.ts",
+        "simbolo": "createCallerFactory",
+        "lineas": "29-34",
+        "explicacion": "Patrón de testing para routers tRPC usando createCallerFactory con mock de db. El implementador debe crear tests similares para ventaRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "dependencies",
+        "lineas": "19-27",
+        "explicacion": "Dependencias del proyecto: Next.js 16, React 19, tRPC 11, Prisma 5, TanStack Query 5, Zod 4, Superjson 2. Todo necesario para implementar el módulo Ventas ya está instalado.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El módulo Ventas tiene el modelo de datos (Venta en Prisma) y el router (ventaRouter en root.ts) ya creados, pero ambos están vacíos de implementación. La página ventas/page.tsx es un placeholder. El implementador debe construir: (1) los procedimientos tRPC create y list en ventaRouter.ts siguiendo el patrón de compraRouter, (2) la UI de registro de ventas en ventas/page.tsx siguiendo el patrón de compras/page.tsx (formulario con useState, parseLocalDate, useMutation con invalidación), y (3) tests unitarios siguiendo el patrón de compras.test.ts. La lógica de negocio es simple: ingresoTotal = cantidadVendida × precioUnitario, calculada server-side."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: 3 Salteñas — Módulo Ventas",
+    "archivos": [
+      "src/server/api/routers/venta.ts",
+      "src/app/ventas/page.tsx",
+      "prisma/schema.prisma",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/trpc/react.tsx",
+      "prisma/seed.ts",
+      "src/lib/lotes.ts",
+      "src/__tests__/lote.test.ts",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "Usar createTRPCRouter + publicProcedure desde @/server/api/trpc",
+      "Validar input con z.object() de zod v4",
+      "Nombrar procedures como list, create (convención del proyecto)",
+      "Usar ctx.db.$transaction para operaciones que modifican múltiples tablas",
+      "Mantener superjson como transformer en toda procedure que maneje Date",
+      "Seguir el patrón de tests con createCallerFactory + mock de db (ver lote.test.ts)",
+      "Usar el ID fijo 'empanada-jyq' del seed como producto por defecto en ventas"
+    ],
+    "dependencias": [
+      "@trpc/server@^11.18.0",
+      "@trpc/client@^11.18.0",
+      "@trpc/react-query@^11.18.0",
+      "@tanstack/react-query@^5.101.2",
+      "@prisma/client@^5.22.0",
+      "zod@^4.4.3",
+      "superjson@^2.2.6",
+      "vitest@^4.1.10"
+    ],
+    "riesgos": [
+      "El campo ingresoTotal en Venta debe calcularse como cantidadVendida × precioUnitario; si se hardcodea $1500, al cambiar el precio futuro se pierde consistencia histórica",
+      "El módulo Ventas no descuenta stock de productos terminados (no existe modelo de stock de productos), solo se descuenta insumos al crear Lote — posible inconsistencia si se intenta agregar control de stock por venta",
+      "Alto coupling con el Dashboard: si la estructura de Venta cambia (ej. rename de campo), se rompen los cálculos de margen, ingreso, etc. sin que haya tests del dashboard aún",
+      "El seed usa id fijo 'empanada-jyq' con precioVenta: 1500 — el módulo ventas debe usar este mismo ID o exponer un selector de producto; hardcodearlo crea rigidez",
+      "Zod v4 tiene cambios de API respecto a v3; cualquier pattern de validación debe validarse contra la versión 4.4.3 del proyecto",
+      "No existen tests para el módulo ventas; los tests de lote.ts son el único referente de patrón a seguir (createCallerFactory + mock db)",
+      "La página /ventas está completamente vacía (stub) y el router ventaRouter está vacío — no hay ningún código base del cual partir, todo es escribir desde cero"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/venta.ts",
+        "simbolo": "ventaRouter",
+        "lineas": "3-4",
+        "explicacion": "Router completamente vacío (createTRPCRouter({})). No hay procedures list, create ni nada. El módulo debe implementarse desde cero.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/ventas/page.tsx",
+        "simbolo": "VentasPage",
+        "lineas": "1-6",
+        "explicacion": "Página placeholder con texto 'Módulo pendiente — ver features F-0013..F-0018'. No hay UI implementada.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Venta",
+        "lineas": "43-51",
+        "explicacion": "Modelo Venta con campos: id, fecha, productoId, cantidadVendida, precioUnitario, ingresoTotal. ingresoTotal es un campo calculado (cantidadVendida * precioUnitario). No hay índice único ni constraints adicionales.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "empanada-jyq",
+        "lineas": "8-14",
+        "explicacion": "Seed hardcodea producto con id 'empanada-jyq' y precioVenta: 1500. Cualquier venta en el MVP debería referenciar este ID o permitir seleccionarlo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "venta",
+        "lineas": "9",
+        "explicacion": "El router venta ya está registrado en appRouter como { venta: ventaRouter }. Solo necesita poblarse con procedures.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/lote.test.ts",
+        "simbolo": "createCallerFactory",
+        "lineas": "80-82",
+        "explicacion": "Patrón de test existente: createCallerFactory(loteRouter) con mock de db. El módulo ventas debería replicar este patrón para sus tests.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "11-23",
+        "explicacion": "Ejemplo de procedure list con include y orderBy. Patrón a seguir para ventaRouter.list.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "create",
+        "lineas": "25-96",
+        "explicacion": "Ejemplo de mutation create con z.object input validation, TRPCError, y ctx.db.$transaction. Patrón a replicar en ventaRouter.create.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "superjson",
+        "lineas": "8",
+        "explicacion": "superjson configurado como transformer global de tRPC. Fechas (Date) se serializan/deserializan automáticamente.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Venta",
+        "lineas": "30-31",
+        "explicacion": "Spec define: 'Venta: fecha, productoId, cantidadVendida, precioUnitario, ingresoTotal (calc.)'. precioUnitario se guarda aunque hoy es único ($1500) para soportar promos futuras.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "zod",
+        "lineas": "20",
+        "explicacion": "Dependencia zod en versión ^4.4.3. La API de Zod v4 tiene diferencias con v3 que pueden afectar la validación de input.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El módulo Ventas está completamente por implementar: el router tRPC (ventaRouter) está vacío, la página es un placeholder, y no hay tests. El modelo Venta en Prisma ya existe con los campos necesarios (fecha, productoId, cantidadVendida, precioUnitario, ingresoTotal). Los principales riesgos son: (1) el cálculo de ingresoTotal debe ser cantidadVendida × precioUnitario y no hardcodear $1500 para mantener consistencia histórica ante cambios de precio; (2) alto coupling con el Dashboard que depende de los datos de ventas para márgenes; (3) el seed fija un ID de producto ('empanada-jyq') que el módulo debe respetar; (4) el proyecto usa Zod v4 que tiene cambios de API respecto a v3; (5) no hay stock de productos modelado — las ventas no descuentan stock, creando posible inconsistencia si se agrega después."
+  }
+]

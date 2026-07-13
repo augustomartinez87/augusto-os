@@ -4,29 +4,401 @@ Registro de decisiones de diseño. Cada decisión es un **ADR** inmutable: una v
 
 El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de cada decisión, y (2) ser **autosuficiente** — cualquier agente (Claude, Llama, otro) debe poder leer esto y retomar el contexto sin reconstruirlo. Por eso cada entrada declara explícitamente su **Origen**: si la decisión fue una instrucción de Augusto o un supuesto que tomó el agente por su cuenta. Eso permite auditar después qué se decidió deliberadamente vs. qué asumió la máquina.
 
-> **Nota de saneamiento (2026-07-11, Cowork):** ADR-0041 a ADR-0074 fueron generados VACÍOS por un bug del ADR auto-log (S-038) y eliminados de este archivo; sus IDs quedan anulados y NO deben reutilizarse (esta mención a ADR-0074 mantiene el contador de `appendAdr` en 74). Backup pre-limpieza: `DECISIONS.md.bak-20260711`.
->
-> **Nota de saneamiento (2026-07-13, S-038 fix):** ADR-0075 a ADR-0078 (generados 2026-07-12/13, features F-0025/F-0026) también salieron VACÍOS — el bug seguía activo tras la limpieza del 2026-07-11 y se corrigió recién ahora (parseAdrBlocks recibía el JSON crudo de `--output-format json` en vez del `.result` ya parseado). Eliminados de este archivo; sus IDs quedan anulados y NO deben reutilizarse (esta mención a ADR-0078 mantiene el contador de `appendAdr` en 78). Backup pre-limpieza: `DECISIONS.md.bak-20260713`.
-
 ## Template (copiar para cada ADR nuevo)
 
 ```
-## ADR-XXXX · YYYY-MM-DD · <título corto>
+## ADR-0068 · 2026-07-11 · 
 
 **Estado:** aceptada
-**Origen:** <Instrucción de Augusto | Supuesto del agente (motivo)>
-**Target:** <sistema | kredy | spensiv | argos | tres-saltenas>
+**Origen:** Supuesto del agente ()
+**Target:** sistema
 
-**Decisión:** <qué se decidió>
-**Contexto:** <por qué>
-**Alternativas descartadas:** <cuáles y por qué no>
-**Consecuencias / riesgo residual:** <qué implica>
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
 
-> <origen: S-XXX / feature F-XXXX · step N> · fecha
-```
+> Generado por el loop · feature F-0020 · step 2
 
 ---
+## ADR-0067 · 2026-07-11 · 
 
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0019 · step 4
+
+---
+## ADR-0066 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0019 · step 2
+
+---
+## ADR-0065 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0018 · step 7
+
+---
+## ADR-0064 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0018 · step 4
+
+---
+## ADR-0063 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0018 · step 3
+
+---
+## ADR-0062 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 7
+
+---
+## ADR-0061 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 6
+
+---
+## ADR-0060 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 5
+
+---
+## ADR-0059 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 4
+
+---
+## ADR-0058 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 2
+
+---
+## ADR-0057 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0017 · step 1
+
+---
+## ADR-0056 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0016 · step 3
+
+---
+## ADR-0055 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0016 · step 3
+
+---
+## ADR-0054 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0015 · step 4
+
+---
+## ADR-0053 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0015 · step 2
+
+---
+## ADR-0052 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature f-0015 · step 1
+
+---
+## ADR-0051 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0014 · step 7
+
+---
+## ADR-0050 · 2026-07-11 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0014 · step 6
+
+---
+## ADR-0049 · 2026-07-09 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0014 · step 5
+
+---
+## ADR-0048 · 2026-07-09 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0014 · step 4
+
+---
+## ADR-0047 · 2026-07-09 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0013 · step 6
+
+---
+## ADR-0046 · 2026-07-09 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0013 · step 3
+
+---
+## ADR-0045 · 2026-07-09 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0013 · step 1
+
+---
+## ADR-0044 · 2026-07-07 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0012 · step 4
+
+---
+## ADR-0043 · 2026-07-07 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0012 · step 2
+
+---
+## ADR-0042 · 2026-07-03 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0011 · step 4
+
+---
+## ADR-0041 · 2026-07-03 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0011 · step 3
+
+---
 ## ADR-0040 · 2026-06-29 · arancelCostoTNA é informativo — não subtrai do spread
 
 **Estado:** aceptada
@@ -55,6 +427,22 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > Generado por el loop · feature F-0009 · step 1
 
 ---
+## ADR-0033 · 2026-06-27 · S-027: heartbeat del loop de build + lock por liveness
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Dos señales de vida separadas: (1) `planner`/`builder` en `orch_presence` siguen siendo el heartbeat de `sync.ts` (control plane alive, cada 5s); (2) nueva fila `role='loop'` en `orch_presence` cuyo `last_heartbeat` viene de `index.ts` (proceso de build alive) vía `LOOP_HEARTBEAT.json`. Lock (`AUTOPILOT.lock`) ahora guarda `featureId` y `acquireLock` respeta el lock si hay heartbeat fresco del loop (proceso vivo) independientemente de la antigüedad del lock. Dashboard usa `presenceMap.loop.last_heartbeat` para staleness del slot Builder; si no existe, hace fallback al heartbeat de `builder` (sync.ts). Umbral de liveness del lock: `LOOP_HB_STALE_MS = 3 min` (> `CUELGUE_SEC = 2 min` de ADR-0032). `markBacklogState` retorna `boolean`; `tryAutopilotPick` solo marca `marked=true` si la fila realmente existió.
+**Contexto:** ADR-0032 (S-015) documentó explícitamente la limitación: "Un loop colgado dentro del proceso seguirá mostrando heartbeat fresco si sync.ts sobrevive". El bug `Lock stale (660s), pisando...` ocurre cuando el lock tiene >10 min (Architect lento o proceso colgado) y se sobreescribe aunque el loop esté vivo. `markBacklogState: ID NONEXISTENT-999 no encontrado` ocurre cuando `AUTOPILOT_MAP.json` tiene una entrada stale o cuando el backlog fue editado manualmente entre el pick y el mark.
+**Alternativas descartadas:** Heartbeat directo de index.ts a Supabase (requiere credenciales en el loop, que hoy solo las tiene sync.ts). Señal vía IPC/socket entre sync.ts e index.ts (sobrecomplejo para procesos detached). Lock basado en PID + kill-check (frágil en Windows con procesos detached).
+**Consecuencias:** Si `index.ts` se cuelga en una LLM call, su heartbeat deja de avanzar en ≤3 min; el dashboard lo muestra como "posible cuelgue" (> CUELGUE_SEC = 2 min) y el lock pasa a ser reclamable (>3 min). ADR-0032 queda supersedido para la limitación de liveness del loop. sync.ts debe reiniciarse para empezar a emitir el rol `loop` (requiere que `index.ts` esté corriendo y haya escrito `LOOP_HEARTBEAT.json`).
+
+> S-027 · 2026-06-27
+
+---
+```
+
 ## ADR-0038 · 2026-06-29 · S-031: centralizar MAX_TURNS y fix visibilidad de errores del CLI
 
 **Estado:** aceptada
@@ -69,6 +457,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > S-031 · 2026-06-29
 
 ---
+
 ## ADR-0037 · 2026-06-28 · S-030: clasificación de ejecutor del backlog + autopilot por allowlist
 
 **Estado:** aceptada
@@ -86,6 +475,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > S-030 · 2026-06-28
 
 ---
+
 ## ADR-0036 · 2026-06-28 · S-025: retención de logs — disco 30 días, Supabase 7 días, throttle 1 hora
 
 **Estado:** aceptada
@@ -103,6 +493,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > S-025 · 2026-06-28
 
 ---
+
 ## ADR-0035 · 2026-06-28 · S-029: coordinación bot + loop para evitar 409 Conflict de Telegram
 
 **Estado:** aceptada
@@ -120,6 +511,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > S-029 · 2026-06-28
 
 ---
+
 ## ADR-0034 · 2026-06-28 · S-028: polling de Telegram embebido en el gate-wait del loop
 
 **Estado:** aceptada
@@ -137,20 +529,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > S-028 · 2026-06-28
 
 ---
-## ADR-0033 · 2026-06-27 · S-027: heartbeat del loop de build + lock por liveness
 
-**Estado:** aceptada
-**Origen:** Instrucción de Augusto
-**Target:** sistema
-
-**Decisión:** Dos señales de vida separadas: (1) `planner`/`builder` en `orch_presence` siguen siendo el heartbeat de `sync.ts` (control plane alive, cada 5s); (2) nueva fila `role='loop'` en `orch_presence` cuyo `last_heartbeat` viene de `index.ts` (proceso de build alive) vía `LOOP_HEARTBEAT.json`. Lock (`AUTOPILOT.lock`) ahora guarda `featureId` y `acquireLock` respeta el lock si hay heartbeat fresco del loop (proceso vivo) independientemente de la antigüedad del lock. Dashboard usa `presenceMap.loop.last_heartbeat` para staleness del slot Builder; si no existe, hace fallback al heartbeat de `builder` (sync.ts). Umbral de liveness del lock: `LOOP_HB_STALE_MS = 3 min` (> `CUELGUE_SEC = 2 min` de ADR-0032). `markBacklogState` retorna `boolean`; `tryAutopilotPick` solo marca `marked=true` si la fila realmente existió.
-**Contexto:** ADR-0032 (S-015) documentó explícitamente la limitación: "Un loop colgado dentro del proceso seguirá mostrando heartbeat fresco si sync.ts sobrevive". El bug `Lock stale (660s), pisando...` ocurre cuando el lock tiene >10 min (Architect lento o proceso colgado) y se sobreescribe aunque el loop esté vivo. `markBacklogState: ID NONEXISTENT-999 no encontrado` ocurre cuando `AUTOPILOT_MAP.json` tiene una entrada stale o cuando el backlog fue editado manualmente entre el pick y el mark.
-**Alternativas descartadas:** Heartbeat directo de index.ts a Supabase (requiere credenciales en el loop, que hoy solo las tiene sync.ts). Señal vía IPC/socket entre sync.ts e index.ts (sobrecomplejo para procesos detached). Lock basado en PID + kill-check (frágil en Windows con procesos detached).
-**Consecuencias:** Si `index.ts` se cuelga en una LLM call, su heartbeat deja de avanzar en ≤3 min; el dashboard lo muestra como "posible cuelgue" (> CUELGUE_SEC = 2 min) y el lock pasa a ser reclamable (>3 min). ADR-0032 queda supersedido para la limitación de liveness del loop. sync.ts debe reiniciarse para empezar a emitir el rol `loop` (requiere que `index.ts` esté corriendo y haya escrito `LOOP_HEARTBEAT.json`).
-
-> S-027 · 2026-06-27
-
----
 ## ADR-0032 · 2026-06-27 · S-015: umbrales de staleness para liveness del roster
 
 **Estado:** aceptada
@@ -191,36 +570,6 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencias / riesgo residual:** Cap de 5 features/día. Lock con timeout 10 min protege contra crashes del sync. Si un gate humano se activa en SLEEP, el loop pausa en silencio (S-002). El backlog queda en "armado (autopilot) <ISO>" para trazabilidad; si falla el release no se resetea solo.
 
 > Generado por el loop · feature S-004 · step 0
-
----
-## ADR-0029 · 2026-06-26 · Marcador `<!-- procesado -->` en FEATURE-INTAKE.md para no reprocesar ideas
-
-**Estado:** aceptada
-**Origen:** Supuesto del agente
-**Target:** sistema
-
-**Decisión:** `intake-cli.ts`, al procesar una idea leída del archivo (sin arg de CLI), le agrega el sufijo `<!-- procesado -->` a esa línea de `system/FEATURE-INTAKE.md` para que no se vuelva a tomar como "última idea sin procesar" en una corrida futura.
-
-**Contexto:** El spec de S-008 no especificaba cómo evitar reprocesar ideas ya convertidas en spec; se dejó como decisión abierta a tomar con criterio. El archivo es append-only y lo escriben dos canales (Telegram `/idea`, dashboard web) — sin un marcador, cada corrida de `npm run intake` (sin arg) reprocesaría la idea más reciente sin distinguir si ya generó un `F-XXXX.md`.
-
-**Alternativas descartadas:** Mover las ideas procesadas a un archivo separado (`FEATURE-INTAKE.processed.md`) — más limpio pero rompe el log cronológico único que también usa el dashboard (S-007) para mostrar el historial de ideas. Un índice separado (ej. `intake-state.json` con offsets) — agrega un segundo archivo de estado a sincronizar.
-
-**Consecuencias / riesgo residual:** El formato de línea de `FEATURE-INTAKE.md` ahora es un contrato implícito para cualquier consumidor futuro (S-007 Fase C, u otro parser) — si algo más lee ese archivo esperando líneas "limpias", debe tolerar el sufijo `<!-- procesado -->`. Si se reformatea el archivo a mano, hay que preservar el marcador en las líneas ya procesadas.
-
----
-## ADR-0028 · 2026-06-26 · `classify` prioriza "arquitectura" sobre "bug" cuando ambos matchean
-
-**Estado:** aceptada
-**Origen:** Supuesto del agente
-**Target:** sistema
-
-**Decisión:** En `intake.ts`, `classify()` chequea `ARCH_KEYWORDS` antes que `BUG_KEYWORDS` — si una idea matchea ambos conjuntos, se clasifica como `arquitectura`, no como `bug`.
-
-**Contexto:** El spec de S-008 no definía un orden de prioridad entre clasificaciones cuando una idea es ambigua (ej. "el loop falla al reintentar un step bloqueado" matchea tanto "falla" (bug) como "loop"/contexto de orquestador (arquitectura)).
-
-**Alternativas descartadas:** Priorizar `bug` sobre `arquitectura` (trataría bugs del propio orchestrator como features de producto comunes, perdiendo la señal de que ese código corre el auto-deploy a prod y merece más cuidado). Clasificación múltiple/no exclusiva (más expresivo pero el resto del pipeline — `needsArchitect`, el prompt al Architect — asume una sola clasificación).
-
-**Consecuencias / riesgo residual:** Un bug trivial del propio orchestrator (ej. typo en un log) podría clasificarse como `arquitectura` y disparar el Architect (Opus) innecesariamente si además matchea alguna keyword de `ARCH_KEYWORDS`. El costo de ese falso positivo es bajo (un spec de más para revisar) comparado con tratar un cambio arquitectónico real como bug menor.
 
 ---
 ## ADR-0027 · 2026-06-26 · El selector de ciudad va encima del botón "Generar contrato", no dentro del dropdown
@@ -335,21 +684,6 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > Generado por el loop · feature F-0007 · step 4
 
 ---
-## ADR-0019 · 2026-06-25 · Auto-deploy en verde + sin gates por-step (reemplaza la aprobación humana manual)
-
-**Estado:** aceptada
-**Origen:** Instrucción de Augusto
-**Target:** sistema
-
-**Decisión:** Se eliminan los gates de aprobación humana por-step (auto-pass) y el gate de deploy a prod pasa a **auto-deploy cuando las verificaciones dan verde** (typecheck + lint + tests + build + TNA check). Si fallan, NO deploya y avisa el error por Telegram. La seguridad deja de ser la aprobación humana previa (que Augusto siempre concedía sin revisar) y pasa a: (a) la verificación automática, (b) el aviso post-deploy por Telegram, (c) la posibilidad de revertir.
-
-**Contexto:** Augusto siempre aprobaba sin revisar a nivel técnico → el tap humano no agregaba seguridad, solo fricción. El db-guard (anti-prod), el hook de comandos (bloquea prisma/deploy/drop reales en ejecución) y el verifier siguen activos.
-
-**Alternativas descartadas:** Auto-deploy sin aviso (máxima velocidad, mínima visibilidad — descartado por ser app con plata real); mantener un tap en Telegram por feature (descartado por fricción innecesaria dado el comportamiento real).
-
-**Consecuencias / riesgo residual:** Un bug que pase las verificaciones llega a prod sin checkpoint humano; mitigación = aviso + revert. **Actualizar el `CLAUDE.md` global**, que hoy exige aprobación explícita para deploys a prod — esta decisión lo cambia deliberadamente. Pendiente: flujo de revert one-tap desde Telegram.
-
----
 ## ADR-0018 · 2026-06-25 · Banner de pendientes se muestra solo en préstamos activos
 
 **Estado:** aceptada
@@ -430,6 +764,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Contexto:** por qué surgió, qué problema resuelve.
 **Alternativas descartadas:** qué otras opciones había y por qué no.
 **Consecuencias / riesgo residual:** qué queda abierto o qué se vuelve frágil.
+```
 
 **Campo Origen — cómo clasificar:**
 - `Instrucción de Augusto` → Augusto lo pidió o aprobó explícitamente. La máquina ejecutó una orden.
@@ -439,6 +774,55 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 > Convención de estados de features (backlog/active/review/done/blocked) → ver `system/CONVENTIONS.md`.
 
 ---
+
+## ADR-0029 · 2026-06-26 · Marcador `<!-- procesado -->` en FEATURE-INTAKE.md para no reprocesar ideas
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** `intake-cli.ts`, al procesar una idea leída del archivo (sin arg de CLI), le agrega el sufijo `<!-- procesado -->` a esa línea de `system/FEATURE-INTAKE.md` para que no se vuelva a tomar como "última idea sin procesar" en una corrida futura.
+
+**Contexto:** El spec de S-008 no especificaba cómo evitar reprocesar ideas ya convertidas en spec; se dejó como decisión abierta a tomar con criterio. El archivo es append-only y lo escriben dos canales (Telegram `/idea`, dashboard web) — sin un marcador, cada corrida de `npm run intake` (sin arg) reprocesaría la idea más reciente sin distinguir si ya generó un `F-XXXX.md`.
+
+**Alternativas descartadas:** Mover las ideas procesadas a un archivo separado (`FEATURE-INTAKE.processed.md`) — más limpio pero rompe el log cronológico único que también usa el dashboard (S-007) para mostrar el historial de ideas. Un índice separado (ej. `intake-state.json` con offsets) — agrega un segundo archivo de estado a sincronizar.
+
+**Consecuencias / riesgo residual:** El formato de línea de `FEATURE-INTAKE.md` ahora es un contrato implícito para cualquier consumidor futuro (S-007 Fase C, u otro parser) — si algo más lee ese archivo esperando líneas "limpias", debe tolerar el sufijo `<!-- procesado -->`. Si se reformatea el archivo a mano, hay que preservar el marcador en las líneas ya procesadas.
+
+---
+
+## ADR-0028 · 2026-06-26 · `classify` prioriza "arquitectura" sobre "bug" cuando ambos matchean
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** En `intake.ts`, `classify()` chequea `ARCH_KEYWORDS` antes que `BUG_KEYWORDS` — si una idea matchea ambos conjuntos, se clasifica como `arquitectura`, no como `bug`.
+
+**Contexto:** El spec de S-008 no definía un orden de prioridad entre clasificaciones cuando una idea es ambigua (ej. "el loop falla al reintentar un step bloqueado" matchea tanto "falla" (bug) como "loop"/contexto de orquestador (arquitectura)).
+
+**Alternativas descartadas:** Priorizar `bug` sobre `arquitectura` (trataría bugs del propio orchestrator como features de producto comunes, perdiendo la señal de que ese código corre el auto-deploy a prod y merece más cuidado). Clasificación múltiple/no exclusiva (más expresivo pero el resto del pipeline — `needsArchitect`, el prompt al Architect — asume una sola clasificación).
+
+**Consecuencias / riesgo residual:** Un bug trivial del propio orchestrator (ej. typo en un log) podría clasificarse como `arquitectura` y disparar el Architect (Opus) innecesariamente si además matchea alguna keyword de `ARCH_KEYWORDS`. El costo de ese falso positivo es bajo (un spec de más para revisar) comparado con tratar un cambio arquitectónico real como bug menor.
+
+---
+
+## ADR-0019 · 2026-06-25 · Auto-deploy en verde + sin gates por-step (reemplaza la aprobación humana manual)
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Se eliminan los gates de aprobación humana por-step (auto-pass) y el gate de deploy a prod pasa a **auto-deploy cuando las verificaciones dan verde** (typecheck + lint + tests + build + TNA check). Si fallan, NO deploya y avisa el error por Telegram. La seguridad deja de ser la aprobación humana previa (que Augusto siempre concedía sin revisar) y pasa a: (a) la verificación automática, (b) el aviso post-deploy por Telegram, (c) la posibilidad de revertir.
+
+**Contexto:** Augusto siempre aprobaba sin revisar a nivel técnico → el tap humano no agregaba seguridad, solo fricción. El db-guard (anti-prod), el hook de comandos (bloquea prisma/deploy/drop reales en ejecución) y el verifier siguen activos.
+
+**Alternativas descartadas:** Auto-deploy sin aviso (máxima velocidad, mínima visibilidad — descartado por ser app con plata real); mantener un tap en Telegram por feature (descartado por fricción innecesaria dado el comportamiento real).
+
+**Consecuencias / riesgo residual:** Un bug que pase las verificaciones llega a prod sin checkpoint humano; mitigación = aviso + revert. **Actualizar el `CLAUDE.md` global**, que hoy exige aprobación explícita para deploys a prod — esta decisión lo cambia deliberadamente. Pendiente: flujo de revert one-tap desde Telegram.
+
+---
+
 ## ADR-0013 · 2026-06-25 · Documentos del préstamo (mutuo firmado + pagaré) NO bloqueantes
 
 **Estado:** aceptada
@@ -452,6 +836,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencias:** El cumplimiento documental queda como métrica informativa (futuro- recordatorios, o eventualmente subir a score del préstamo). Spec- F-0007 / SP-011.
 
 ---
+
 ## ADR-0012 · 2026-06-25 · Pagaré generado pre-llenado (uno por el total, sin protesto)
 
 **Estado:** aceptada (revisa una decisión previa del mismo día de "solo guía", cambiada al confirmar la validez legal)
@@ -467,6 +852,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencias:** El mutuo YA existe (`lib/contract-generator.ts`, .docx, 10 cláusulas). Hallazgo- hoy el pagaré y la cláusula SÉPTIMA usan el CAPITAL, no el total → F-0006 los corrige a total a devolver. Riesgo legal a validar con abogado- la SÉPTIMA permite accionar por pagaré O contrato (no ambos), así que el pagaré debe ser por el total para no perder los intereses por la vía ejecutiva. El impuesto de sellos es fiscal por jurisdicción, fuera de la feature. Spec- F-0006 / SP-010.
 
 ---
+
 ## ADR-0011 · 2026-06-25 · Política de originación por vínculo (conocido / referido / desconocido)
 
 **Estado:** aceptada
@@ -482,6 +868,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencias:** Límites como defaults configurables (patrón `minApScore` de F-0002), ajustables sin migración. Caso de hoy- tratar como referido, hasta 200k, con la conocida como referente. Spec- F-0005 / SP-009. Follow-up- UI de tier/referente (SP-012).
 
 ---
+
 ## ADR-0010 · 2026-06-20 · Argos en el loop sin dev DB (targets no-Prisma)
 
 **Estado:** aceptada
@@ -495,6 +882,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Riesgo residual:** el executor podría, en teoría, tocar la Supabase prod de Argos (no hay aislamiento de DB). Mitigación: features de Argos deben ser UI/lógica; gates de no-SQL-destructivo siguen activos; no se le pasa service key al loop. Pendiente AR-003: afinar el prompt del executor por dbModel.
 
 ---
+
 ## ADR-0009 · 2026-06-20 · Fase de release autónoma (merge + verificación + gate de OK + push/deploy)
 
 **Estado:** aceptada
@@ -512,6 +900,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Límite explícito:** push/deploy son las ÚNICAS acciones de prod; siempre detrás del OK humano. El merge local no toca prod, por eso es automático. Honra el gate de prod del `CLAUDE.md`.
 
 ---
+
 ## ADR-0008 · 2026-06-20 · Rename: identidad Kredy vs Spensiv + config del orquestador
 
 **Estado:** aceptada
@@ -530,6 +919,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencias:** el `CLAUDE.md` global describe Spensiv como "finanzas personales + préstamos reales", conflando ambos productos. Conviene separarlo — no se editó automáticamente por ser config personal de Augusto.
 
 ---
+
 ## ADR-0007 · 2026-06-19 · Dev DB de Kredy/Spensiv = Neon
 
 **Estado:** aceptada
@@ -545,6 +935,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Guard:** `prodDbPatterns` contiene `jymdblurkpadupdqzfzo` (matchea la prod Supabase de Kredy). La URL de Neon dev no matchea ningún patrón de prod. El `.env` de la app queda intacto apuntando a prod; el loop overridea solo en memoria (execa).
 
 ---
+
 ## ADR-0006 · 2026-06-19 · Aislamiento de prod: DB no-prod + guard anti-prod
 
 **Estado:** aceptada
@@ -560,6 +951,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Alternativa descartada:** Editar el `.env` de la app — Augusto lo usa para desarrollo manual y rompe su flujo.
 
 ---
+
 ## ADR-0005 · 2026-06-18 · `--strict-mcp-config` como capa de bloqueo MCP
 
 **Estado:** aceptada
@@ -573,6 +965,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Alternativa descartada:** `--permission-prompt-tool auto-deny` — en la versión actual del CLI se trata como nombre de MCP tool y falla con "MCP tool auto-deny not found".
 
 ---
+
 ## ADR-0004 · 2026-06-18 · Hook `pre-tool-use.sh` como guardrail load-bearing
 
 **Estado:** aceptada
@@ -586,6 +979,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencia:** Si se cambia cómo se invoca `claude`, hay que re-testear ambas capas. La capa deny es documentación; el hook es enforcement real.
 
 ---
+
 ## ADR-0003 · 2026-06-18 · QA graceful failure con `NO_SERVER:` prefix
 
 **Estado:** aceptada
@@ -599,6 +993,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Cuándo bloquea:** Si hay errores QA que NO son `NO_SERVER:` (ej: JS error en página, invariante rota), sí bloquea y requiere gate humano.
 
 ---
+
 ## ADR-0002 · 2026-06-18 · augusto-os como repo separado de los targets
 
 **Estado:** aceptada
@@ -612,6 +1007,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Alternativa descartada:** Mantener orchestrator en `spensiv/orchestrator/` — ya fue Fase 0, no escala a multi-target.
 
 ---
+
 ## ADR-0001 · 2026-06-18 · Comisión AP se devenga al cobro, no al originar
 
 **Estado:** aceptada
@@ -623,5 +1019,3 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Contexto:** Evita el caso donde el AP cobró comisión por un préstamo que eventualmente resultó en default. El AP tiene skin in the game en la cobrabilidad.
 
 **Consecuencia:** `realizeCommissionsForPayment` es el punto de entrada correcto, no `createOpportunity`.
-
----

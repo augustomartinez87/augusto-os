@@ -165,7 +165,7 @@ export async function executeStep(
 
   // Extract session_id from JSON (primary) then fall back to regex on all output
   let sessionId: string | null = null
-  const { parsed } = parseClaudeJson(result.stdout ?? '')
+  const { text, parsed } = parseClaudeJson(result.stdout ?? '')
   if (parsed?.session_id) {
     sessionId = parsed.session_id
   } else {
@@ -204,7 +204,7 @@ export async function executeStep(
     return { ok: false, sessionId, output, usageLimit: false, contextFull: false, adrBlocks: [] }
   }
 
-  return { ok: true, sessionId, output, usageLimit: false, contextFull: false, adrBlocks: parseAdrBlocks(output) }
+  return { ok: true, sessionId, output, usageLimit: false, contextFull: false, adrBlocks: parseAdrBlocks(text || output) }
 }
 
 export async function executeStepWithRetry(

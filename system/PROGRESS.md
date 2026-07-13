@@ -337,3 +337,410 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0012/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+---
+
+## 2026-07-07 — S-010: Migración Kredy prod Supabase→Neon, paso 0 (backup) [sistema/kredy]
+
+**Ejecutor:** Augusto (manual, con guía de Claude en Cowork — el sandbox no tiene red/credenciales a la DB de Kredy).
+
+**Qué se hizo:**
+- Backup pre-migración de Kredy prod (Supabase `jymdblurkpadupdqzfzo`) vía `pg_dump` contra el **Session Pooler** (`aws-0-us-west-2.pooler.supabase.com:5432`, no la conexión directa — Supabase fuerza IPv6 para directa y esta máquina no lo tiene).
+- Archivo: `kredy/backups/kredy-prod-pre-neon.dump` — formato custom, 167.155 bytes, 227 TOC entries, 27 tablas de `public` (`users`, `persons`, `loans`, `loan_installments`, `loan_payments`, `agent_configs`, `ap_commissions`, `ap_withdrawals`, `pre_approvals`, `opportunities`, `risk_configs`, etc.). Verificado con `pg_restore -l`.
+- **Conteos de referencia (origen, para comparar contra Neon en el paso 4 del runbook):** users=4, persons=18, loans=36, loan_installments=192, loan_payments=63, agent_configs=3, ap_commissions=27, ap_withdrawals=0, pre_approvals=1, opportunities=27. Obtenidos vía Supabase MCP (`execute_sql`, solo lectura).
+
+**Notas:** Volumen de datos chico (producto en etapa temprana) — explica el tamaño del dump, no es una dump parcial/rota. Password de Kredy prod quedó expuesta en el chat de la sesión (Augusto decidió no rotarla por ahora). Siguiente paso: crear proyecto Neon `kredy` (prod) — paso 1 del runbook.
+
+---
+
+## 2026-07-08 — S-010: Migración Kredy prod Supabase→Neon, pasos 1-4 (schema + datos) [sistema/kredy]
+
+**Ejecutor:** Augusto (manual, guiado por Claude en Cowork — sin red/credenciales a Neon/Supabase desde el sandbox; acceso de solo lectura a Supabase vía MCP para verificación).
+
+**Qué se hizo:**
+- Proyecto Neon `kredy` creado (prod, `AWS US East 1`, Postgres 17), separado de `kredy-dev`.
+- **Drift de schema encontrado y corregido:** `ap_commissions` en prod tenía 6 columnas ausentes de `prisma/schema.prisma` (`rateSnapshot` numeric(8,6), `consolidatedAmount` numeric(12,2), `estimatedAt`/`consolidatedAt`/`releasedAt`/`paidAt` timestamp, todas nullable). Se agregaron al schema con comentario de procedencia y se pusheó a Neon antes de restaurar datos, para no dejar el schema del repo desincronizado de la realidad de prod.
+- `prisma db push` materializó el schema completo en Neon.
+- Datos restaurados vía `pg_restore --data-only` sobre el dump de `kredy-prod-pre-neon.dump`. Complicaciones resueltas en el camino: `--disable-triggers` no funciona en Neon (no hay superusuario) → se dropearon los 39 FK constraints manualmente (`drop-fks.sql`, incluye 1 con nombre distinto al esperado por convención de Prisma — `ap_score_snapshots_agentConfigId_fkey` en vez de `..._agent_config_id_fkey`) + `TRUNCATE` de las 28 tablas para limpiar un intento parcial previo; luego restore limpio; luego `db push` de nuevo para recrear los FKs (que de paso valida integridad referencial de todo lo restaurado — sin errores).
+- **Paridad verificada 1:1 contra el origen** (users=4, persons=18, loans=36, loan_installments=192, loan_payments=63, agent_configs=3, ap_commissions=27, ap_withdrawals=0, pre_approvals=1, opportunities=27).
+
+**Notas:** `ap_commissions.loanId` ya no es una relación FK real en el schema actual (quedó como `String @unique` suelto) — drift menor, no bloqueante, documentado por si se retoma esa relación a futuro.
+
+---
+
+## 2026-07-08 — S-010: Migración Kredy prod Supabase→Neon, resync final (28/28 tablas) [sistema/kredy]
+
+**Ejecutor:** Augusto (manual, guiado por Claude en Cowork).
+
+**Qué se hizo:**
+- Detectado que prod siguió recibiendo escritura entre el backup inicial y este punto (`loans` 36→37, `loan_payments` 63→65) — normal, es una app en uso real. Se repitió el pipeline completo (dump fresco `kredy-prod-final-sync.dump` → drop de 39 FKs + `TRUNCATE` de las 28 tablas vía `drop-fks.sql` corregido → `pg_restore --data-only` → `prisma db push` para recrear FKs) para capturar el estado más reciente antes de cortar tráfico.
+- `drop-fks.sql` corregido de forma permanente: se sacó la línea de `ap_commissions_loanId_fkey` (no existe, no es FK real en el schema actual) y se corrigió el nombre de `ap_score_snapshots_..._fkey` a la convención camelCase que usa Prisma. Corrida limpia: 44 drops sin error, 1 solo error esperado en el restore (`_prisma_migrations`, tabla que no aplica).
+- **Paridad verificada 1:1 en las 28 tablas reales** (no solo la muestra de 10 anterior): agent_configs=3, alerts=0, ap_commissions=27, ap_ledger_events=0, ap_links=3, ap_score_configs=1, ap_score_snapshots=6, ap_settlements=0, ap_withdrawals=0, borrower_types=4, consulta_360_cache=55, consultas_360=28, contacts=28, duration_adjustments=12, loan_accruals_monthly=201, loan_activity_logs=15, loan_attachments=0, loan_installments=192, loan_payments=65, loan_real_cashflows=148, loans=37, opportunities=27, opportunity_events=57, persons=18, pre_approvals=1, public_simulator_configs=1, risk_configs=0, users=4.
+
+**Notas:** Migración de datos/schema **cerrada por completo**. Siguiente paso: **paso 5 del runbook — cortar tráfico** (cambiar `DATABASE_URL`/`DIRECT_URL` en Vercel `kredy-ap` de Supabase a Neon + redeploy). Confirmado con Augusto que se avanza ahora.
+
+## 2026-07-08 — S-010: Migración Kredy prod Supabase→Neon, corte de tráfico (pasos 5-7) [sistema/kredy]
+
+**Ejecutor:** Claude en Cowork (Chrome MCP sobre Vercel dashboard, con confirmación explícita de Augusto antes de escribir la env var y antes del redeploy).
+
+**Qué se hizo:**
+- Backup del `DATABASE_URL` viejo (Supabase, pooler `aws-0-us-west-2.pooler.supabase.com`) leído y entregado a Augusto en el chat para que lo guarde en su gestor de contraseñas.
+- Detectado que `DATABASE_URL` en `kredy-ap` estaba scopeado como **"All Environments"** (no solo Production) — matiz no contemplado en el runbook original. Augusto confirmó pasar Production+Preview+Development a Neon en un solo movimiento (no hay builds de preview dependientes de Supabase en este momento).
+- Editado `DATABASE_URL` (All Environments) al pooled de Neon (`ep-patient-art-atxooul0-pooler...`). `DIRECT_URL` no se tocó (confirmado en la sesión anterior que el runtime no lo usa).
+- Redeploy de producción disparado desde el mismo dialog de Vercel tras guardar la env var (deployment `dpl_2cFJGPpvkcdqdEJNRrNTBAKyHYrP`, mismo commit `main`/`feebac58`). Build OK, `READY` en ~2 min.
+- Smoke test: `/dashboard/loans` carga con datos reales (19 préstamos activos, mora, cobranza), detalle de un préstamo (Fernando, cuotas/capital/TIR) abre correcto, y navegación por `/dashboard/ap`, `/dashboard/risk`, `/dashboard/persons`, etc. — todo 200 en logs de runtime de Vercel, sin errores Prisma/conexión.
+- `augusto-os/targets/targets.json`: agregado el host de Neon (con y sin `-pooler`) a `prodDbPatterns` de `kredy`, sin borrar el patrón viejo de Supabase (paso 7 del runbook).
+
+**Estado:** Kredy corre 100% sobre Neon en prod. Supabase sigue existiendo pero ya no recibe tráfico de la app — **no pausar/eliminar todavía** (paso 8 del runbook, recién después de unos días estables). Pendiente: retirar el patrón de Supabase de `targets.json` cuando se llegue a ese paso.
+
+---
+
+## 2026-07-08 — Reconciliación de BACKLOG.md: 4 filas stale de Kredy (SP-001/002/003/004) [sistema/kredy]
+
+**Ejecutor:** Claude en Cowork (retomado desde `HANDOFF-backlog-reconciliation.md`, sesión nueva por pedido de Augusto).
+
+**Qué se hizo:**
+- Verificadas contra código real las 4 filas con nomenclatura vieja ("Sprint S-A/B/C/D/E") que estaban `blocked`/`waiting` en la sección Kredy — las 4 ya estaban shippeadas y nunca se marcaron `done`:
+  - **SP-001** (búsqueda unificada CUIL/DNI): `app/dashboard/persons/page.tsx` filtra por `p.cuit.includes(search)`; como el DNI son las posiciones 2-9 del CUIL, un DNI suelto matchea por substring sin lógica adicional. Confirmado también que Consulta 360° (candidato inicial del handoff) NO sirve para esto — `consulta-360.ts` exige CUIT/CUIL de 11 dígitos con dígito verificador, rechaza un DNI de 7-8 dígitos.
+  - **SP-002** (límite de originación por CUIL en frontend): `lib/risk/debtorLimit.ts` + banners en `components/loans/pre-approved-loan-card.tsx`.
+  - **SP-003** (identity backbone): `lib/identity/resolvePerson.ts` (CUIL→DNI→nombre→crear) + campos `dni`/`identityStatus` en `Person`.
+  - **SP-004** (AP Commission V2): `docs/migration-ap-commission-v2.sql` aplicada en prod, `server/services/commission.service.ts` (`realizeCommissionsForPayment`); confirmado en vivo porque el cron `/api/cron/ap-reconcile` (activo en prod) usa exactamente esos conceptos y las tablas `ap_withdrawals`/`ap_ledger_events` tienen datos reales en Neon. Sin spec `F-XXXX` formal — se hizo fuera del loop, a mano (commits `5988972`/`9c40c03`, 2026-06-16).
+- Fechas confirmadas por git log: SP-002/SP-003 → commit `32f2bc7` (2026-06-11); SP-003 también tiene un commit previo `6ee650a` (2026-06-10); SP-001 → mismo `32f2bc7`.
+- Las 4 filas actualizadas en `system/BACKLOG.md` a `done`, con evidencia y manteniendo exactamente 5 columnas (el bug de parseo que motivó esta reconciliación era justamente una fila con una columna de más).
+- **Barrido del resto del backlog** (Sistema/Argos) con el mismo criterio: `S-005`, `S-014`, `S-023` (Sistema) y `AR-003`, `AR-004`, `AR-006` (Argos) se verificaron contra código — ninguno tiene evidencia de implementación (`dbModel` no existe en `executor.ts`, distribución de estrategia en Argos sigue en `localStorage` sin persistencia DB, sin rastro de "Product Analyst"/"routing multi-modelo"/"closed learning loop" en `orchestrator/src`). Se dejan como están, no son stale.
+
+**Notas:** `npm test` en `orchestrator/` no se corrió en este sandbox (mismatch de plataforma con `node_modules` — rollup/esbuild compilados para Windows, según el handoff). Falta correrlo en la máquina de Augusto para confirmar que `sync.test.ts` sigue en verde contra el `BACKLOG.md` editado.
+
+---
+
+## 2026-07-08 — Limpieza de backlog viejo de Augusto (notas sueltas Kredy/Argos) [sistema/kredy/argos]
+
+**Ejecutor:** Claude en Cowork.
+
+**Qué se hizo:** Augusto pegó una lista de notas viejas (mezcla de ideas/bugs) para Kredy y Argos, sospechando que varias ya estaban resueltas. Se verificó cada ítem contra el código real antes de tocar `BACKLOG.md`:
+
+**Ya hecho (no se agregó al backlog, solo se le confirmó a Augusto):**
+- TNA promedio ponderado prestado → `computeWeightedTNA` (`lib/loan-yield-metrics.ts`) ya surfaceado en `app/dashboard/ap/page.tsx` como `grossTNA`/`netTNA` por moneda.
+- "1 link con 3 pestañas" para el AP → `/ap` ya tiene 4 tabs (`originar`/`cartera`/`comision`/`produccion`), con comisión devengada + retirable en `ComisionTab`. Excede el pedido original.
+
+**Nuevas filas agregadas a `BACKLOG.md` (verificadas contra código, no solo por nombre):**
+- **Kredy:** SP-015 (nav mobile solo expone 4/10 destinos, sin "más"), SP-016 (plazo personalizado en `/ap` — backend ya soporta 1-360m, falta el input), SP-017 (falta confirmación+redirect tras crear/pre-aprobar préstamo), SP-018 (límite de originación es por-AP hoy, no global por CUIL — requiere decisión de Augusto).
+- **Argos:** AR-008 (bug real confirmado: `last_sign_in_at` nunca se escribe desde la app, solo se lee — "usuarios activos" en Admin probablemente sub-cuenta), AR-009 (sparkline en `MobilePositionsList.jsx:271` va junto a `resultPct` acumulado en vez de `dailyPct`, que ya existe en el mismo archivo), AR-010 (parser de cauciones no separa arancel como campo propio, distinto del cálculo informativo de AR-005), AR-011 (conciliación de "lugares" contra el portfolio real de la ALyC — feature nueva), AR-012 (revisión UX/UI mobile por Sonnet, pedido explícito).
+- AR-007 enriquecido con el detalle que dio Augusto (alerta prioritaria = rescate/suscripción, UI candidata = campanita, scope solo Alycbur) — no se duplicó como ítem nuevo.
+
+**Descartado (no entra al backlog):**
+- Filtro por tipo/estrategia en Argos "no funciona" — Augusto aclaró que le parece bien así (evita quedar muy espaciado). Sin acción.
+- "Skill sobre el tema/diseño" para Spensiv y Argos — pedido meta (crear un skill), no un ítem de producto. Queda pendiente de decidir con Augusto, no es backlog de features.
+- Recordatorio masivo de cobranza — ya existía como SP-014 pending, no se duplicó.
+- Pregunta sobre crecimiento de la DB de FCI (`fci_prices`, 1 fila por fondo/día) — respondida directo, no requiere backlog: con el puñado de fondos que califican (CAFCI 2/3/5), son ~2-4k filas/año: irrelevante para Postgres, no hace falta Opus ni acción.
+
+## 2026-07-09 — F-0013 completado
+
+## Feature F-0013
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Implementar la mutation `compra.create` en src/server/api/routers/compra.ts usando publicProcedure con input Zod (insumoId, cantidad, precioTotal, proveedor opcional, fecha). Dentro de una transacción Prisma ($transaction / interactive): crear el registro de Compra y actualizar el Insumo asociado recalculando costoUnitarioActual = precioTotal / cantidad y sumando cantidad a stockActual. Usar ctx.db. (b1992985)
+- [x] Step 2: Implementar la query `compra.list` en src/server/api/routers/compra.ts que devuelva las compras ordenadas por fecha descendente, incluyendo la relación con Insumo (include) para mostrar el nombre del insumo en la UI. (b9bc87cc)
+- [x] Step 3: Configurar el cliente tRPC del lado React: crear el helper createTRPCReact (por ej. src/trpc/react.tsx) con superjson como transformer y httpBatchLink apuntando a /api/trpc, y montar el TRPCProvider (junto con QueryClientProvider de TanStack) en src/app/layout.tsx envolviendo a los children. (399f70d8)
+- [x] Step 4: Construir el formulario de carga en src/app/compras/page.tsx (Client Component, mobile-first con Tailwind): selección de insumo, cantidad, precio total, proveedor y fecha; usar el hook useMutation de compra.create e invalidar la query de historial al guardar. Usar exclusivamente el lenguaje 'Compras' (nunca 'Egresos' ni jerga contable). (89ab324c)
+- [x] Step 5: Agregar en la página de compras la lista/historial de compras cargadas usando el hook useQuery de compra.list, mostrando insumo, cantidad, precio total, proveedor y fecha, ordenadas por fecha descendente. (89ab324c)
+- [x] Step 6: Escribir tests unitarios (Vitest) que validen el cálculo de costoUnitarioActual = precioTotal / cantidad y el incremento de stockActual en `cantidad`, extrayendo la lógica de cálculo a una función pura testeable si hace falta. No e2e. (1b5540d8)
+
+### Decisiones (ADR)
+- ADR-0045 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0046 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0047 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0013/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — F-0014 completado
+
+## Feature F-0014
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/server/api/routers/insumo.ts, expandir el procedure `list` para que el select incluya stockActual, stockMinimo y costoUnitarioActual además de id, nombre y unidad. Ordenar por nombre asc. Verificar que src/app/compras/page.tsx siga typecheckeando (agregar campos es backward-compatible). IMPORTANTE: NO toques src/middleware.ts bajo ninguna circunstancia — ya fue rechazado 3 veces por scope creep (cambio de auth global fuera de este step). Si insumo.list necesita protección de auth por exponer costoUnitarioActual, eso se decide en un step de auth aparte, no acá. (316fd3a1)
+- [x] Step 2: En src/server/api/routers/insumo.ts, agregar el procedure `updateStockMinimo` como publicProcedure.mutation con input Zod z.object({ id: z.string(), stockMinimo: z.number().min(0) }) que ejecuta ctx.db.insumo.update({ where: { id }, data: { stockMinimo } }) y devuelve el insumo actualizado. Seguir el patrón de validación de compraRouter. (f510b2c2)
+- [x] Step 3: Crear src/lib/insumos.ts con la función pura `tieneStockBajo(stockActual: number, stockMinimo: number): boolean` que devuelve true si stockMinimo > 0 && stockActual < stockMinimo (si stockMinimo es 0 no hay alerta). Exportarla para uso en UI y tests. (769a83d4)
+- [x] Step 4: Implementar la UI de src/app/insumos/page.tsx: componente client ('use client') que consume trpc.insumo.list.useQuery() y renderiza una lista mobile-first (cards apiladas, no tabla) con nombre, stockActual + unidad, y costoUnitarioActual formateado en pesos. Manejar estados de loading y lista vacía. Sin jerga contable: usar etiquetas como 'Stock actual' y 'Último precio por unidad'. (5c8551b5)
+- [x] Step 5: Agregar el badge de alerta en src/app/insumos/page.tsx: usando tieneStockBajo de src/lib/insumos.ts, marcar visualmente los insumos con stock bajo el mínimo (borde/fondo de alerta en la card + badge con texto 'Stock bajo'). Mostrar también el stockMinimo actual de cada insumo. (ab5dd217)
+- [x] Step 6: Agregar la edición de stockMinimo en src/app/insumos/page.tsx: por cada insumo, un input numérico + botón que dispara trpc.insumo.updateStockMinimo.useMutation(), con estado de pending deshabilitando el botón, e invalidación con utils.insumo.list.invalidate() en onSuccess para refrescar stock y alertas. (6c953c6c)
+- [x] Step 7: Crear src/__tests__/insumos.test.ts con Vitest: tests unitarios de tieneStockBajo (stock sobre el mínimo, bajo el mínimo, igual al mínimo, stockMinimo=0) y test del procedure insumo.updateStockMinimo con mock de Prisma (siguiendo el patrón de src/__tests__/compras.test.ts) verificando que llama a db.insumo.update con los argumentos correctos. (513d2c54)
+
+### Decisiones (ADR)
+- ADR-0048 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0049 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0050 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0051 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0014/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — f-0015 completado
+
+## Feature f-0015
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear src/lib/lotes.ts con funciones puras: calcularCostoMateriaPrima(recetaItems con costoUnitarioActual) que retorna el costo unitario Σ(cantidadPorUnidad × costoUnitarioActual), calcularCostoLote(costoUnitario, cantidadProducida) que retorna { costoMateriaPrimaTotal, costoMateriaPrimaUnitario }, y verificarStockSuficiente(recetaItems, cantidadProducida) que retorna los insumos con stock insuficiente. Manejar la conversión de unidades gramos↔kg de forma consistente. Sin dependencias de Prisma ni UI. (1d5d3093)
+- [x] Step 2: Implementar el procedure lote.create en src/server/api/routers/lote.ts siguiendo el patrón de compraRouter.create: input Zod { productoId, cantidadProducida (int positivo), fecha }, consulta RecetaItems del producto con sus Insumos, valida stock suficiente (lanza TRPCError si no alcanza), y dentro de ctx.db.$transaction descuenta stockActual de cada insumo con { increment: -cantidad } y crea el Lote con costoMateriaPrimaTotal/Unitario calculados usando las funciones de src/lib/lotes.ts. Usar publicProcedure (sin auth). (0d74a47a)
+- [x] Step 3: Implementar el procedure lote.list en src/server/api/routers/lote.ts: publicProcedure.query() que devuelve los lotes ordenados por fecha descendente con include del producto relacionado. (449a3109)
+- [x] Step 4: Implementar la UI de carga en src/app/produccion/page.tsx: convertir a 'use client', formulario mobile-first (max-w-lg, cards bg-white) con selector de producto, input de cantidadProducida, input de fecha (usar parseLocalDate para evitar bug de timezone), y trpc.lote.create.useMutation con onSuccess que invalida lote.list e insumo.list vía useUtils. Mostrar el aviso de stock insuficiente que devuelve el server antes de guardar. Manejar el estado de costo $0 cuando aún no hay compras cargadas. (21daa13e)
+- [x] Step 5: Agregar la sección de historial de lotes en src/app/produccion/page.tsx: usar trpc.lote.list.useQuery para listar los lotes con producto, fecha, cantidadProducida y costoMateriaPrimaTotal/Unitario, con manejo de estado vacío. No usar useEffect+setState para sincronizar; si hace falta remount usar key={...}. (21daa13e)
+- [x] Step 6: Crear src/__tests__/lote.test.ts siguiendo el patrón de compras.test.ts con createCallerFactory + buildMockDb: testear el cálculo de costoMateriaPrimaTotal/Unitario, el descuento de stock vía Prisma increment con valores negativos, y el caso de stock insuficiente que rechaza la creación sin tocar la base. (77402632)
+
+### Decisiones (ADR)
+- ADR-0052 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0053 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0054 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0015/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — f-0016 completado
+
+## Feature f-0016
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Implementar el procedure `venta.create` en src/server/api/routers/venta.ts siguiendo el patrón de compraRouter/loteRouter: mutation con validación Zod v4 (productoId, fecha, cantidadVendida, precioUnitario con default 1500), que calcule ingresoTotal = cantidadVendida × precioUnitario server-side y persista con ctx.db.venta.create. No hardcodear el precio en la lógica. (65fc03f3)
+- [x] Step 2: Implementar el procedure `venta.list` en src/server/api/routers/venta.ts como query que retorna las ventas con include del producto y orderBy fecha desc, siguiendo el patrón de lote.list/compra.list. (74129c0f)
+- [x] Step 3: Implementar la UI de carga de ventas en src/app/ventas/page.tsx (mobile-first): formulario con useState para cantidadVendida, precioUnitario (prellenado en 1500 y editable) y fecha, usando parseLocalDate para el input type='date', y trpc.venta.create.useMutation con invalidación de venta.list en onSuccess y reseteo del formulario, siguiendo el patrón de compras/page.tsx. (a3ae46f3)
+- [x] Step 4: Agregar en src/app/ventas/page.tsx la sección de historial de ventas usando trpc.venta.list.useQuery, mostrando fecha, cantidad, precio unitario e ingresoTotal por venta. (a3ae46f3)
+- [x] Step 5: Crear src/__tests__/venta.test.ts siguiendo el patrón de compras.test.ts/lote.test.ts (createCallerFactory + mock de db), validando que venta.create calcula ingresoTotal = cantidadVendida × precioUnitario, respeta el precioUnitario provisto (no hardcodea 1500) y que venta.list retorna las ventas ordenadas. (bfbea563)
+
+### Decisiones (ADR)
+- ADR-0055 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0056 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0016/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — f-0017 completado
+
+## Feature f-0017
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear helpers puros de costeo en src/lib/costeo.ts siguiendo el patrón de src/lib/lotes.ts: calcularCostoMOD(sueldoObjetivoSemanal, empanadasEstimadasSemana) que retorne 0 si empanadasEstimadasSemana es 0 (evitar división por cero); prorratearCostoOperativo(totalGastosPeriodo, unidadesVendidasPeriodo) que retorne 0 si no hay unidades o gastos; calcularCostoTotalEmpanada({costoMateriaPrima, costoMOD, costoOperativo}); y calcularMargen(precioVenta, costoTotal) que devuelva {margenUnitario, margenPct} manejando precioVenta 0. Exportar funciones puras tipadas, siguiendo exactamente la fórmula de SPEC-MVP.md §5. (9b3e0ebe)
+- [x] Step 2: Implementar el gastoRouter vacío en src/server/api/routers/gasto.ts con procedures publicProcedure siguiendo el patrón de loteRouter: `list` (todos los gastos) y `byPeriod` (input Zod con desde/hasta como fechas) que sume montos de GastoOperativo filtrando por createdAt/fecha dentro del rango. Debe retornar total 0 sin error cuando no hay gastos cargados en el período. (ecf10b33)
+- [x] Step 3: Agregar un procedure de lectura de ConfigManoDeObra: crear src/server/api/routers/config.ts con un configRouter que exponga `get` (publicProcedure) leyendo el registro con id fijo 'config-mod' y retornando sueldoObjetivoSemanal y empanadasEstimadasSemana. Montar configRouter en src/server/api/root.ts. (d6204331)
+- [x] Step 4: Crear src/lib/produccion.ts con la función pura calcularEmpanadasProducibles(recetaItems, stocksInsumos) que calcule el mínimo, sobre cada insumo de la receta, de stockActual_insumo / cantidadPorUnidad_insumo, reutilizando toUnidadNativa de src/lib/lotes.ts para convertir unidades. Retornar 0 si algún insumo tiene stock 0 o si la receta está vacía, sin dividir por cero. (c5e3d218)
+- [x] Step 5: Crear src/server/api/routers/dashboard.ts con un dashboardRouter (publicProcedure) `resumenPorPeriodo` que reciba un input Zod {periodo: 'hoy'|'semana'|'mes'} y compute, con queries agregadas sobre Venta (unidades y ingresos), Lote/insumos (costoMateriaPrima vía calcularCostoMateriaPrima), GastoOperativo (gasto.byPeriod) y ConfigManoDeObra: costoMOD, costoOperativo prorrateado, costoTotalEmpanada, margenUnitario, margenPct y empanadasProducibles, usando los helpers de src/lib/costeo.ts y src/lib/produccion.ts. Incluir flag sinGastosCargados cuando el gasto del período es 0. Montar dashboardRouter en src/server/api/root.ts. Calcular los rangos de fecha respetando hora local argentina (patrón parseLocalDate). (70b02a1d)
+- [x] Step 6: Implementar la UI del dashboard en src/app/page.tsx ('use client'): selector o secciones para hoy / esta semana / este mes usando trpc.dashboard.resumenPorPeriodo.useQuery, mostrando unidades vendidas, ingresos, costo por empanada, margen unitario, margen %, y empanadas producibles con stock actual. Mostrar la nota 'sin gastos cargados este período' cuando el flag sinGastosCargados sea true. Usar exclusivamente el lenguaje de SPEC-MVP.md §6 (nunca 'costos fijos/variables') y mostrar solo datos reales, nunca proyecciones. (b69357f7)
+- [x] Step 7: Crear src/__tests__/costeo.test.ts y src/__tests__/dashboard.test.ts siguiendo el patrón de venta.test.ts (createCallerFactory + mock de db): tests unitarios de las fórmulas de src/lib/costeo.ts y src/lib/produccion.ts (incluyendo casos borde: empanadasEstimadasSemana 0, sin gastos, stock 0, receta vacía) y test del procedure resumenPorPeriodo verificando la agregación por período con datos mockeados. (6aee821a)
+
+### Decisiones (ADR)
+- ADR-0057 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0058 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0059 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0060 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0061 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0062 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0017/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — f-0018 completado
+
+## Feature f-0018
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar la mutation `create` a gastoRouter (src/server/api/routers/gasto.ts): input Zod con categoria z.enum(['packaging','delivery','otro']), descripcion opcional, monto positivo y fecha; persiste con ctx.db.gastoOperativo.create. Mantener list y byPeriod intactos. (57a41884)
+- [x] Step 2: Implementar retiroRouter desde cero (src/server/api/routers/retiro.ts) siguiendo el patrón de gasto.ts: procedure `create` (input Zod monto positivo, nota opcional, fecha), `list` (findMany orderBy fecha desc) y `byPeriod` (aggregate _sum:monto con filtro fecha gte/lte). Ya está montado en root.ts. (aefebe79)
+- [x] Step 3: Crear función pura `calcularSaldoNegocio` en src/lib/costeo.ts que reciba ingresos, compras, gastos y retiros y retorne saldo = ingresos − compras − gastos − retiros (derivado, nunca persistido). Agregar un procedure `saldoNegocio` (acumulado) en dashboardRouter que consulte ventas, compras, gastoOperativo.aggregate y retiro.aggregate y devuelva ingresos, compras, gastos, retiros y saldo usando esa función. (14e0a244)
+- [x] Step 4: Ajustar el prorrateo de costoOperativo del dashboard para usar unidades PRODUCIDAS del período en lugar de unidades vendidas (SPEC §5): actualizar la llamada en dashboardRouter.resumenPorPeriodo y adaptar prorratearCostoOperativo si hace falta, actualizando los tests existentes en src/__tests__/costeo.test.ts y src/__tests__/dashboard.test.ts para que sigan pasando. (01093a5a)
+- [x] Step 5: Crear la página de carga de Gastos operativos en src/app/gastos/page.tsx ('use client'): formulario con selector de categoría fija (packaging/delivery/otro), descripción, monto y fecha, usando trpc.gasto.create.useMutation con invalidación de trpc.gasto.list tras crear, más listado de gastos recientes. Reusar el layout mobile-first (max-w-lg mx-auto p-4) y formateo ARS con Intl.NumberFormat. (f11e359e)
+- [x] Step 6: Crear la página de carga de Retiros en src/app/retiros/page.tsx ('use client'): formulario con monto, nota y fecha usando trpc.retiro.create.useMutation con invalidación de trpc.retiro.list tras crear, más listado de retiros recientes. Mismo layout y formateo ARS que la página de gastos. (24b76bc4)
+- [x] Step 7: Crear la vista 'Mi plata' en src/app/mi-plata/page.tsx ('use client') que consuma dashboard.saldoNegocio y muestre el desglose (ingresos − compras − gastos − retiros) y el saldo del negocio acumulado como KPIs, con banner cuando no haya datos, siguiendo el patrón de KpiCards del dashboard. (4bce0ca2)
+- [x] Step 8: Agregar tests con vitest y buildMockDb para gasto.create, retiroRouter (create/list/byPeriod), calcularSaldoNegocio y el procedure saldoNegocio del dashboard, cubriendo casos borde (montos cero, sin retiros, sin gastos), en src/__tests__. (8fd9a8c1)
+
+### Decisiones (ADR)
+- ADR-0063 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0064 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0065 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0018/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — F-0019 completado
+
+## Feature F-0019
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/PortfolioHeroChart.jsx`, parametrizar `renderChart(gradId, { minimal } = {})` para que en modo minimal omita `CartesianGrid`, `XAxis` e `YAxis`, use `margin={{ top: 4, right: 0, left: 0, bottom: 0 }}`, `strokeWidth={2.5}` en el área y un gradiente con stops 0%→0.35, 55%→0.08, 100%→0. Mantener `isAnimationActive={false}`. Usar `minimal: true` únicamente en la invocación dentro de `mobileEl` y subir la altura del contenedor mobile del chart de 140px a 200px. No tocar la invocación de `desktopEl`. (0212d476)
+- [x] Step 2: En `mobileEl` de `PortfolioHeroChart.jsx`, reordenar el bloque superior a: label "VALOR DEL PORTFOLIO" (sin `· {period}`) → valor `text-[34px] tracking-tight` → P&L nominal + badge % → `LiveDot` centrado debajo del P&L → chart. Eliminar la fila superior actual "LiveDot … ojo" y mover el botón del ojo a posición absoluta top-right del hero, conservando el uso de `useBalanceVisibility`/`toggleBalance` sin romper la censura. (5553ed0c)
+- [x] Step 3: Rediseñar los period chips de `mobileEl` en `PortfolioHeroChart.jsx`: fila `justify-between` a lo ancho sin `overflow-x-auto`/scroll horizontal, cada botón `text-[13px]` y `min-h-[44px]`; inactivo solo con `color: var(--ink-faint)` (sin fondo ni borde), activo como pill `rgba(47,212,205,0.15)` + color teal. Mantener los 7 períodos de `PERIODS` visibles en viewport 375–430px y dejar los chips XIRR / vs SPY debajo sin cambios. (ed486305)
+- [x] Step 4: Ajustar el skeleton de loading de `mobileEl` en `PortfolioHeroChart.jsx` para que coincida con el nuevo tamaño del valor (34px) y del chart (200px de alto), evitando el salto visual al pasar de loading a datos. (01699c1e)
+
+### Decisiones (ADR)
+- ADR-0066 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0067 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0019/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — F-0020 completado
+
+## Feature F-0020
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/components/common/MobileHeader.jsx`, reemplazar el spacer derecho (`w-8`) de la row 1 por un grupo derecho con el botón ojo: importar `Eye`/`EyeOff` de lucide-react y `useBalanceVisibility` de `src/hooks/`, renderizar un botón toggle (Eye si visible, EyeOff si oculto) con target táctil ≥44px que llame al toggle del hook. Ajustar el ancho del grupo para que el logo (absolute left-1/2) siga centrado sin overlap en 320–375px. (77b05258)
+- [x] Step 2: En `MobileHeader.jsx`, agregar dentro del grupo derecho el botón settings: importar `Settings` de lucide-react y `useNavigate` de react-router-dom, navegar a `/sistema/administracion` al click, con target táctil ≥44px. Gatear su renderizado con el mismo criterio de permisos que la navegación (isAdmin desde `useAuth`); si el usuario no tiene acceso, no renderizar el botón (no deshabilitarlo). (fce611ac)
+- [x] Step 3: En `src/features/portfolio/components/PortfolioHeroChart.jsx`, eliminar del bloque mobile el botón ojo en posición absoluta y su handler `toggleBalance`; remover los imports/estado que queden huérfanos (`Eye`/`EyeOff` y `toggleBalance`), manteniendo la lectura de `balanceHidden` de `useBalanceVisibility` que el hero sigue usando para renderizar los montos censurados. (206a318f)
+
+### Decisiones (ADR)
+- ADR-0068 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0020/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-11 — F-0021 completado
+
+## Feature F-0021
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/AllocationPanel.jsx`, reestructurar el body del card en un layout de dos columnas: donut a la izquierda (~96–110px de lado) y leyenda en columna a la derecha ocupando el resto del ancho, sin tocar el header (título + toggle) ni el cálculo de `pieData`/`posCount`. Verificar que no rompa el ancho del panel en desktop (~35% del grid). (e4921ed2)
+- [x] Step 2: Ajustar las props del `Pie`/`PieChart` en AllocationPanel: `innerRadius` ≈ 68% del `outerRadius`, `paddingAngle: 3`, `cornerRadius: 4`, manteniendo `startAngle=90`/`endAngle=-270` e `isAnimationActive={false}`. Superponer el contador central con el número grande (~18px, clase `num`) + "pos." (10px, ink-faint) usando `<text>` SVG centrado o div absolute con `pointer-events-none`, reusando `posCount`. (0dba99f2)
+- [x] Step 3: Rediseñar la leyenda de AllocationPanel para que cada slice se muestre como "• Label … XX,X%": dot del color del slice, label en `--ink-mute` `text-[13px]`, y el porcentaje en clase `num` con el color del slice, formateando con `formatNumber`. Mantener el orden de `sliceDefs` y usar exclusivamente los colores de `TYPE_SLICES`/`STRATEGY_SLICES`. Los % quedan visibles con censura activa (comportamiento actual). (3ff88fdb)
+- [x] Step 4: Verificar y conservar sin regresión el header con el toggle Por tipo / Por estrategia (que re-renderiza donut + leyenda + contador) y la `StatBar` de objetivo USD debajo cuando `targetUsd > 0`, validando el render en ambos escenarios (con y sin StatBar), con un solo slice y con cartera vacía (fallback `empty` de `chartData`). Confirmar que typecheck y lint pasan. (3ff88fdb)
+
+### Decisiones (ADR)
+- ADR-0069 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0021/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-12 — F-0022 completado
+
+## Feature F-0022
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/MobilePositionsList.jsx`, convertir el componente `MiniSpark` de `<LineChart>`/`<Line>` (48×20) a `<AreaChart>`/`<Area>` con gradiente (siguiendo el patrón de `renderChart` en `PortfolioHeroChart.jsx`: `<linearGradient>` con stops de opacity 0.3→0, `fill=url(#id)`, `strokeWidth 2.5`). Parametrizar tamaño vía props (`width`/`height` con defaults ~72×28) para no romper el uso actual, mantener el color por signo del período (primer vs último punto usando TEAL/CORAL) y `isAnimationActive={false}`. Cada instancia debe usar un id de gradiente único para evitar colisiones SVG. (4290c0f8)
+- [x] Step 2: En `MobilePositionsList.jsx`, agregar soporte para `variant="featured"`: cuando esté activa, aplanar las posiciones (excluyendo CASH igual que hoy), ordenar desc por `valuation`/`valuationUSD` según la moneda activa (`currency`) reutilizando los helpers ya exportados por `GroupedPositionsTable`, y hacer `slice(0,5)` sin agrupación, sin group headers y sin el toggle tipo/estrategia. No alterar el comportamiento de la variante agrupada existente. (e860f3df)
+- [x] Step 3: En `MobilePositionsList.jsx`, renderizar el header de la sección featured: título "Posiciones Destacadas" y un link/botón "Ver todas ›" (con `ChevronRight` de lucide-react) que invoque la prop `onViewAll`. Cada fila del top-5 debe usar `AssetLogo` (36px), ticker + assetClass, la nueva `MiniSpark` de área (~72×28), valuación censurable vía `MoneyValue`/`maskMoney`/`useBalanceVisibility` y el % coloreado; tap abre el `PositionDetailSheet` existente. Touch targets ≥ 44px por fila. (ff1f0ff8)
+- [x] Step 4: En `src/features/portfolio/components/DashboardOverview.jsx`, cambiar el call-site mobile de la variante `full` para pasar `variant="featured"` a `MobilePositionsList`, manteniendo el `sparklineFor` y el `onViewAll={() => navigate('/portfolio/posiciones')}` ya existentes. Verificar que la variante `positions` (página /portfolio/posiciones) siga usando la lista agrupada completa sin regresión. (ff1f0ff8)
+
+### Decisiones (ADR)
+- ADR-0070 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0071 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0072 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0022/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-12 — F-0024 completado
+
+## Feature F-0024
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/DashboardOverview.jsx`, dentro del bloque `md:hidden` de la variante `full`, reordenar los bloques JSX existentes al orden: hero → AllocationPanel → Posiciones Destacadas (MobilePositionsList variant='featured') → KPI carousel (kpiItems) → FAB. Mover el bloque del KPI carousel tal cual (sin tocar props, hooks ni data flow) desde su posición actual entre hero y AllocationPanel hacia abajo de la sección de destacadas. No modificar el layout desktop (`hidden md:`) ni la variante `positions`. (4a3903c5)
+- [x] Step 2: En el mismo bloque mobile `full` de `DashboardOverview.jsx`, normalizar el spacing entre secciones a un único criterio de gap: revisar y unificar los `px-4`/`pt-4`/`pb-2` de cada sección para evitar padding duplicado, y eliminar el divider `mx-4` si quedó redundante tras el reorden. Sin cambios de lógica. (2fa5754c)
+- [x] Step 3: En el contenedor del bloque mobile `full` de `DashboardOverview.jsx`, asegurar el padding-bottom suficiente para que el FAB (offset `--safe-bottom` + 56px + 16px sobre el bottom nav) no tape el último KPI del carousel ahora que quedó al final del scroll. Verificar en viewport 390×844 que above the fold queden el valor, el chart, los períodos y el inicio del card de Asignación. (aad14661)
+
+### Decisiones (ADR)
+- ADR-0073 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0024/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-12 — F-0023 completado
+
+## Feature F-0023
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/components/common/MobileNav.jsx`, extraer el markup interno de cada ítem (icono + label) a un contenedor pill reutilizable, sin cambiar aún el estilo: mantener el `Link` con `flex-1`, `min-h-[44px]` y el hit area completo, envolviendo icono+label en un `<span>` interno que servirá de pill. Conservar intactos `PINNED`, `isActive(path)`, `pinnedVisible` y el filtrado por permisos. El render de los 4 pinned y del botón 'Más' debe usar la misma estructura de pill interno. (6c83c045)
+- [x] Step 2: En el mismo `MobileNav.jsx`, aplicar el estilo pill condicionado por estado activo en el contenedor interno: cuando el ítem está activo (`isActive(item.path)`), setear `background: var(--teal-dim)`, `rounded-full`, padding horizontal e icono+label en `var(--teal)`; cuando inactivo, sin fondo con icono+label en `var(--ink-faint)`. Agregar `transition-all duration-200`. El pill vive dentro del ítem sin alterar el ancho de columna (flex-1) ni el alto total de 56px + safe-area. Usar solo los tokens existentes (`--teal-dim`, `--teal`, `--ink-faint`), sin colores nuevos. (b766a73b)
+- [x] Step 3: En `MobileNav.jsx`, aplicar el mismo estado pill al botón 'Más' cuando su bottom sheet está abierto (`moreOpen`): usar la misma condición visual (`background: var(--teal-dim)`, `rounded-full`, icono en `var(--teal)`) que los ítems pinned activos, reutilizando el contenedor pill del paso anterior. No modificar la lógica de apertura/cierre del BottomSheet ni su contenido. (b766a73b)
+
+### Decisiones (ADR)
+- ADR-0074 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0023/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-12 — F-0025 completado
+
+## Feature F-0025
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/pages/Dashboard.jsx` (~línea 356), envolver el `<PageHeader title="Overview" subtitle="Portfolio" />` de la tab overview en un contenedor con `className="hidden md:block"` (o condicionar su render) para que NO se muestre en mobile solo en la tab overview. No tocar el PageHeader de las demás tabs ni el layout desktop. (0fe9c884)
+- [x] Step 2: En `src/features/portfolio/components/PortfolioSelector.jsx`, agregar una prop `variant="compact"` (default el actual) que renderice el trigger como pill con icono `ChevronDown` de lucide-react en lugar del `⋮` actual, sin cambiar la lógica del selector ni romper los call-sites existentes desktop. (262d4350)
+- [x] Step 3: En `src/components/common/MobileHeader.jsx`, pasar `variant="compact"` al `PortfolioSelector` de la row 2 y reducir la altura de esa row (hoy `h-9`) para compactar el header, recalculando si corresponde el offset `mobile-body-offset` en `src/index.css` para evitar solapamiento con el contenido. Mantener touch targets ≥44px y la censura intacta. (cbc6cd56)
+- [x] Step 4: En `src/features/portfolio/components/PortfolioHeroChart.jsx`, reforzar los stops del gradiente del área en modo minimal/mobile (de 0%→0.35, 55%→0.08, 100%→0 a ~0%→0.5, 50%→0.18, 100%→0.03) manteniendo `isAnimationActive={false}` y sin alterar el render desktop no-minimal; además reducir el gap vertical entre el bloque del valor ("En vivo") y el contenedor del chart para eliminar el aire muerto. (e0fb2a2f)
+
+### Decisiones (ADR)
+- ADR-0075 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0076 —  [Supuesto del agente ()] **⚠ REVISAR**
+- ADR-0077 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0025/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-13 — F-0026 completado
+
+## Feature F-0026
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/components/common/MobileNav.jsx`, subir la presencia del span pill del ítem activo: aumentar el fondo teal (ej. `rgba(47,212,205,0.18)`) y/o agregar un borde sutil `1px solid rgba(47,212,205,0.25)`, ampliar el padding a `px-4 py-2` manteniendo `rounded-full` y `transition-all duration-200`. Los inactivos quedan sin fondo/borde (ink-faint). Solo estilos condicionados por `active`, sin tocar estructura ni lógica de F-0023. (784c6d5b)
+- [x] Step 2: En el mismo `MobileNav.jsx`, diferenciar el peso visual del icono activo pasando `strokeWidth={2.5}` al icono lucide cuando el ítem está activo y `strokeWidth={2}` (default) cuando está inactivo, para que el activo se distinga por peso además de color. (b417435a)
+- [x] Step 3: Verificar que el botón "Más" aplique el mismo pill prominente (fondo/borde/padding e icono con strokeWidth mayor) cuando su bottom sheet está abierto (`moreOpen === true`), reutilizando exactamente el mismo tratamiento visual que los ítems pinned activos; ajustar sólo si el markup del "Más" no comparte el estilo del pill. (b417435a)
+
+### Decisiones (ADR)
+- ADR-0078 —  [Supuesto del agente ()] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0026/`
+
+> Revisar con Claude in Chrome para validación de UX.

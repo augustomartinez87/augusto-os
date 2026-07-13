@@ -1,0 +1,255 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Argos — AllocationPanel con donut centrado (contador de posiciones) y leyenda coloreada",
+    "archivos": [
+      "src/features/portfolio/components/AllocationPanel.jsx",
+      "src/utils/formatters.ts",
+      "src/hooks/useBalanceVisibility.js",
+      "src/components/ui/MoneyValue.jsx",
+      "src/components/ui/index.js",
+      "src/utils/chartTheme.tsx",
+      "src/features/portfolio/contexts/PortfolioContext.jsx",
+      "src/features/portfolio/components/DistributionChart.jsx",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/features/portfolio/components/PortfolioTabs.jsx"
+    ],
+    "patrones": [
+      "Donut con Recharts: PieChart + Pie + Cell, innerRadius/outerRadius, startAngle=90, endAngle=-270, cx/cy centrado",
+      "Contador superpuesto en el centro del donut con posicionamiento absolute + pointer-events-none",
+      "Leyenda coloreada con bullets circulares (w-1.5 h-1.5 rounded-full) + label truncado + porcentaje con color",
+      "Toggle de agrupación 'tipo'/'estrategia' con botones estilo segmented control inline",
+      "useBalanceVisibility hook para ocultar/mostrar montos sensibles (HIDDEN = '••••••')",
+      "Memoización del pieData con useMemo dependiente de positions, groupMode, currency, totalValuation",
+      "Clasificación de posiciones con funciones classifyType (assetClass) y classifyStrategy (ticker)",
+      "StatBar componente interno con barra de progreso de goal (objetivo US$)",
+      "Alias @/ para imports: @/utils/formatters, @/hooks/useBalanceVisibility, @/components/ui",
+      "Estilos inline con objeto style + clases Tailwind (dark theme: #16151C fondo, #20202A bordes)"
+    ],
+    "dependencias": [
+      "recharts: ^2.10.0 (PieChart, Pie, Cell)",
+      "react: ^18.2.0",
+      "tailwindcss: ^3.3.2",
+      "date-fns: ^4.1.0 [NO VERIFICADO si se usa en AllocationPanel]",
+      "lucide-react: ^0.263.1 [NO VERIFICADO si se usa en AllocationPanel]"
+    ],
+    "riesgos": [
+      "AllocationPanel no usa los helpers de src/utils/chartTheme.tsx — implementa estilos y tooltip propios (riesgo de divergencia si se refactoriza)",
+      "El donut usa isAnimationActive={false} — no hay animación de entrada/salida de datos",
+      "La importación de formatNumber desde '@/utils/formatters' asume archivo .ts (formatters.ts), no .js — verificar que el alias resuelva correctamente",
+      "Los colores están hardcodeados en TYPE_SLICES y STRATEGY_SLICES dentro del componente, no centralizados",
+      "Si targetUsd <= 0 se oculta la sección de stats y divider — layout condicional que puede generar saltos visuales",
+      "El componente usa 'currency' para elegir entre totals.valuation vs totals.valuationUSD — inconsistencia si cambia la estructura de datos"
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "AllocationPanel",
+        "lineas": "99-190",
+        "explicacion": "Componente principal: recibe positions, currency, totals, targetUsd. Renderiza donut centrado con contador de posiciones y leyenda coloreada.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "TYPE_SLICES",
+        "lineas": "8-13",
+        "explicacion": "Define los segmentos del donut por tipo (acciones, cedears, fcis, bonos) con etiqueta y color hardcodeados.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "STRATEGY_SLICES",
+        "lineas": "15-19",
+        "explicacion": "Define los segmentos del donut por estrategia (Core 1 SPY, Core 2 BTC, Satélite) con colores fijos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "classifyType",
+        "lineas": "21-27",
+        "explicacion": "Clasifica una posición por assetClass: ARGY→acciones, CEDEAR→cedears, FCI→fcis, BONO→bonos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "classifyStrategy",
+        "lineas": "29-33",
+        "explicacion": "Clasifica por ticker: SPY→core1, IBIT/BTC/BITCOIN→core2, resto→satelite.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "pieData",
+        "lineas": "113-128",
+        "explicacion": "useMemo que computa los datos del donut: agrupa posiciones por sliceDefs, calcula value y pct sobre totalValuation.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "posCount",
+        "lineas": "132",
+        "explicacion": "Contador de posiciones (filtra CASH) que se muestra centrado en el donut.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "chartData",
+        "lineas": "134",
+        "explicacion": "Si pieData está vacío, fallback con un segmento gris (#1E1E27) para mantener el donut visible.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "innerRadius",
+        "lineas": "145",
+        "explicacion": "innerRadius=28, outerRadius=40 en un PieChart de 88x88 — define el grosor del aro del donut.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "startAngle",
+        "lineas": "147",
+        "explicacion": "startAngle=90, endAngle=-270 para que el donut empiece desde arriba (en sentido horario).",
+        "confianza": 1
+      },
+      {
+        "path": "src/hooks/useBalanceVisibility.js",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "1-30",
+        "explicacion": "Hook que controla visibilidad de saldos vía localStorage + StorageEvent para sincronización multi-componente.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/ui/MoneyValue.jsx",
+        "simbolo": "HIDDEN",
+        "lineas": "3",
+        "explicacion": "Constante '••••••' usada para ocultar valores sensibles cuando balanceHidden es true.",
+        "confianza": 1
+      },
+      {
+        "path": "src/utils/formatters.ts",
+        "simbolo": "formatNumber",
+        "lineas": "70-76",
+        "explicacion": "Formatea números con locale es-AR y decimales configurables — usado en AllocationPanel para porcentajes y montos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/utils/chartTheme.tsx",
+        "simbolo": "gridProps",
+        "lineas": "5-9",
+        "explicacion": "Props base para gráficos Recharts (grid, ejes, tooltip). AllocationPanel NO usa estos helpers — implementa todo inline.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "StatBar",
+        "lineas": "36-53",
+        "explicacion": "Componente interno para barra de progreso del objetivo con label, porcentaje, subtxt y soporte hidden.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El AllocationPanel (en src/features/portfolio/components/AllocationPanel.jsx) es un componente React que renderiza un donut con Recharts (PieChart + Pie + Cell) centrado en un contenedor de 88x88px con un contador de posiciones superpuesto vía posicionamiento absolute. Incluye una leyenda coloreada con bullets circulares, labels truncados y porcentajes numericos. Soporta dos modos de agrupación (tipo/estrategia) mediante un segmented control. Usa el hook useBalanceVisibility para ocultar montos sensibles y formatNumber (locale es-AR) para formateo. El stack incluye React 18, Recharts 2.10, Tailwind CSS 3 y Vite."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Argos — AllocationPanel con donut centrado (contador de posiciones) y leyenda coloreada",
+    "archivos": [
+      "src/features/portfolio/components/AllocationPanel.jsx",
+      "SPEC-mobile-overview-redesign.md",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/pages/Dashboard.jsx",
+      "src/hooks/useBalanceVisibility.js",
+      "src/utils/formatters.ts",
+      "package.json"
+    ],
+    "patrones": [
+      "recharts PieChart + Pie + Cell con innerRadius/outerRadius",
+      "isAnimationActive={false} en todas las series recharts",
+      "useBalanceVisibility hook para censura (localStorage + StorageEvent)",
+      "HIDDEN constante para valores censurados (importada de @/components/ui)",
+      "formatNumber(value, decimals) para porcentajes",
+      "TEAL='#2FD4CD' como color primario, tokens CSS --surface-*, --ink*, --teal-dim",
+      "targetUsd prop condicional (solo >0 si portfolio.name incluye 'Alycbur')",
+      "groupMode state local 'tipo'/'estrategia' para toggle y re-memoización"
+    ],
+    "dependencias": [
+      "recharts ^2.10.0",
+      "react ^18.2.0",
+      "tailwindcss ^3.3.2",
+      "lucide-react ^0.263.1"
+    ],
+    "riesgos": [
+      "BREAKING CHANGES vis-a-vis SPEC: La SPEC M4 pide donut con paddingAngle=3, cornerRadius=4, innerRadius ~68% del outer, contador con <text> SVG, y porcentajes coloreados por slice — el código actual NO tiene nada de esto (div en vez de text SVG, sin paddingAngle/cornerRadius, colores fijos en %). Migración sustancial.",
+      "AUSENCIA DE TESTS: No existe ningún test unitario para AllocationPanel ni para recharts en el proyecto. Cero cobertura = alta probabilidad de regresiones silenciosas.",
+      "LAYOUT CONDICIONAL targetUsd: El componente tiene dos layouts radicalmente distintos según si targetUsd > 0 (solo cuando portfolio.name incluye 'Alycbur'). Cambios en el donut/leyenda deben verificar ambos caminos.",
+      "CENSURA PARCIAL: Los % de asignación NO se censuran hoy con balanceHidden (solo la StatBar se oculta). La SPEC dice que pueden quedar visibles, pero cualquier cambio debe mantener esta decisión explícita.",
+      "ACOPLAMIENTO DashboardOverview: AllocationPanel es importado y renderizado en DashboardOverview, que a su vez recibe targetUsd desde Dashboard.jsx. Cambiar la interfaz de props del panel impacta en cascada.",
+      "MIGRACIÓN DE CONTADOR CENTRAL: Pasar de un <div> absolute centrado a un <text> SVG requiere reestructurar el contenido del SVG, lo que puede romper el posicionamiento y el pointer-events.",
+      "TOKENS CSS NO NEGOCIABLES: La SPEC prohíbe colores nuevos hardcodeados fuera de TEAL/CORAL/PERIWINKLE. El mockup exige % coloreados por slice, lo que requiere mapear slice.color correctamente."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "AllocationPanel",
+        "lineas": "37-159",
+        "explicacion": "Componente principal a modificar. Contiene el donut (PieChart 88x88, innerRadius=28, outerRadius=40), contador central con div+flex, leyenda con colores fijos, toggle tipo/estrategia, StatBar condicional. Debe adaptarse a SPEC M4.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-mobile-overview-redesign.md",
+        "simbolo": "M4 — AllocationPanel: donut con centro + leyenda coloreada",
+        "lineas": "78-101",
+        "explicacion": "Especificación de los cambios requeridos: donut ~96-110px, innerRadius ~68% del outer, paddingAngle=3, cornerRadius=4, contador con <text> SVG, leyenda con % coloreados por slice, título 'Asignación del Portfolio'.",
+        "confianza": 1
+      },
+      {
+        "path": "src/pages/Dashboard.jsx",
+        "simbolo": "targetUsd",
+        "lineas": "37-37",
+        "explicacion": "targetUsd solo es 100_000 si el portfolio se llama 'Alycbur'; si no, es 0. Esto controla si se renderiza la StatBar y el divider vertical en AllocationPanel. Cambios de layout deben validar ambos escenarios.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "DashboardOverview",
+        "lineas": "81-83",
+        "explicacion": "Call-site de AllocationPanel. Pasa positions, currency, totals, targetUsd como props. Cualquier cambio en la interfaz de AllocationPanel impacta aquí.",
+        "confianza": 1
+      },
+      {
+        "path": "src/hooks/useBalanceVisibility.js",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "1-27",
+        "explicacion": "Hook de censura usado en AllocationPanel. Solo afecta la StatBar actualmente, NO los % del donut. La SPEC confirma que los % pueden quedar visibles. No cambiar este comportamiento sin coordinación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "classifyType",
+        "lineas": "19-25",
+        "explicacion": "Lógica de clasificación acoplada directamente al componente (assetClass 'ARGY'/'CEDEAR'/'FCI'/'BONO'). Si cambia la taxonomía de portfolios, hay que modificarla aquí y en classifyStrategy.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "groupMode",
+        "lineas": "42-42",
+        "explicacion": "Estado local para toggle 'tipo'/'estrategia'. Dispara re-memoización de pieData. El SPEC exige mantener esta funcionalidad existente.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "recharts",
+        "lineas": "17-17",
+        "explicacion": "Dependencia recharts ^2.10.0 ya instalada. Las props paddingAngle y cornerRadius están disponibles desde v2.x pero deben verificarse en la versión concreta (2.10.0). [NO VERIFICADO: no se pudo confirmar que paddingAngle/cornerRadius existan en la versión exacta 2.10.0]",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "isAnimationActive={false}",
+        "lineas": "70-70",
+        "explicacion": "Animaciones desactivadas en el Pie, consistente con la convención del proyecto. Mantener este patrón.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "AllocationPanel requiere una migración significativa para alinearse con la SPEC M4: pasar de un layout con div+flex para el contador central a <text> SVG, agregar paddingAngle y cornerRadius al donut, y colorear los porcentajes de la leyenda por slice. No existen tests unitarios para el componente, lo que eleva el riesgo de regresiones. La interfaz de props (targetUsd condicional, positions, currency) está acoplada a DashboardOverview/Dashboard, por lo que cualquier cambio debe validar ambos caminos de layout (con y sin StatBar de objetivo USD). Deben respetarse los tokens CSS existentes sin introducir colores nuevos, y mantener la funcionalidad actual de toggle tipo/estrategia."
+  }
+]

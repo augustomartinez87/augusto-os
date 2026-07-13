@@ -131,6 +131,24 @@ export async function notifyDeployed(featureId: string, tnaNote?: string, _deps?
   await tgSendRetry(pickText(full, short, mode, responseStyle), _deps)
 }
 
+/**
+ * Aviso informativo de step bloqueado (ADR-0019: sin gates por-step). NO pide
+ * aprobación, no tiene botones — el loop ya cortó y requiere fix manual + re-run.
+ */
+export async function notifyStepBlocked(featureId: string, detail: string, _deps?: TgDeps): Promise<void> {
+  const { mode, responseStyle } = (_deps?.getState ?? getOperatorState)()
+
+  if (mode === 'SLEEP') {
+    log(`[telegram] SLEEP — notificación suprimida: step blocked ${featureId}`)
+    return
+  }
+
+  const clip = detail.length > 1400 ? detail.slice(0, 1400) + '…' : detail
+  const full = `⛔ ${featureId} — step bloqueado (fix manual + \`npm start ${featureId}\` para reintentar):\n\n${clip}`
+  const short = `⛔ ${featureId} — step bloqueado`
+  await tgSendRetry(pickText(full, short, mode, responseStyle), _deps)
+}
+
 /** Aviso de release fallido — NO se deployó. Manda el error para debuggear. */
 export async function notifyReleaseFailed(featureId: string, errors: string, _deps?: TgDeps): Promise<void> {
   const { mode, responseStyle } = (_deps?.getState ?? getOperatorState)()

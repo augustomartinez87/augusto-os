@@ -5,8 +5,6 @@ Registro de decisiones de diseño. Cada decisión es un **ADR** inmutable: una v
 El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de cada decisión, y (2) ser **autosuficiente** — cualquier agente (Claude, Llama, otro) debe poder leer esto y retomar el contexto sin reconstruirlo. Por eso cada entrada declara explícitamente su **Origen**: si la decisión fue una instrucción de Augusto o un supuesto que tomó el agente por su cuenta. Eso permite auditar después qué se decidió deliberadamente vs. qué asumió la máquina.
 
 > **Nota de saneamiento (2026-07-11, Cowork):** ADR-0041 a ADR-0074 fueron generados VACÍOS por un bug del ADR auto-log (S-038) y eliminados de este archivo; sus IDs quedan anulados y NO deben reutilizarse (esta mención a ADR-0074 mantiene el contador de `appendAdr` en 74). Backup pre-limpieza: `DECISIONS.md.bak-20260711`.
->
-> **Nota de saneamiento (2026-07-13, S-038 fix):** ADR-0075 a ADR-0078 (generados 2026-07-12/13, features F-0025/F-0026) también salieron VACÍOS — el bug seguía activo tras la limpieza del 2026-07-11 y se corrigió recién ahora (parseAdrBlocks recibía el JSON crudo de `--output-format json` en vez del `.result` ya parseado). Eliminados de este archivo; sus IDs quedan anulados y NO deben reutilizarse (esta mención a ADR-0078 mantiene el contador de `appendAdr` en 78). Backup pre-limpieza: `DECISIONS.md.bak-20260713`.
 
 ## Template (copiar para cada ADR nuevo)
 
@@ -27,6 +25,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0078 · 2026-07-13 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0026 · step 1
+
+---
+## ADR-0077 · 2026-07-12 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0025 · step 4
+
+---
+## ADR-0076 · 2026-07-12 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0025 · step 3
+
+---
+## ADR-0075 · 2026-07-12 · 
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente ()
+**Target:** sistema
+
+**Decisión:** 
+**Contexto:** 
+**Alternativas descartadas:** ninguna
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0025 · step 2
+
+---
 ## ADR-0040 · 2026-06-29 · arancelCostoTNA é informativo — não subtrai do spread
 
 **Estado:** aceptada

@@ -1,0 +1,439 @@
+[
+  {
+    "objetivo": "Mapa del repo para: 3 Salteñas — Módulo Producción por lote",
+    "archivos": [
+      "prisma/schema.prisma",
+      "prisma/seed.ts",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/routers/producto.ts",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/lib/compras.ts",
+      "src/lib/insumos.ts",
+      "src/lib/db.ts",
+      "src/trpc/react.tsx",
+      "src/app/produccion/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/app/insumos/page.tsx",
+      "src/app/layout.tsx",
+      "src/app/api/trpc/[trpc]/route.ts",
+      "src/middleware.ts",
+      "src/__tests__/compras.test.ts",
+      "src/__tests__/insumos.test.ts",
+      "vitest.config.ts",
+      "package.json",
+      "SPEC-MVP.md",
+      "SESSION-HANDOFF.md"
+    ],
+    "patrones": [
+      "tRPC router pattern: cada módulo define un router en src/server/api/routers/<modulo>.ts usando createTRPCRouter y publicProcedure",
+      "Función utilitaria pura: lógica de negocio extraída a src/lib/<modulo>.ts (ej: calcularCostoUnitario, tieneStockBajo)",
+      "Página cliente con \"use client\": hooks trpc.useQuery / trpc.useMutation / trpc.useUtils para data fetching",
+      "Formulario con invalidación post-mutación: onSuccess invalida queries relacionadas via utils.<router>.<procedure>.invalidate()",
+      "Transacciones Prisma en mutations: ctx.db.$transaction para operaciones que tocan múltiples tablas (ej: crear compra + actualizar insumo)",
+      "Test con createCallerFactory + mock de db: construye caller con db mockeado para testear routers sin base real",
+      "Seed con upsert: datos fijos del negocio (producto, insumos, receta, configMOD) insertados con prisma.insumo.upsert",
+      "Mobile-first UI: max-w-lg mx-auto, inputs con border rounded-lg, formularios en cards bg-white con border"
+    ],
+    "dependencias": [
+      "next@16 (App Router)",
+      "@trpc/server@^11.18.0, @trpc/client@^11.18.0, @trpc/react-query@^11.18.0",
+      "@prisma/client@^5.22.0, prisma@^5.22.0",
+      "@tanstack/react-query@^5.101.2",
+      "zod@^4.4.3",
+      "superjson@^2.2.6",
+      "@clerk/nextjs@^7.5.14",
+      "tailwindcss@^4",
+      "vitest@^4.1.10",
+      "tsx@^4.23.0 (para seed y tooling)"
+    ],
+    "riesgos": [
+      "Prisma 5.x pinneado: npm install prisma@latest instala v7 que rompe el schema — mantener en ^5.22.0",
+      "Auth no enforceada: middleware.ts es clerkMiddleware() mínimo sin protect(), todos los procedures son publicProcedure — datos sensibles (costoUnitarioActual) expuestos",
+      "Push automático a main sin deploy real: el loop de augusto-os mergea y pushea main automáticamente (gotcha #9)",
+      "Lint react-hooks/set-state-in-effect: prohibido useEffect(() => setState(prop), [prop]); usar key={...} para forzar remount",
+      "Conversión gramos↔kg: receta usa gramos (24g paleta, 34g queso) pero stock de insumos está en kg — las operaciones de descuento de stock deben convertir unidades consistentemente",
+      "LoteRouter vacío: src/server/api/routers/lote.ts es un createTRPCRouter({}) sin procedures — debe implementarse create con descuento transaccional de stock en $transaction",
+      "Costo materia prima arranca en $0 hasta que Dani cargue la primera compra — comportamiento esperado pero requiere manejo de estados vacíos en UI",
+      "Sin tests para lote todavía: no existe src/__tests__/lote.test.ts — debe crearse siguiendo el patrón de compras.test.ts"
+    ],
+    "evidencia": [
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model Lote",
+        "lineas": "60-68",
+        "explicacion": "Modelo Prisma de Lote con campos: id, fecha, productoId, cantidadProducida (Int), costoMateriaPrimaTotal (Float), costoMateriaPrimaUnitario (Float). Relación belongsTo con Producto. La base sobre la que se construye el módulo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "loteRouter",
+        "lineas": "1-5",
+        "explicacion": "Router tRPC del módulo Producción — está vacío (createTRPCRouter({})). Es el punto de entrada donde deben agregarse los procedures create y list para lotes.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "lote: loteRouter",
+        "lineas": "14",
+        "explicacion": "El router loteRouter ya está registrado en appRouter. Solo falta implementar los procedures en lote.ts.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model RecetaItem",
+        "lineas": "50-57",
+        "explicacion": "Modelo RecetaItem con cantidadPorUnidad (Float) e insumoId. Define los 3 ingredientes fijos (paleta 24g, queso 34g, tapa 1u) que se usan para calcular costoMateriaPrimaTotal del lote.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "receta",
+        "lineas": "23-37",
+        "explicacion": "Seed que crea las 3 filas de RecetaItem con ids fijos ('receta-insumo-paleta', etc.). Necesario para que el cálculo de descuento de stock en lote tenga datos contra qué correr.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "8-38",
+        "explicacion": "[NO VERIFICADO] Patrón de referencia para implementar loteRouter.create: input con Zod, mutation que usa ctx.db.$transaction para operaciones atómicas (crear registro + actualizar insumo con increment de stock).",
+        "confianza": 0
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "8-9",
+        "explicacion": "Todos los procedures del repo usan publicProcedure (sin auth). El módulo Producción debe seguir el mismo patrón por consistencia — la auth se decide después (ver SESSION-HANDOFF.md gotcha #8).",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/compras.ts",
+        "simbolo": "calcularCostoUnitario",
+        "lineas": "4-6",
+        "explicacion": "Ejemplo de función utilitaria pura en src/lib/. Para Producción se necesita crear src/lib/lotes.ts con funciones como calcularCostoMateriaPrimaLote(recetaItems, productoId) y descontarStockInsumos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/produccion/page.tsx",
+        "simbolo": "ProduccionPage",
+        "lineas": "1-6",
+        "explicacion": "Página placeholder del módulo Producción. Debe implementarse siguiendo el patrón de src/app/compras/page.tsx: 'use client', formulario con cantidadProducida, select de producto, fecha, y mutate de lote.create.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "createMutation",
+        "lineas": "18-25",
+        "explicacion": "Patrón de mutation con invalidación: onSuccess invalida compra.list e insumo.list. Para Producción se debe invalidar lote.list y también insumo.list (por el descuento de stock).",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/compras.test.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "34-64",
+        "explicacion": "Patrón de test para router con createCallerFactory + mock de db. Para Producción se debe crear src/__tests__/lote.test.ts testeando que el descuento de stock use Prisma increment con valores negativos.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Lote (producción)",
+        "lineas": "64-65",
+        "explicacion": "[NO VERIFICADO] Spec del modelo Lote: 'al guardar: descuenta stock de cada insumo (cantidadPorUnidad × cantidadProducida)'. Define comportamiento esperado del módulo.",
+        "confianza": 0
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "F-0015",
+        "lineas": "42-44",
+        "explicacion": "Hoja de ruta: después de F-0014 (Insumos/Stock) viene F-0015 (Producción). El módulo es el próximo a implementar tras mergear la branch actual.",
+        "confianza": 1
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "react-hooks/set-state-in-effect",
+        "lineas": "83-86",
+        "explicacion": "Gotcha activo: lint de Next 16 prohíbe useEffect(() => setState(prop), [prop]). Si Producción necesita un editor inline (ej: cantidad producida editable post-creación), usar key={...} para remount.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tres-saltenas es una app Next.js 16 App Router + tRPC v11 + Prisma 5.x para costeo de empanadas. El módulo Producción por lote (F-0015) es el próximo a implementar: el modelo Lote ya existe en schema, el router loteRouter ya está registrado en appRouter pero vacío, y la página /produccion es un placeholder. El módulo debe implementar: (1) un procedure lote.create que reciba cantidadProducida, calcule costoMateriaPrimaTotal = Σ(RecetaItem.cantidadPorUnidad × Insumo.costoUnitarioActual) × cantidadProducida, descuente stock de cada insumo en una transacción Prisma, y cree el Lote; (2) un procedure lote.list para historial; y (3) la UI en src/app/produccion/page.tsx siguiendo el patrón mobile-first de Compras. Riesgos clave: conversión gramos↔kg (receta en gramos, stock en kg), prohibición de useEffect para sincronizar estado, y auth no implementada (todos los procedures son públicos)."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: 3 Salteñas — Módulo Producción por lote",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/root.ts",
+      "src/app/produccion/page.tsx",
+      "src/lib/compras.ts",
+      "src/lib/db.ts",
+      "src/trpc/react.tsx",
+      "src/server/api/trpc.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/insumo.ts",
+      "prisma/seed.ts",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "createTRPCRouter({}) + publicProcedure.input(z.object({...})).mutation() con $transaction para operaciones atómicas que descuentan stock (ver compraRouter.create)",
+      "publicProcedure.query() para listar lotes con include: { producto: ... }",
+      "trpc.useQuery() y trpc.useMutation() + useUtils().lote.list.invalidate() en el frontend",
+      "parseLocalDate() para input type=date (bug de timezone documentado en compras/page.tsx)"
+    ],
+    "dependencias": [
+      "@prisma/client (modelo Lote ya definido)",
+      "zod (validación de input)",
+      "@trpc/server / @trpc/react-query / @trpc/client (RPC tipado)",
+      "@tanstack/react-query (caching e invalidación)",
+      "superjson (transformer de fechas/decimales)",
+      "prisma/seed.ts (datos de receta fija para calcular costo del lote)"
+    ],
+    "riesgos": [
+      "loteRouter en src/server/api/routers/lote.ts está completamente vacío — hay que implementar create y list desde cero",
+      "La página de producción (src/app/produccion/page.tsx) es un placeholder sin UI ni hooks",
+      "No existe un helper que calcule costoMateriaPrima a partir de RecetaItem + costoUnitarioActual de cada insumo; hay que crearlo",
+      "Al crear un lote hay que descontar stock de cada insumo usando cantidadPorUnidad × cantidadProducida (transacción atómica que abarca Lote.create + múltiples Insumo.update)",
+      "El modelo RecetaItem no tiene router propio ni página implementada (recetas/page.tsx también es placeholder)",
+      "Los costos unitarios de insumos arrancan en 0 hasta que Dani cargue su primera compra — comportamiento esperado según SPEC-MVP.md §5 pero la UI debe manejarlo",
+      "No se verificaron tests unitarios para el módulo de producción [NO VERIFICADO]"
+    ],
+    "evidencia": [
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model Lote",
+        "lineas": "61-69",
+        "explicacion": "Modelo Prisma completo para producción por lote: id, fecha, productoId, producto (relación), cantidadProducida, costoMateriaPrimaTotal, costoMateriaPrimaUnitario. Ya incluye los campos calculados que debe llenar la mutación.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model RecetaItem",
+        "lineas": "50-55",
+        "explicacion": "Relación receta: vincula Producto con Insumo y cantidadPorUnidad. Necesario para calcular costoMateriaPrima de un lote iterando los RecetaItem del producto.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "costoMateriaPrimaTotal",
+        "lineas": "66",
+        "explicacion": "Campo Float en modelo Lote que se calcula al crear el lote como Σ(cantidadPorUnidad × costoUnitarioActual) × cantidadProducida.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "loteRouter",
+        "lineas": "3-4",
+        "explicacion": "Router tRPC vacío para el módulo Producción. Ya está importado y registrado en root.ts como 'lote'. Punto de entrada para implementar los endpoints create y list.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "lote: loteRouter",
+        "lineas": "14",
+        "explicacion": "Registro del loteRouter en el appRouter. Ya conectado, solo falta implementar los procedimientos dentro del router.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "9-49",
+        "explicacion": "[NO VERIFICADO] Patrón de referencia para implementar loteRouter.create: publicProcedure.input(z.object({...})).mutation() con ctx.db.$transaction para operaciones atómicas (crear lote + descontar stock de múltiples insumos).",
+        "confianza": 0
+      },
+      {
+        "path": "src/lib/compras.ts",
+        "simbolo": "calcularCostoUnitario",
+        "lineas": "3-4",
+        "explicacion": "Helper disponible para cálculos de costo unitario. Aunque está orientado a compras, la lógica de división precioTotal/cantidad es reusable conceptualmente (el módulo lote tendrá su propio cálculo de costo materia prima).",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Lote",
+        "lineas": "64-65",
+        "explicacion": "Spec detallado del módulo: 'al guardar: descuenta stock de cada insumo (cantidadPorUnidad × cantidadProducida)'. Especifica el comportamiento exacto esperado para la mutación.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "receta",
+        "lineas": "23-27",
+        "explicacion": "Receta fija del negocio (paleta 24g, queso 34g, tapa 1u) que el módulo producción debe consultar para calcular costo de materia prima de cada lote.",
+        "confianza": 1
+      },
+      {
+        "path": "src/trpc/react.tsx",
+        "simbolo": "trpc",
+        "lineas": "11",
+        "explicacion": "Hook tRPC tipado con AppRouter. El frontend usará trpc.lote.create.useMutation() y trpc.lote.list.useQuery() para interactuar con el módulo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "15",
+        "explicacion": "Procedimiento público base de tRPC que debe usar loteRouter. Se inyecta ctx.db (Prisma) automáticamente.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/produccion/page.tsx",
+        "simbolo": "ProduccionPage",
+        "lineas": "1-6",
+        "explicacion": "Página placeholder del módulo Producción. Sin implementación. Deberá contener el formulario 'hoy hice X' y el listado de lotes históricos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/db.ts",
+        "simbolo": "db",
+        "lineas": "1-6",
+        "explicacion": "Cliente Prisma singleton global que ctx.db expone en los procedimientos tRPC. Se usa para consultar RecetaItem, Insumo y crear Lote.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "insumoRouter.list",
+        "lineas": "7-19",
+        "explicacion": "[NO VERIFICADO] Patrón de query simple que el módulo lote debe replicar (lote.list) para devolver lotes ordenados por fecha con include del producto.",
+        "confianza": 0
+      }
+    ],
+    "resumen": "El módulo Producción por lote tiene el modelo de datos completo (model Lote en schema.prisma), el router tRPC ya registrado (loteRouter en root.ts) pero vacío, y la página placeholder (produccion/page.tsx). El implementador debe crear un procedimiento create que reciba productoId y cantidadProducida, consulte la receta (RecetaItem) y los costos actuales de insumos (Insumo.costoUnitarioActual), calcule costoMateriaPrimaTotal y costoMateriaPrimaUnitario, descuente stock de cada insumo en una transacción atómica, y persista el Lote. También debe implementar lote.list y la UI del formulario siguiendo el patrón del módulo Compras. No existe ningún helper pre-armado para el cálculo de costo de materia prima a partir de receta — habrá que crearlo."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: 3 Salteñas — Módulo Producción por lote",
+    "archivos": [
+      "src/server/api/routers/lote.ts",
+      "src/app/produccion/page.tsx",
+      "prisma/schema.prisma",
+      "src/server/api/routers/compra.ts",
+      "src/lib/compras.ts",
+      "src/__tests__/compras.test.ts",
+      "src/lib/insumos.ts",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/app/compras/page.tsx",
+      "SESSION-HANDOFF.md",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "ctx.db.$transaction(async (tx) => { ... }) para atomicidad (crear lote + decrementar stock de cada insumo)",
+      "publicProcedure para procedures sin autenticación (consistente con compra, insumo — salvo decisión explícita de auth)",
+      "key={`${id}:${valor}`} para forzar remount en vez de useEffect(() => setState(prop), [prop]) — evita react-hooks/set-state-in-effect",
+      "increment/update en Prisma para mutar stockActual (en lote usar { decrement: cantidad } o { increment: -cantidad })",
+      "Zod input schema con .positive() y .min(1) para validación de entrada",
+      "invalidate de queries relacionadas tras mutación (onSuccess: utils.lote.list.invalidate() + utils.insumo.list.invalidate())"
+    ],
+    "dependencias": [
+      "@prisma/client (Prisma ^5.22.0)",
+      "@trpc/server (v11.18.0)",
+      "@trpc/client (v11.18.0)",
+      "@trpc/react-query (v11.18.0)",
+      "zod (^4.4.3)",
+      "superjson (^2.2.6)",
+      "@tanstack/react-query (^5.101.2)",
+      "next (16.2.10)"
+    ],
+    "riesgos": [
+      "El router `loteRouter` y la page `/produccion` son placeholders vacíos — todo el módulo está por construir (riesgo de estimación)",
+      "No existe un router ni lib para `RecetaItem` — el cálculo de costoMateriaPrimaTotal requiere consultar la receta (cantidadPorUnidad × cantidadProducida × costoUnitarioActual) y no hay procedimiento tRPC ni función auxiliar que exponga esos datos",
+      "El patrón de `decrement` de stock no existe en el código base — solo se usa `increment` en compraRouter. Si se usa `{ decrement: cantidad }`, hay que verificar que Prisma 5 lo soporte; alternativa: `{ increment: -cantidad }` que sí está verificado",
+      "`costoUnitarioActual` de los insumos arranca en $0 y se completa solo cuando Dani carga compras — el costo del lote será $0 hasta entonces (comportamiento esperado según SPEC-MVP.md §5, pero riesgo de confusión si no se comunica en UI)",
+      "eslint `react-hooks/set-state-in-effect` de Next.js 16 puede romper el CI si la UI de producción usa el patrón useEffect+setState para sincronizar formularios (SESSION-HANDOFF.md gotcha #10)",
+      "El ejecutor de augusto-os tiene tendencia a colar auth global en middleware.ts sin que se lo pidan (SESSION-HANDOFF.md gotcha #8) — riesgo de romper webhooks/server-side calls si se agrega auth.protect() sin revisión explícita",
+      "Tests del módulo deben mockear `db.$transaction` siguiendo el patrón de compras.test.ts — riesgo si no se replica la cobertura del decremento de stock y cálculo de costos",
+      "La page `/produccion` debe ser `\"use client\"` (como compras/page.tsx e insumos/page.tsx) para usar hooks de tRPC — si se omite, los hooks no funcionan",
+      "Riesgo de push automático a `main` sin deploy real detrás (SESSION-HANDOFF.md gotcha #9): el pipeline puede mergear y pushear antes de que se verifique que no rompe nada",
+      "No hay procedimiento `recetaItem.list` ni `producto.list` en los routers — el lote necesita traer la receta del producto para calcular costos, y eso requiere crear/queries adicionales"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "loteRouter",
+        "lineas": "1-3",
+        "explicacion": "Router completamente vacío — solo tiene createTRPCRouter({}). Todo el módulo (create, list, cálculo de costos) está por implementar.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/produccion/page.tsx",
+        "simbolo": "ProduccionPage",
+        "lineas": "1-6",
+        "explicacion": "Placeholder de página — muestra texto 'Módulo pendiente'. No hay UI de carga de lotes ni listado. Debe convertirse a `\"use client\"` y seguir el patrón de ComprasPage.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Lote",
+        "lineas": "54-62",
+        "explicacion": "Modelo Lote ya definido en schema con todos los campos necesarios: fecha, productoId, cantidadProducida, costoMateriaPrimaTotal, costoMateriaPrimaUnitario. No requiere migración, pero se debe verificar que esté en la BD (prisma db push ya corrido).",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "RecetaItem",
+        "lineas": "33-39",
+        "explicacion": "Modelo RecetaItem contiene cantidadPorUnidad por insumo — necesario para calcular cuánto descontar de stock al producir. No tiene router tRPC ni función lib expuesta; la lote debe consultarlo directamente o crearlo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "8-38",
+        "explicacion": "[NO VERIFICADO] Patrón de referencia para loteRouter.create: usa ctx.db.$transaction, actualiza stock con { increment: cantidad }, recibe input con Zod, y valida con .positive(). El lote debe replicar este patrón pero con decremento de stock y cálculo de costoMateriaPrimaTotal.",
+        "confianza": 0
+      },
+      {
+        "path": "src/lib/compras.ts",
+        "simbolo": "calcularCostoUnitario",
+        "lineas": "1-6",
+        "explicacion": "Función pura existente para calcular costo unitario (precioTotal/cantidad). El módulo lote requiere una función análoga (ej. calcularCostoLote) en una nueva lib como src/lib/produccion.ts.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/compras.test.ts",
+        "simbolo": "buildMockDb",
+        "lineas": "30-39",
+        "explicacion": "Patrón de mock para tests del router: buildMockDb crea mocks de $transaction, compra.create, insumo.update. El lote necesita un mock similar que verifique decremento de stock y cálculo de costoMateriaPrimaTotal.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "10-19",
+        "explicacion": "Router raíz que registra loteRouter. Al agregar procedures a loteRouter, el tipo AppRouter se infiere automáticamente — no requiere cambios manuales a root.ts salvo que se agregue un nuevo subrouter.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Insumo.stockActual",
+        "lineas": "11-11",
+        "explicacion": "[NO VERIFICADO] Campo stockActual de Insumo (Float). Es el que se debe decrementar al producir un lote. Actualmente solo se incrementa (compraRouter). El decremento debe asegurar que no quede negativo — validación adicional necesaria.",
+        "confianza": 0
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "react-hooks/set-state-in-effect",
+        "lineas": "50-50",
+        "explicacion": "Gotcha #10: eslint de Next.js 16 prohíbe useEffect(() => setState(prop), [prop]). Si la UI de Producción necesita sincronizar estado local con datos del server, debe usar key={...} para remount en vez de un efecto. Aplica a formularios editables.",
+        "confianza": 1
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "middleware.ts",
+        "lineas": "48-50",
+        "explicacion": "Gotcha #8: el ejecutor tiende a agregar auth.protect() en middleware.ts sin que se lo pidan. Riesgo de que loteRouter (hoy publicProcedure) herede restricciones de auth no pedidas explícitamente.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "costoMateriaPrima",
+        "lineas": "46-50",
+        "explicacion": "Fórmula de costeo: costoMateriaPrima = Σ (cantidadPorUnidad_insumo × costoUnitarioActual_insumo). El lote debe calcular costoMateriaPrimaTotal = cantidadProducida × costoMateriaPrima (unitario) y guardar ambos en el modelo Lote.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El módulo Producción por lote (F-0015) está completamente por construir: tanto `loteRouter` como la página `/produccion` son placeholders vacíos. El modelo `Lote` y `RecetaItem` ya existen en Prisma, pero no hay funciones lib ni queries expuestas para consultar la receta — riesgo de coupling. El patrón de `compraRouter.create` (transacción atómica con $transaction, increment de stock, validación Zod) es la referencia obligada, pero el lote requiere la operación inversa (decremento de stock) que no existe en el código base. Además, se deben respetar las restricciones de eslint de Next.js 16 (no usar useEffect+setState sincronizador) y evitar que el pipeline agregue auth no solicitado en middleware.ts."
+  }
+]

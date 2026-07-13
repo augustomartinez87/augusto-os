@@ -46,7 +46,12 @@ export function parseAdrBlocks(output: string): AdrDraft[] {
   return blocks
 }
 
-export function appendAdr(draft: AdrDraft, featureId: string, stepId: number, filePath?: string): number {
+export function appendAdr(draft: AdrDraft, featureId: string, stepId: number, filePath?: string): number | null {
+  if (!draft.titulo.trim() && !draft.decision.trim()) {
+    console.warn(`[adr] Bloque ADR vacío descartado (feature ${featureId}, step ${stepId}) — no se quema ID`)
+    return null
+  }
+
   const p = filePath ?? DECISIONS_PATH
   const content = existsSync(p) ? readFileSync(p, 'utf-8') : ''
 

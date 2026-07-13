@@ -1,0 +1,290 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Argos mobile — Ojo de censura y settings en el MobileHeader",
+    "archivos": [
+      "src/components/common/MobileHeader.jsx",
+      "SPEC-mobile-overview-redesign.md",
+      "src/hooks/useBalanceVisibility.js",
+      "src/components/ui/MoneyValue.jsx",
+      "src/components/common/MobileNav.jsx",
+      "src/config/navigation.js",
+      "src/features/portfolio/components/PortfolioHeroChart.jsx",
+      "src/features/portfolio/components/AllocationPanel.jsx",
+      "src/features/portfolio/components/MobilePositionsList.jsx",
+      "src/components/ui/Sparkline.jsx",
+      "src/components/ui/index.js",
+      "package.json",
+      "src/components/layout/AppLayout.jsx"
+    ],
+    "patrones": [
+      "useBalanceVisibility hook: retorna [hidden, toggle] usando localStorage + StorageEvent para sincronización cross-component sin Context",
+      "MoneyValue component: wrappea cualquier valor monetario con censura automática; exporta maskMoney() helper para contextos sin JSX",
+      "MobileHeader: fixed top-0 left-0 right-0 z-50 con paddingTop por safe-area, dos rows (avatar/logo/spacer y pill de cuenta/ARS|USD toggle)",
+      "CSS variables del design system: --teal, --teal-dim, --ink, --ink-mute, --ink-faint, --border, --surface-*, todas referenciadas en spec como invariantes",
+      "Iconos de lucide-react: Eye, EyeOff, Settings, usados consistentemente en todo el proyecto",
+      "Auth context: useAuth() expone isAdmin y allowedModules para gates de permisos",
+      "Touch targets >= 44px (min-h-[44px]) en todos los componentes mobile"
+    ],
+    "dependencias": [
+      "react@^18.2.0",
+      "react-router-dom@^6.20.0",
+      "lucide-react@^0.263.1 (Eye, EyeOff, Settings)",
+      "recharts@^2.10.0",
+      "tailwindcss@^3.3.2",
+      "@supabase/supabase-js@^2.39.0 (backend)",
+      "@tanstack/react-query@^5.90.19"
+    ],
+    "riesgos": [
+      "El ojo de censura actualmente vive en PortfolioHeroChart.jsx — hay que removerlo de allí al implementar M5 para evitar duplicación",
+      "Settings debe navegar a /sistema/administracion solo si el usuario tiene acceso (isAdmin gate de useAuth); si no, ocultar el icono",
+      "El centrado del logo en Row 1 depende del spacer derecho que compensa el avatar izquierdo — al agregar ojo+settings hay que recalcular ese spacer para no romper el centrado",
+      "No agregar campana de notificaciones: el sistema de notificaciones no existe y un icono muerto es deuda de UX según SPEC M5",
+      "Todo valor monetario debe pasar por MoneyValue o maskMoney — ningún renderizado de montos crudos fuera de esos wrappers",
+      "Cada módulo debe compilar sin romper la variante desktop (todo dentro de bloques md:hidden ya existentes)"
+    ],
+    "evidencia": [
+      {
+        "path": "src/components/common/MobileHeader.jsx",
+        "simbolo": "MobileHeader",
+        "lineas": "7-93",
+        "explicacion": "Componente target a modificar: actualmente tiene avatar, logo centrado y spacer vacío a la derecha en Row 1. Según M5 de la SPEC, hay que reemplazar el spacer por ojo (Eye/EyeOff con useBalanceVisibility) y settings (Settings con navegación a /sistema/administracion, gateado por isAdmin).",
+        "confianza": 1
+      },
+      {
+        "path": "src/hooks/useBalanceVisibility.js",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "10-34",
+        "explicacion": "Hook central de censura. Retorna [hidden, toggle] sincronizado vía localStorage + StorageEvent. El ojo en MobileHeader debe usar este mismo hook para mantener coherencia con el resto de la app (ya usado en PortfolioHeroChart, MoneyValue, AllocationPanel, MobilePositionsList).",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/ui/MoneyValue.jsx",
+        "simbolo": "MoneyValue",
+        "lineas": "13-20",
+        "explicacion": "Componente que oculta automáticamente el children cuando balanceHidden=true. Invariante: ningún valor monetario debe renderizarse sin pasar por MoneyValue o maskMoney.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/ui/MoneyValue.jsx",
+        "simbolo": "maskMoney",
+        "lineas": "7-9",
+        "explicacion": "Helper puro para formatear strings ocultos en contextos no-JSX (props, strings). Usado en conjunto con MoneyValue.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "11",
+        "explicacion": "Import actual del hook de censura en el hero chart. Al implementar M5/M2, el ojo debe quitarse de aquí y moverse al MobileHeader. El hook ya está importado y usado (toggleBalance).",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "Eye",
+        "lineas": "3",
+        "explicacion": "Import de Eye/EyeOff desde lucide-react en el hero chart actual. Estos iconos deben migrarse al MobileHeader cuando se implemente M5.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-mobile-overview-redesign.md",
+        "simbolo": "M5 — Header: ojo + settings",
+        "lineas": "81-94",
+        "explicacion": "Especificación detallada de M5: Row 1 pasa a avatar · logo · [ojo, settings]; ojo usa useBalanceVisibility con Eye/EyeOff (44px target); settings navega a /sistema/administracion con gate isAdmin; no agregar campana de notificaciones.",
+        "confianza": 1
+      },
+      {
+        "path": "src/config/navigation.js",
+        "simbolo": "/sistema/administracion",
+        "lineas": "60",
+        "explicacion": "Ruta de admin configurada en NAV_SECTIONS con adminOnly: true. El ícono Settings en MobileHeader debe navegar aquí y ocultarse si !isAdmin.",
+        "confianza": 1
+      },
+      {
+        "path": "src/config/navigation.js",
+        "simbolo": "adminOnly",
+        "lineas": "43",
+        "explicacion": "Patrón de permisos: módulos con adminOnly:true requieren isAdmin=true. Misma lógica debe aplicarse al botón Settings en MobileHeader.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/common/MobileNav.jsx",
+        "simbolo": "isAdmin",
+        "lineas": "5",
+        "explicacion": "Ejemplo de uso de isAdmin desde useAuth() para filtrar navegación. Mismo patrón debe usar MobileHeader para gatear el botón Settings.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/layout/AppLayout.jsx",
+        "simbolo": "MobileHeader",
+        "lineas": "30-31",
+        "explicacion": "MobileHeader se renderiza en AppLayout justo después del Topbar. Cualquier cambio en MobileHeader afecta todas las rutas mobile.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "lucide-react",
+        "lineas": "19",
+        "explicacion": "lucide-react@^0.263.1 ya está instalado. Proporciona Eye, EyeOff y Settings - los tres iconos necesarios para M5.",
+        "confianza": 1
+      },
+      {
+        "path": "spec-mobile-overview-redesign.md",
+        "simbolo": "Invariantes",
+        "lineas": "29-34",
+        "explicacion": "Reglas no negociables: censura via MoneyValue/useBalanceVisibility/maskMoney; tokens CSS existentes; touch targets ≥44px; recharts con isAnimationActive=false; todo dentro de md:hidden.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tiene una estructura React + Vite + TailwindCSS con un design system basado en CSS variables (--teal, --ink, --border, etc.). El MobileHeader actual (src/components/common/MobileHeader.jsx) tiene dos rows: avatar/logo/spacer y selector de cuenta/ARS|USD. Para implementar M5 (ojo de censura + settings), se debe reemplazar el spacer derecho por un botón Eye/EyeOff que use el hook useBalanceVisibility (src/hooks/useBalanceVisibility.js) y un botón Settings que navegue a /sistema/administracion con gate isAdmin. El ojo actualmente vive en PortfolioHeroChart.jsx y debe removerse de allí. Todas las dependencias (lucide-react, react-router-dom) ya están instaladas y los patrones de censura (MoneyValue, maskMoney) están definidos y en uso en toda la app."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: Argos mobile — Ojo de censura y settings en el MobileHeader",
+    "archivos": [
+      "src/components/common/MobileHeader.jsx",
+      "src/components/layout/Topbar.jsx",
+      "src/hooks/useBalanceVisibility.js",
+      "src/components/layout/AppLayout.jsx",
+      "src/components/layout/Sidebar.jsx"
+    ],
+    "patrones": [
+      "Usar el hook useBalanceVisibility() que retorna [hidden, toggle] para controlar la visibilidad de saldos",
+      "Importar Eye/EyeOff de 'lucide-react' para el ícono del ojo (mismo patrón que Topbar)",
+      "Agregar el botón 'ojo' en MobileHeader siguiendo el estilo del currency toggle existente",
+      "Agregar un botón de settings (ícono Settings de lucide-react) en la misma fila que el avatar y logo",
+      "Usar localStorage key 'balanceHidden' para persistencia (ya gestionada por useBalanceVisibility)"
+    ],
+    "dependencias": [
+      "lucide-react (Eye, EyeOff, Settings)",
+      "react-router-dom (Link para settings route)",
+      "react (useContext, hooks)"
+    ],
+    "riesgos": [
+      "MobileHeader no tiene actualmente imports de useBalanceVisibility ni de lucide-react — hay que agregarlos",
+      "La ruta de destino para el botón 'Settings' no fue verificada; Sidebar usa Settings como ícono de navegación pero no encontré la ruta exacta de la página de settings [NO VERIFICADO]",
+      "El espacio en MobileHeader es limitado (fila de 3 elementos: avatar, logo, spacer) — habrá que reorganizar o agregar una fila extra",
+      "El hook useBalanceVisibility usa localStorage + StorageEvent para sincronización cross-tab, no depende de Context — funcionará tanto en mobile como desktop"
+    ],
+    "evidencia": [
+      {
+        "path": "src/components/common/MobileHeader.jsx",
+        "simbolo": "MobileHeader",
+        "lineas": "1-75",
+        "explicacion": "Componente target a modificar. Actualmente renderiza avatar, logo, portfolio selector y toggle ARS/USD. Falta el botón 'ojo' de censura de saldos y el botón de settings.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/layout/Topbar.jsx",
+        "simbolo": "Topbar",
+        "lineas": "57-72",
+        "explicacion": "Implementación de referencia del 'ojo de censura' en desktop: importa Eye/EyeOff de lucide-react, usa useBalanceVisibility() y renderiza un button con toggle. El implementador debe replicar este patrón en MobileHeader.",
+        "confianza": 1
+      },
+      {
+        "path": "src/hooks/useBalanceVisibility.js",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "1-28",
+        "explicacion": "Hook compartido que retorna [hidden, toggle] usando localStorage con key 'balanceHidden'. Ya existe y debe ser reutilizado directamente desde MobileHeader. No requiere Context.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/layout/AppLayout.jsx",
+        "simbolo": "MobileHeader",
+        "lineas": "32",
+        "explicacion": "AppLayout renderiza MobileHeader. No se necesitan cambios aquí, pero confirma que MobileHeader recibe children y se renderiza con className 'md:hidden'.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/layout/Sidebar.jsx",
+        "simbolo": "Settings",
+        "lineas": "2",
+        "explicacion": "Sidebar importa Settings de lucide-react como ícono de navegación. Sugiere que existe una ruta de settings (probablemente /admin/settings o similar) pero no fue verificada en esta investigación.",
+        "confianza": 0.7
+      }
+    ],
+    "resumen": "El MobileHeader actual no incluye ni el botón 'ojo' para ocultar/mostrar saldos ni el botón de settings. El hook useBalanceVisibility (src/hooks/useBalanceVisibility.js) y el patrón de uso con Eye/EyeOff de lucide-react ya existen en Topbar (desktop) y deben replicarse en MobileHeader. El implementador debe agregar los imports faltantes, incorporar el botón toggle de visibilidad siguiendo el estilo del currency toggle existente, y agregar un botón Settings (con ícono de lucide-react) en la primera fila del MobileHeader, probablemente reemplazando el spacer o agregando una fila adicional. La ruta de destino del botón Settings no fue confirmada."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Argos mobile — Ojo de censura y settings en el MobileHeader",
+    "archivos": [
+      "src/components/common/MobileHeader.jsx",
+      "src/features/portfolio/components/PortfolioHeroChart.jsx",
+      "src/hooks/useBalanceVisibility.js",
+      "src/config/navigation.js",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/components/common/MobileNav.jsx"
+    ],
+    "patrones": [
+      "usar `useBalanceVisibility()` (retorna `[hidden, toggle]`) para el estado del ojo",
+      "importar `Eye`/`EyeOff` desde `lucide-react` para íconos del ojo",
+      "importar `Settings` desde `lucide-react` para el icono de ajustes",
+      "gatear el icono Settings con `isAdmin` desde `useAuth()` — si !isAdmin, no renderizar",
+      "target táctil mínimo de 44×44px en ambos botones (ojo y settings)",
+      "mantener el logo centrado usando un layout de 3 columnas flex: avatar | logo centrado absoluto | grupo(ojo+settings) con ancho equivalente al avatar"
+    ],
+    "dependencias": [
+      "lucide-react (Eye, EyeOff, Settings)",
+      "react-router-dom (navigate para el link de settings a /sistema/administracion)"
+    ],
+    "riesgos": [
+      "El logo centrado (absolute left-1/2 -translate-x-1/2) se desalineará al reemplazar el spacer `w-8 h-8` por ojo+settings — requiere recalcular el balance visual del lado derecho",
+      "El ojo actual vive en PortfolioHeroChart.jsx (líneas 154-162) como botón absoluto top-right; al moverlo a MobileHeader hay que eliminarlo de allí para evitar duplicación y confusión",
+      "El estado `balanceHidden` usa localStorage + StorageEvent (sin Context), lo que garantiza sincronización entre componentes, pero si durante la migración ambos componentes montan el hook simultáneamente no habrá conflicto — verificar que no haya doble dispatch",
+      "El ícono Settings requiere gateo de permisos admin (`isAdmin` desde `useAuth()`); MobileHeader ya importa `useAuth` — riesgo bajo pero hay que condicionar correctamente",
+      "No existen tests unitarios para MobileHeader, useBalanceVisibility ni para el ojo en PortfolioHeroChart — riesgo de regresión visual no detectada",
+      "El spacer derecho actual (`w-8 h-8`) es un div vacío que mantiene el centrado del logo; al reemplazarlo por dos botones (ojo+settings) de ~44px cada uno, el logo se desplazará hacia la izquierda si no se ajusta el layout",
+      "La navegación a `/sistema/administracion` desde Settings requiere que la ruta exista y sea accesible — ya existe en NAV_SECTIONS con adminOnly: true (confirmado en navigation.js)"
+    ],
+    "evidencia": [
+      {
+        "path": "src/components/common/MobileHeader.jsx",
+        "simbolo": "MobileHeader",
+        "lineas": "1-83",
+        "explicacion": "Componente target de la migración. Actualmente no tiene ojo ni settings. La Row 1 tiene avatar + logo centrado (absolute left-1/2) + spacer w-8 h-8. El spacer debe reemplazarse por ojo+settings y recalcular el centrado del logo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "7",
+        "explicacion": "El hook useBalanceVisibility se importa y usa en PortfolioHeroChart. El ojo actual está en el bloque mobileEl (líneas 154-162) como botón absoluto. Debe eliminarse de aquí al migrar al MobileHeader.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "toggleBalance",
+        "lineas": "156",
+        "explicacion": "El toggle del ojo se dispara con `toggleBalance` obtenido de `useBalanceVisibility()`. Es la misma función que debe usarse en MobileHeader. El estado se sincroniza vía localStorage+StorageEvent.",
+        "confianza": 1
+      },
+      {
+        "path": "src/hooks/useBalanceVisibility.js",
+        "simbolo": "useBalanceVisibility",
+        "lineas": "1-27",
+        "explicacion": "Hook compartido para mostrar/ocultar saldos. Usa localStorage + StorageEvent manual para sincronizar todas las instancias del hook. No usa Context. Retorna [hidden, toggle]. Es la API correcta para el ojo en MobileHeader.",
+        "confianza": 1
+      },
+      {
+        "path": "src/config/navigation.js",
+        "simbolo": "NAV_SECTIONS",
+        "lineas": "34-35",
+        "explicacion": "La ruta `/sistema/administracion` existe con icono Settings y adminOnly: true. Es el destino del botón Settings en el header. El gateo de permisos debe usar isAdmin desde useAuth(), mismo criterio que el sidebar.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/common/MobileHeader.jsx",
+        "simbolo": "useAuth",
+        "lineas": "4",
+        "explicacion": "MobileHeader ya importa useAuth. Puede acceder a `isAdmin` para gatear el icono Settings. No necesita importación adicional para los permisos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/common/MobileNav.jsx",
+        "simbolo": "MobileNav",
+        "lineas": "25-31",
+        "explicacion": "PINNED incluye 4 ítems fijos en bottom nav. No tiene ojo ni settings. Referencia para verificar que no hay conflicto con el nuevo header.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "La migración del ojo de censura desde PortfolioHeroChart hacia MobileHeader requiere eliminar el botón ojo absoluto en el hero (líneas 154-162) y agregarlo en MobileHeader junto con un nuevo botón Settings (gateado por isAdmin). El riesgo principal es la desalineación del logo centrado al reemplazar el spacer derecho por dos botones de ~44px. No hay tests que cubran estos componentes, aumentando el riesgo de regresión visual. El hook useBalanceVisibility ya sincroniza correctamente el estado entre componentes mediante localStorage+StorageEvent. El icono Settings debe navegar a /sistema/administracion solo para usuarios admin, usando isAdmin desde useAuth (ya disponible en MobileHeader)."
+  }
+]

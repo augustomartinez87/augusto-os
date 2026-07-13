@@ -1,4 +1,4 @@
-mode: OFFICE        # PRODUCT | OFFICE | SLEEP
+mode: PRODUCT        # PRODUCT | OFFICE | SLEEP
 available_for_questions: true
 response_style: normal   # normal | short
 

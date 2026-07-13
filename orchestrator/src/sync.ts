@@ -211,7 +211,13 @@ async function pullOperatorState(): Promise<void> {
 }
 
 // Parsea system/BACKLOG.md (tablas markdown por sección) → filas para orch_backlog.
-function parseBacklog(): unknown[] {
+// Formato esperado por fila: | ID | P | Descripción | Estado | Ejecutor |  → 7 celdas tras split('|')
+// (celda vacía inicial + 5 columnas + celda vacía final). Si el conteo no cierra, la fila
+// tiene una celda de más/menos (típicamente un "|" de sobra metido a mano en Descripción/Estado)
+// y desplaza todo lo que sigue — mejor loguear y saltarla que subir datos corridos a Supabase.
+const BACKLOG_ROW_CELLS = 7
+
+export function parseBacklog(warn: (msg: string) => void = log): unknown[] {
   if (!existsSync(BACKLOG)) return []
   const rows: unknown[] = []
   let project = 'Sistema'
@@ -222,12 +228,15 @@ function parseBacklog(): unknown[] {
     if (c.length < 6) continue
     const id = c[1]
     if (!id || id === 'ID' || /^-+$/.test(id)) continue
+    if (c.length !== BACKLOG_ROW_CELLS) {
+      warn(`[sync] BACKLOG.md: fila ${id} tiene ${c.length} celdas (esperado ${BACKLOG_ROW_CELLS} = ID|P|Descripción|Estado|Ejecutor) — se salteó para no subir columnas corridas a orch_backlog. Revisar pipes "|" de más/menos en esa fila.`)
+      continue
+    }
     const desc = c[3]
     const bold = desc.match(/\*\*(.+?)\*\*/)
     let label = (bold ? bold[1] : desc).replace(/[*`]/g, '')
     label = label.split(/\s[—–-]\s| \(/)[0].trim().slice(0, 52)
-    // Ejecutor: c[5] en formato nuevo (7+ celdas), 'manual' por defecto en filas sin columna
-    const ejecutor = (c.length >= 7 ? c[5] : 'manual').trim() || 'manual'
+    const ejecutor = c[5].trim() || 'manual'
     rows.push({ item_id: id, project, priority: c[2], label, state: c[4], ejecutor, updated_at: new Date().toISOString() })
   }
   return rows
@@ -302,4 +311,9 @@ async function run(): Promise<void> {
   }
 }
 
-run().catch((e) => { console.error('[sync] fatal:', e); process.exit(1) })
+// Solo arranca el loop infinito si el archivo se ejecuta directamente (`npm run sync`),
+// nunca al importarlo (p.ej. desde un test que solo quiere `parseBacklog`).
+const isMain = !!process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+if (isMain) {
+  run().catch((e) => { console.error('[sync] fatal:', e); process.exit(1) })
+}

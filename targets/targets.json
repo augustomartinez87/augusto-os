@@ -13,7 +13,9 @@
       "_devSetupNote": "Sandbox = Neon kredy-dev (ep-old-union-aiylgeew). Si el sandbox quedó con tablas viejas del tracker, re-sincronizar: cd kredy && npx prisma db push contra la URL directa.",
       "prodDbPatterns": [
         "jymdblurkpadupdqzfzo",
-        "aws-0-us-west-2.pooler.supabase.com"
+        "aws-0-us-west-2.pooler.supabase.com",
+        "ep-patient-art-atxooul0.c-9.us-east-1.aws.neon.tech",
+        "ep-patient-art-atxooul0-pooler.c-9.us-east-1.aws.neon.tech"
       ]
     },
     "spensiv": {
@@ -43,6 +45,23 @@
       "_dbNote": "Sin Prisma. dbModel=none → el loop no exige dev DB ni inyecta DATABASE_URL; build/test (vite/vitest) no tocan la DB. Las features deben ser UI/lógica; nada que escriba contra la Supabase prod.",
       "prodDbPatterns": [
         "wwzocpcolgdzkvcigchj"
+      ]
+    },
+    "tres-saltenas": {
+      "path": "C:/Users/Augusto/Downloads/Proyectos/tres-saltenas",
+      "description": "3 Salteñas — costeo y gestión para el microemprendimiento de empanadas de Dani. Next.js/tRPC/Prisma. Augusto = backup/analista (PC), Dani = mano de obra que carga datos (celular). Spec: tres-saltenas/SPEC-MVP.md.",
+      "stack": "next+trpc+prisma",
+      "verifyCmd": "npx tsc --noEmit",
+      "lintCmd": "npx eslint . --ext .ts,.tsx --max-warnings 0",
+      "testCmd": "vitest run",
+      "qaBaseUrl": "http://localhost:3000",
+      "devDatabaseUrl": "${TRES_SALTENAS_DEV_DATABASE_URL}",
+      "devDirectUrl": "${TRES_SALTENAS_DEV_DATABASE_URL}",
+      "_devSetupNote": "Prod Neon 'tres-saltenas' creado 2026-07-08 (host ep-tiny-voice-atetw10j, PG18). Falta: crear branch/proyecto 'tres-saltenas-dev' (sandbox del loop) y completar devDatabaseUrl real.",
+      "prodDbPatterns": [
+        "ep-tiny-voice-atetw10j",
+        "ep-tiny-voice-atetw10j-pooler.c-9.us-east-1.aws.neon.tech",
+        "ep-tiny-voice-atetw10j.c-9.us-east-1.aws.neon.tech"
       ]
     },
     "sistema": {
