@@ -3,14 +3,14 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import {
-  getNextPendingStep, getBlockedStep, markStepStatus, archiveState,
+  getNextPendingStep, getBlockedStep, markStepStatus, archiveState, appendFailureHistory,
   type OrchestratorState, type Step,
 } from './state.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function makeStep(id: number, status: Step['status']): Step {
-  return { id, desc: `Step ${id}`, status, commit: null, sessionId: null, retries: 0, ui: false, adrIds: [], humanApproved: false }
+  return { id, desc: `Step ${id}`, status, commit: null, sessionId: null, retries: 0, ui: false, adrIds: [], humanApproved: false, failureHistory: [] }
 }
 
 function makeState(steps: Step[]): OrchestratorState {
@@ -110,6 +110,53 @@ describe('markStepStatus', () => {
   it('throws for an unknown step id', () => {
     const state = makeState([makeStep(1, 'pending')])
     expect(() => markStepStatus(state, 99, 'done', undefined, tmpStatePath)).toThrow('Step 99 not found')
+  })
+})
+
+// ── appendFailureHistory (S-039) ───────────────────────────────────────────────
+
+describe('appendFailureHistory', () => {
+  it('appends a single entry to an empty history', () => {
+    const state = makeState([makeStep(1, 'running')])
+    appendFailureHistory(state, 1, 'builder: TypeError', tmpStatePath)
+    expect(state.steps[0].failureHistory).toEqual(['builder: TypeError'])
+  })
+
+  it('accumulates entries across multiple failure types instead of overwriting', () => {
+    const state = makeState([makeStep(1, 'running')])
+    appendFailureHistory(state, 1, 'builder: fallo en intento 1', tmpStatePath)
+    appendFailureHistory(state, 1, 'verifier: tsc falla', tmpStatePath)
+    appendFailureHistory(state, 1, 'QA: screenshot no matchea', tmpStatePath)
+    appendFailureHistory(state, 1, 'reviewer: CHANGES_REQUESTED', tmpStatePath)
+    expect(state.steps[0].failureHistory).toEqual([
+      'builder: fallo en intento 1',
+      'verifier: tsc falla',
+      'QA: screenshot no matchea',
+      'reviewer: CHANGES_REQUESTED',
+    ])
+  })
+
+  it('caps the history to the last N entries', () => {
+    const state = makeState([makeStep(1, 'running')])
+    for (let i = 1; i <= 10; i++) {
+      appendFailureHistory(state, 1, `fallo ${i}`, tmpStatePath)
+    }
+    const history = state.steps[0].failureHistory!
+    expect(history.length).toBeLessThan(10)
+    expect(history[history.length - 1]).toBe('fallo 10')
+    expect(history).not.toContain('fallo 1')
+  })
+
+  it('truncates a single very long entry instead of blowing up the fixer context', () => {
+    const state = makeState([makeStep(1, 'running')])
+    const huge = 'x'.repeat(5000)
+    appendFailureHistory(state, 1, huge, tmpStatePath)
+    expect(state.steps[0].failureHistory![0].length).toBeLessThan(5000)
+  })
+
+  it('throws for an unknown step id', () => {
+    const state = makeState([makeStep(1, 'running')])
+    expect(() => appendFailureHistory(state, 99, 'x', tmpStatePath)).toThrow('Step 99 not found')
   })
 })
 

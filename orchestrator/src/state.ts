@@ -19,6 +19,11 @@ export const StepSchema = z.object({
   error: z.string().nullable().optional(),
   adrIds: z.array(z.number()).default([]),
   humanApproved: z.boolean().default(false),
+  // Historial de fallos reales (builder/verifier/QA/reviewer) acumulado a través de
+  // reintentos, para que el fixer (S-039) vea la secuencia completa, no solo el último
+  // error. Cap en appendFailureHistory — default([]) mantiene compatibilidad con STATE.json
+  // ya existentes en disco.
+  failureHistory: z.array(z.string()).default([]),
 })
 
 export const StateSchema = z.object({
@@ -53,7 +58,7 @@ export function saveState(state: OrchestratorState, statePath = STATE_PATH): voi
   writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8')
 }
 
-export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds' | 'humanApproved'>[]): OrchestratorState {
+export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds' | 'humanApproved' | 'failureHistory'>[]): OrchestratorState {
   const now = new Date().toISOString()
   const state: OrchestratorState = {
     featureId,
@@ -67,6 +72,7 @@ export function initState(featureId: string, branch: string, steps: Omit<Step, '
       retries: 0,
       adrIds: [],
       humanApproved: false,
+      failureHistory: [],
     })),
     pausedUntil: null,
     needsHumanApproval: null,
@@ -96,6 +102,23 @@ export function getNextPendingStep(state: OrchestratorState): Step | null {
 
 export function getBlockedStep(state: OrchestratorState): Step | null {
   return state.steps.find(s => s.status === 'blocked') ?? null
+}
+
+const MAX_FAILURE_HISTORY_ENTRIES = 6
+const MAX_FAILURE_ENTRY_CHARS = 800
+
+/**
+ * Acumula un fallo real (builder/verifier/QA/reviewer) en el historial del step, en vez
+ * de pisar una variable local con solo el último error. Cap de tamaño (últimas 6 entradas,
+ * 800 chars c/u) para no volar el contexto del fixer (S-039).
+ */
+export function appendFailureHistory(state: OrchestratorState, stepId: number, entry: string, statePath = STATE_PATH): void {
+  const step = state.steps.find(s => s.id === stepId)
+  if (!step) throw new Error(`Step ${stepId} not found`)
+  const trimmed = entry.length > MAX_FAILURE_ENTRY_CHARS ? entry.slice(0, MAX_FAILURE_ENTRY_CHARS) + '…' : entry
+  const history = [...(step.failureHistory ?? []), trimmed]
+  step.failureHistory = history.slice(-MAX_FAILURE_HISTORY_ENTRIES)
+  saveState(state, statePath)
 }
 
 /**

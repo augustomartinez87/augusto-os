@@ -3,11 +3,12 @@ import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import {
-  loadState, saveState, initState, markStepStatus,
-  getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState,
+  loadState, saveState, initState, markStepStatus, appendFailureHistory,
+  getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
 } from './state.js'
 import { planFeature, loadFeatureSpec } from './planner.js'
 import { executeStepWithRetry } from './executor.js'
+import { escalateStep } from './escalation.js'
 import { runScout } from './scout/index.js'
 import { runVerifier, runReleaseChecks } from './verifier.js'
 import { runQA } from './qa.js'
@@ -19,7 +20,7 @@ import { isBotAlive } from './bot-heartbeat.js'
 import { log, sleepUntil } from './limits.js'
 import { setActiveTarget, getTargetConfig } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
-import { appendAdr, readAdrMeta } from './adr.js'
+import { appendAdr, readAdrMeta, type AdrDraft } from './adr.js'
 import { appendProgress } from './progress.js'
 import { getOperatorState } from './operator-state.js'
 import { resolveBacklogId, markBacklogState, clearPick } from './autopilot.js'
@@ -165,16 +166,36 @@ async function startFeature(featureId: string): Promise<OrchestratorState> {
 }
 
 /**
- * ADR-0019: sin gates humanos por-step. Cuando retries/verifier/QA/reviewer se
- * agotan, el step ya quedó marcado 'blocked' por el caller — esto corta el loop
- * (sin esperar `npm run approve`) y avisa por Telegram a modo informativo.
- * Augusto arregla a mano y re-corre `npm start <feature>` cuando quiera.
+ * S-039: cuando retries/verifier/QA/reviewer se agotan, en vez de bloquear directo
+ * (haltBlocked / ADR-0019), se escala a un fixer más capaz (Opus, MODEL_FIXER) con el
+ * historial completo de fallos del step, en sesión fresca. Si el fixer resuelve el
+ * problema (y pasa verifier), el step NUNCA llega a marcarse 'blocked' de cara al
+ * usuario — el flujo sigue normal. Solo si el fixer también falla se marca 'blocked'
+ * de verdad, se notifica por Telegram (informativo, sin botón) y se continúa el loop
+ * sin cortar el proceso — `getNextPendingStep` ya corta limpio cuando no queda más
+ * trabajo elegible, sin necesidad de un `return` forzado acá.
  */
-async function haltBlocked(state: OrchestratorState, detail: string): Promise<void> {
-  log(`[main] Step BLOQUEADO — ejecución detenida (no requiere aprobación; requiere fix manual).`)
+async function escalateOrHalt(
+  state: OrchestratorState,
+  step: Step,
+  detail: string,
+): Promise<{ ok: boolean; sessionId: string | null; adrBlocks: AdrDraft[] }> {
+  log(`[main] Step ${step.id} trabado tras agotar reintentos — escalando a Opus (fixer) antes de bloquear.`)
   log(`[main] Motivo: ${detail}`)
+
+  const result = await escalateStep(step, state, step.failureHistory ?? [])
+
+  if (result.ok) {
+    log(`[main] Fixer (Opus) resolvió el step ${step.id} — retomando el flujo normal, sin marcarlo bloqueado.`)
+    return { ok: true, sessionId: result.sessionId, adrBlocks: result.adrBlocks }
+  }
+
+  const combinedDetail = `${detail}\n\n[fixer también falló] ${result.finalError ?? '(sin detalle)'}`
+  markStepStatus(state, step.id, 'blocked', { error: combinedDetail })
+  log(`[main] Fixer también falló — step ${step.id} BLOQUEADO de verdad (requiere fix manual).`)
   log(`[main] Corregí el problema y re-ejecutá \`npm start ${state.featureId}\` para reintentar.`)
-  await notifyStepBlocked(state.featureId, detail)
+  await notifyStepBlocked(state.featureId, combinedDetail)
+  return { ok: false, sessionId: null, adrBlocks: [] }
 }
 
 async function runLoop(state: OrchestratorState) {
@@ -313,42 +334,59 @@ async function runLoop(state: OrchestratorState) {
       markStepStatus(state, step.id, 'running', { sessionId: execResult.sessionId })
     }
 
-    if (!execResult.ok) {
-      step.retries = (step.retries ?? 0) + 1
-      if (step.retries >= 3) {
-        markStepStatus(state, step.id, 'blocked', { error: execResult.finalError })
-        await haltBlocked(state, `Step ${step.id} bloqueado tras 3 reintentos: ${execResult.finalError?.slice(0, 200)}`)
-        return
-      }
-      markStepStatus(state, step.id, 'pending', { retries: step.retries })
-      continue
-    }
-
+    let sessionId = execResult.sessionId
     let pendingAdrBlocks = execResult.adrBlocks
 
-    writeLoopHeartbeat(state.featureId, `verifying:step-${step.id}`)
-    const verify = await runVerifier()
-    if (!verify.ok) {
-      log(`[main] Verifier falló en step ${step.id} — reintentando con el error`)
+    if (!execResult.ok) {
+      appendFailureHistory(state, step.id, `builder: ${execResult.finalError ?? '(sin detalle)'}`)
       step.retries = (step.retries ?? 0) + 1
-      if (step.retries >= 3) {
-        markStepStatus(state, step.id, 'blocked', { error: verify.errors })
-        await haltBlocked(state, `Step ${step.id} bloqueado: verifier sigue fallando`)
-        return
+      if (step.retries < 3) {
+        markStepStatus(state, step.id, 'pending', { retries: step.retries })
+        continue
       }
-      markStepStatus(state, step.id, 'pending', { retries: step.retries })
-      const fix = await executeStepWithRetry(step, state, () => verify.errors)
-      if (!fix.ok) {
-        markStepStatus(state, step.id, 'blocked')
-        await haltBlocked(state, `Step ${step.id}: no pasa verifier`)
-        return
-      }
-      pendingAdrBlocks = fix.adrBlocks
-      const verify2 = await runVerifier()
-      if (!verify2.ok) {
-        markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
-        await haltBlocked(state, `Step ${step.id}: verifier falla tras corrección`)
-        return
+      const esc = await escalateOrHalt(state, step, `Step ${step.id} bloqueado tras 3 reintentos: ${execResult.finalError?.slice(0, 200)}`)
+      if (!esc.ok) continue
+      sessionId = esc.sessionId
+      pendingAdrBlocks = esc.adrBlocks
+      markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+      // el fixer ya corrió el verifier internamente (escalateStep) — seguimos a QA/reviewer
+    } else {
+      writeLoopHeartbeat(state.featureId, `verifying:step-${step.id}`)
+      const verify = await runVerifier()
+      if (!verify.ok) {
+        log(`[main] Verifier falló en step ${step.id} — reintentando con el error`)
+        appendFailureHistory(state, step.id, `verifier: ${verify.errors}`)
+        step.retries = (step.retries ?? 0) + 1
+        if (step.retries >= 3) {
+          const esc = await escalateOrHalt(state, step, `Step ${step.id} bloqueado: verifier sigue fallando`)
+          if (!esc.ok) continue
+          sessionId = esc.sessionId
+          pendingAdrBlocks = esc.adrBlocks
+          markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+        } else {
+          markStepStatus(state, step.id, 'pending', { retries: step.retries })
+          const fix = await executeStepWithRetry(step, state, () => verify.errors)
+          if (!fix.ok) {
+            appendFailureHistory(state, step.id, `builder (fix de verifier): ${fix.finalError ?? '(sin detalle)'}`)
+            const esc = await escalateOrHalt(state, step, `Step ${step.id}: no pasa verifier`)
+            if (!esc.ok) continue
+            sessionId = esc.sessionId
+            pendingAdrBlocks = esc.adrBlocks
+            markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+          } else {
+            sessionId = fix.sessionId
+            pendingAdrBlocks = fix.adrBlocks
+            const verify2 = await runVerifier()
+            if (!verify2.ok) {
+              appendFailureHistory(state, step.id, `verifier (post-fix): ${verify2.errors}`)
+              const esc = await escalateOrHalt(state, step, `Step ${step.id}: verifier falla tras corrección`)
+              if (!esc.ok) continue
+              sessionId = esc.sessionId
+              pendingAdrBlocks = esc.adrBlocks
+              markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+            }
+          }
+        }
       }
     }
 
@@ -362,46 +400,85 @@ async function runLoop(state: OrchestratorState) {
           log(`[main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.`)
         } else {
           log(`[main] QA falló en step ${step.id} — reintentando`)
+          appendFailureHistory(state, step.id, `QA: ${qa.errors.join('\n')}`)
           step.retries = (step.retries ?? 0) + 1
-          markStepStatus(state, step.id, 'pending', { retries: step.retries })
           if (step.retries >= 3) {
-            markStepStatus(state, step.id, 'blocked', { error: qa.errors.join('\n') })
-            await haltBlocked(state, `Step ${step.id}: QA gate falla — ver screenshots en ${qa.screenshotDir}`)
-            return
+            const esc = await escalateOrHalt(state, step, `Step ${step.id}: QA gate falla — ver screenshots en ${qa.screenshotDir}`)
+            if (!esc.ok) continue
+            sessionId = esc.sessionId
+            pendingAdrBlocks = esc.adrBlocks
+            markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+          } else {
+            markStepStatus(state, step.id, 'pending', { retries: step.retries })
+            continue
           }
-          continue
         }
       }
     }
 
-    const review = await runReviewer(step, state)
+    let review = await runReviewer(step, state)
     if (!review.approved) {
       log(`[reviewer] CHANGES_REQUESTED en step ${step.id}:\n${review.feedback}`)
+      appendFailureHistory(state, step.id, `reviewer: ${review.feedback}`)
       step.retries = (step.retries ?? 0) + 1
       if (step.retries >= 3) {
-        markStepStatus(state, step.id, 'blocked', { error: review.feedback })
-        await haltBlocked(state, `Step ${step.id}: Reviewer rechazó el diff 3 veces`)
-        return
-      }
-      markStepStatus(state, step.id, 'pending', { retries: step.retries })
-      const fix = await executeStepWithRetry(step, state, () => review.feedback)
-      if (!fix.ok) {
-        markStepStatus(state, step.id, 'blocked')
-        await haltBlocked(state, `Step ${step.id}: no pasa review tras fix`)
-        return
-      }
-      pendingAdrBlocks = fix.adrBlocks
-      const verify2 = await runVerifier()
-      if (!verify2.ok) {
-        markStepStatus(state, step.id, 'blocked', { error: verify2.errors })
-        await haltBlocked(state, `Step ${step.id}: verifier falla tras corrección de reviewer`)
-        return
-      }
-      const review2 = await runReviewer(step, state)
-      if (!review2.approved) {
-        markStepStatus(state, step.id, 'blocked', { error: review2.feedback })
-        await haltBlocked(state, `Step ${step.id}: reviewer rechaza tras segunda corrección`)
-        return
+        const esc = await escalateOrHalt(state, step, `Step ${step.id}: Reviewer rechazó el diff 3 veces`)
+        if (!esc.ok) continue
+        sessionId = esc.sessionId
+        pendingAdrBlocks = esc.adrBlocks
+        markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+        // El fixer arregló lo que el reviewer venía rechazando — el reviewer origina
+        // esta escalación, así que el diff igual tiene que pasar por él antes de commitear.
+        review = await runReviewer(step, state)
+        if (!review.approved) {
+          markStepStatus(state, step.id, 'blocked', { error: review.feedback })
+          await notifyStepBlocked(state.featureId, `Step ${step.id}: reviewer sigue rechazando incluso después de escalar a Opus:\n${review.feedback}`)
+          continue
+        }
+      } else {
+        markStepStatus(state, step.id, 'pending', { retries: step.retries })
+        const fix = await executeStepWithRetry(step, state, () => review.feedback)
+        if (!fix.ok) {
+          appendFailureHistory(state, step.id, `builder (fix de review): ${fix.finalError ?? '(sin detalle)'}`)
+          const esc = await escalateOrHalt(state, step, `Step ${step.id}: no pasa review tras fix`)
+          if (!esc.ok) continue
+          sessionId = esc.sessionId
+          pendingAdrBlocks = esc.adrBlocks
+          markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+          review = await runReviewer(step, state)
+          if (!review.approved) {
+            markStepStatus(state, step.id, 'blocked', { error: review.feedback })
+            await notifyStepBlocked(state.featureId, `Step ${step.id}: reviewer sigue rechazando incluso después de escalar a Opus:\n${review.feedback}`)
+            continue
+          }
+        } else {
+          sessionId = fix.sessionId
+          pendingAdrBlocks = fix.adrBlocks
+          const verify2 = await runVerifier()
+          if (!verify2.ok) {
+            appendFailureHistory(state, step.id, `verifier (post-review-fix): ${verify2.errors}`)
+            const esc = await escalateOrHalt(state, step, `Step ${step.id}: verifier falla tras corrección de reviewer`)
+            if (!esc.ok) continue
+            sessionId = esc.sessionId
+            pendingAdrBlocks = esc.adrBlocks
+            markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+          }
+          review = await runReviewer(step, state)
+          if (!review.approved) {
+            appendFailureHistory(state, step.id, `reviewer (post-review-fix): ${review.feedback}`)
+            const esc = await escalateOrHalt(state, step, `Step ${step.id}: reviewer rechaza tras segunda corrección`)
+            if (!esc.ok) continue
+            sessionId = esc.sessionId
+            pendingAdrBlocks = esc.adrBlocks
+            markStepStatus(state, step.id, 'running', { sessionId, retries: 0, error: null })
+            review = await runReviewer(step, state)
+            if (!review.approved) {
+              markStepStatus(state, step.id, 'blocked', { error: review.feedback })
+              await notifyStepBlocked(state.featureId, `Step ${step.id}: reviewer sigue rechazando incluso después de escalar a Opus:\n${review.feedback}`)
+              continue
+            }
+          }
+        }
       }
     }
     log(`[reviewer] APPROVED step ${step.id}`)
@@ -419,7 +496,7 @@ async function runLoop(state: OrchestratorState) {
       }
     }
 
-    markStepStatus(state, step.id, 'done', { commit: sha, sessionId: execResult.sessionId, adrIds })
+    markStepStatus(state, step.id, 'done', { commit: sha, sessionId, adrIds })
     log(`[main] Step ${step.id} completado y commiteado (${sha.slice(0, 8)})`)
   }
 }

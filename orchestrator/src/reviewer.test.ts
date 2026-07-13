@@ -56,6 +56,7 @@ const FAKE_STEP: Step = {
   ui: false,
   adrIds: [],
   humanApproved: false,
+  failureHistory: [],
 }
 
 const FAKE_STATE: OrchestratorState = {

@@ -34,6 +34,16 @@ export function loadSpecSections(featureId: string): { fueraDeAlcance: string; r
 
 export const MAX_RETRIES = 3
 
+// Restricciones absolutas del builder — compartidas con el fixer de escalación (S-039):
+// nunca se relajan, ni siquiera cuando escala a un modelo más capaz.
+export const RESTRICCIONES_ABSOLUTAS = `RESTRICCIONES ABSOLUTAS:
+- NO corras "prisma migrate", "prisma db push", ni SQL destructivo.
+- NO deployés a Vercel.
+- NO toques main branch ni archivos de mutuo/pagaré.
+- La TNA/tasa NUNCA debe mostrarse en vistas de prestatario.
+- Columnas en camelCase sin @map en Prisma.
+- Para conocer modelos y campos del schema, leé prisma/schema.prisma del repo. NUNCA consultes la DB en vivo (DATABASE_URL apunta a producción directamente).`
+
 export interface ExecutorResult {
   ok: boolean
   sessionId: string | null
@@ -67,13 +77,7 @@ function buildPrompt(
 
 TAREA: ${step.desc}
 ${alcanceBlock}${restriccionesBlock}${researchBlock}
-RESTRICCIONES ABSOLUTAS:
-- NO corras "prisma migrate", "prisma db push", ni SQL destructivo.
-- NO deployés a Vercel.
-- NO toques main branch ni archivos de mutuo/pagaré.
-- La TNA/tasa NUNCA debe mostrarse en vistas de prestatario.
-- Columnas en camelCase sin @map en Prisma.
-- Para conocer modelos y campos del schema, leé prisma/schema.prisma del repo. NUNCA consultes la DB en vivo (DATABASE_URL apunta a producción directamente).
+${RESTRICCIONES_ABSOLUTAS}
 
 Implementá el cambio mínimo necesario. Al terminar verificá que typecheque con npx tsc --noEmit.
 
