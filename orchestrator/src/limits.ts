@@ -57,11 +57,32 @@ export async function sleepUntil(until: Date): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export async function handleUsageLimit(output: string, state: OrchestratorState): Promise<void> {
-  const resetAt = parseResetTime(output)
-  state.pausedUntil = resetAt.toISOString()
-  saveState(state)
-  await sleepUntil(resetAt)
+function hasExplicitResetTime(output: string): boolean {
+  return /retry[- ]after[:\s]+(\d+)/i.test(output) || /reset(?:s)? at (\d{2}:\d{2})/i.test(output)
+}
+
+export async function handleUsageLimit(output: string, state: OrchestratorState, opts?: ProbeOpts): Promise<void> {
+  const pollSleep = (ms: number): Promise<void> =>
+    opts?.sleepMs ? opts.sleepMs(ms) : new Promise(resolve => setTimeout(resolve, ms))
+
+  if (hasExplicitResetTime(output)) {
+    const resetAt = parseResetTime(output)
+    state.pausedUntil = resetAt.toISOString()
+    saveState(state)
+    await (opts?.sleepUntilFn ? opts.sleepUntilFn(resetAt) : sleepUntil(resetAt))
+    while (!(await probeAvailability(opts))) {
+      log(`Límite persiste tras reset. Reintentando en ${PROBE_INTERVAL_MS / 60000} min.`)
+      await pollSleep(PROBE_INTERVAL_MS)
+    }
+  } else {
+    log(`Sin hora de reset parseable. Sondeando disponibilidad cada ${PROBE_INTERVAL_MS / 60000} min.`)
+    let available = false
+    while (!available) {
+      await pollSleep(PROBE_INTERVAL_MS)
+      available = await probeAvailability(opts)
+      if (!available) log(`Límite persiste. Próximo sondeo en ${PROBE_INTERVAL_MS / 60000} min.`)
+    }
+  }
   state.pausedUntil = null
   saveState(state)
 }
@@ -70,6 +91,10 @@ export const PROBE_INTERVAL_MS = 15 * 60 * 1000
 
 export interface ProbeOpts {
   probeFn?: () => Promise<boolean>
+  /** Inyectable para tests: reemplaza el setTimeout del loop de poll */
+  sleepMs?: (ms: number) => Promise<void>
+  /** Inyectable para tests: reemplaza sleepUntil en la rama de hora explícita */
+  sleepUntilFn?: (until: Date) => Promise<void>
 }
 
 // Disponibilidad = el CLI NO reportó límite de uso. MISMA señal que executor.ts:195

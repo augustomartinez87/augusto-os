@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { isUsageLimitError, isContextWindowError, parseResetTime, probeAvailability, isProbeAvailable, PROBE_INTERVAL_MS } from './limits.js'
+import { describe, it, expect, vi } from 'vitest'
+import { isUsageLimitError, isContextWindowError, parseResetTime, probeAvailability, isProbeAvailable, PROBE_INTERVAL_MS, handleUsageLimit } from './limits.js'
+import type { OrchestratorState } from './state.js'
+
+vi.mock('./state.js', () => ({ saveState: vi.fn() }))
 
 // ── isUsageLimitError ──────────────────────────────────────────────────────────
 
@@ -91,6 +94,92 @@ describe('isProbeAvailable', () => {
 
   it('tolerates a null exit code (treated as no 429)', () => {
     expect(isProbeAvailable('ok', null)).toBe(true)
+  })
+})
+
+// ── handleUsageLimit ────────────────────────────────────────────────────────────
+
+const makeState = (): OrchestratorState => ({
+  featureId: 'F-test',
+  branch: 'feat/test',
+  steps: [],
+  pausedUntil: null,
+  needsHumanApproval: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  merged: false,
+  pushed: false,
+})
+
+const noSleep = async (_ms: number) => {}
+const noSleepUntil = async (_d: Date) => {}
+
+describe('handleUsageLimit — poll path (sin hora explícita)', () => {
+  it('llama probeFn hasta que retorna true, luego limpia pausedUntil', async () => {
+    const state = makeState()
+    let calls = 0
+    const probeFn = async () => { calls++; return calls >= 3 }
+
+    await handleUsageLimit('unrelated error text', state, { probeFn, sleepMs: noSleep })
+
+    expect(calls).toBe(3)
+    expect(state.pausedUntil).toBeNull()
+  })
+
+  it('reanuda en el primer intento si el probe ya pasa', async () => {
+    const state = makeState()
+    let calls = 0
+    const probeFn = async () => { calls++; return true }
+
+    await handleUsageLimit('generic failure', state, { probeFn, sleepMs: noSleep })
+
+    expect(calls).toBe(1)
+    expect(state.pausedUntil).toBeNull()
+  })
+})
+
+describe('handleUsageLimit — explicit-time path (retry-after / resets at)', () => {
+  it('duerme hasta resetAt, prueba probe de confirmación y limpia pausedUntil', async () => {
+    const state = makeState()
+    let sleptUntil: Date | null = null
+    let probes = 0
+    const probeFn = async () => { probes++; return true }
+    const sleepUntilFn = async (d: Date) => { sleptUntil = d }
+
+    await handleUsageLimit('retry-after: 3600', state, { probeFn, sleepMs: noSleep, sleepUntilFn })
+
+    expect(sleptUntil).not.toBeNull()
+    expect((sleptUntil as unknown as Date).getTime()).toBeGreaterThan(Date.now() + 3_500_000)
+    expect(probes).toBe(1)
+    expect(state.pausedUntil).toBeNull()
+  })
+
+  it('reintenta probe si el límite persiste tras el sleep', async () => {
+    const state = makeState()
+    let probes = 0
+    const probeFn = async () => { probes++; return probes >= 2 }
+
+    await handleUsageLimit('resets at 14:00', state, { probeFn, sleepMs: noSleep, sleepUntilFn: noSleepUntil })
+
+    expect(probes).toBe(2)
+    expect(state.pausedUntil).toBeNull()
+  })
+
+  it('persiste pausedUntil con la hora real antes de dormir', async () => {
+    const state = makeState()
+    const capturedPausedUntil: (string | null)[] = []
+    const probeFn = async () => true
+    const sleepUntilFn = async (_d: Date) => {
+      capturedPausedUntil.push(state.pausedUntil)
+    }
+
+    await handleUsageLimit('retry-after: 60', state, { probeFn, sleepMs: noSleep, sleepUntilFn })
+
+    // Durante el sleep, pausedUntil debe ser un ISO string (no null)
+    expect(capturedPausedUntil[0]).not.toBeNull()
+    expect(typeof capturedPausedUntil[0]).toBe('string')
+    // Al terminar, siempre null
+    expect(state.pausedUntil).toBeNull()
   })
 })
 
