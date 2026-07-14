@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'fs'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import {
-  getNextPendingStep, getBlockedStep, markStepStatus, archiveState, appendFailureHistory,
+  loadState, saveState, getNextPendingStep, getBlockedStep, markStepStatus, archiveState, appendFailureHistory,
   type OrchestratorState, type Step,
 } from './state.js'
 
@@ -166,5 +166,143 @@ describe('archiveState', () => {
   it('is a no-op when STATE.json does not exist', () => {
     // tmpStatePath was never created → archiveState should return early without throwing
     expect(() => archiveState('F-GHOST', tmpStatePath)).not.toThrow()
+  })
+})
+
+// ── loadState — tolerancia a basura trailing (S-036) ─────────────────────────
+
+describe('loadState — tolerancia a basura trailing', () => {
+  it('parsea un STATE.json con null bytes trailing, loguea warning y reescribe limpio', () => {
+    const validState = makeState([makeStep(1, 'pending')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json + '\0\0\0\0', 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result).not.toBeNull()
+    expect(result?.featureId).toBe('F-TEST')
+    expect(result?.steps[0].status).toBe('pending')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('basura trailing'))
+
+    const rewritten = readFileSync(tmpStatePath, 'utf-8')
+    expect(rewritten).not.toContain('\0')
+
+    warnSpy.mockRestore()
+  })
+
+  it('parsea un STATE.json con texto arbitrario trailing', () => {
+    const validState = makeState([makeStep(2, 'running')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json + '\ncorrupted extra text', 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result?.steps[0].id).toBe(2)
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('no reescribe un STATE.json limpio', () => {
+    const validState = makeState([makeStep(1, 'done')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json, 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadState(tmpStatePath)
+
+    const contentAfter = readFileSync(tmpStatePath, 'utf-8')
+    expect(contentAfter).toBe(json)
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('devuelve null y loguea error si STATE.json no contiene JSON válido', () => {
+    writeFileSync(tmpStatePath, 'NOT JSON\0\0', 'utf-8')
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result).toBeNull()
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('devuelve null cuando el archivo no existe', () => {
+    expect(loadState(tmpStatePath)).toBeNull()
+  })
+})
+
+// ── saveState — escritura atómica (S-036) ─────────────────────────────────────
+
+describe('saveState — escritura atómica', () => {
+  it('no deja archivo .tmp tras una escritura exitosa', () => {
+    const state = makeState([makeStep(1, 'pending')])
+    saveState(state, tmpStatePath)
+
+    expect(existsSync(tmpStatePath)).toBe(true)
+    expect(existsSync(tmpStatePath + '.tmp')).toBe(false)
+  })
+
+  it('el archivo resultante contiene JSON parseable con todos los campos del step', () => {
+    const state = makeState([makeStep(1, 'running'), makeStep(2, 'pending')])
+    saveState(state, tmpStatePath)
+
+    const parsed = JSON.parse(readFileSync(tmpStatePath, 'utf-8'))
+    expect(parsed.featureId).toBe('F-TEST')
+    expect(parsed.steps).toHaveLength(2)
+    expect(parsed.steps[0].status).toBe('running')
+    expect(parsed.steps[1].status).toBe('pending')
+  })
+})
+
+// ── round-trip saveState/loadState — sin pérdida de datos (S-036) ─────────────
+
+describe('round-trip saveState/loadState', () => {
+  it('loadState devuelve exactamente lo que saveState escribió', () => {
+    const original = makeState([makeStep(1, 'done'), makeStep(2, 'running'), makeStep(3, 'pending')])
+    original.steps[0].commit = 'abc123'
+    original.steps[0].retries = 2
+    original.steps[1].sessionId = 'ses_xyz'
+
+    saveState(original, tmpStatePath)
+    const loaded = loadState(tmpStatePath)
+
+    expect(loaded).not.toBeNull()
+    expect(loaded!.featureId).toBe('F-TEST')
+    expect(loaded!.branch).toBe('feat/test')
+    expect(loaded!.steps).toHaveLength(3)
+    expect(loaded!.steps[0].commit).toBe('abc123')
+    expect(loaded!.steps[0].retries).toBe(2)
+    expect(loaded!.steps[1].sessionId).toBe('ses_xyz')
+    expect(loaded!.steps[2].status).toBe('pending')
+  })
+
+  it('múltiples writes sucesivos no corrompen el archivo ni dejan .tmp', () => {
+    const state = makeState([makeStep(1, 'pending')])
+    for (let i = 0; i < 5; i++) {
+      state.steps[0].retries = i
+      saveState(state, tmpStatePath)
+    }
+
+    const loaded = loadState(tmpStatePath)
+    expect(loaded).not.toBeNull()
+    expect(loaded!.steps[0].retries).toBe(4)
+    expect(existsSync(tmpStatePath + '.tmp')).toBe(false)
+  })
+
+  it('preserva pausedUntil, merged y pushed correctamente', () => {
+    const state = makeState([makeStep(1, 'done')])
+    state.pausedUntil = '2026-07-14T12:00:00.000Z'
+    state.merged = true
+    state.pushed = true
+
+    saveState(state, tmpStatePath)
+    const loaded = loadState(tmpStatePath)
+
+    expect(loaded!.pausedUntil).toBe('2026-07-14T12:00:00.000Z')
+    expect(loaded!.merged).toBe(true)
+    expect(loaded!.pushed).toBe(true)
   })
 })

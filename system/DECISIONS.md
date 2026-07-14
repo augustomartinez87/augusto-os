@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0079 · 2026-07-14 · Disponibilidad del probe por detección de límite, no por exit code
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** `probeAvailability()` decide disponibilidad con `isProbeAvailable(output, exitCode)` = `!isUsageLimitError(output) && exitCode !== 429` sobre stdout+stderr, en vez de `exitCode === 0`.
+**Contexto:** Con `--max-turns 1`, el CLI sale con exit 1 aun en llamadas exitosas (tool_use en turno 1, models.ts:10-12), y puede salir 0 informando límite en el texto; ambos casos rompían el criterio por exit code y reintroducían la pausa ciega que F-0028 arregla.
+**Alternativas descartadas:** Subir `--max-turns` a 2/MAX_TURNS (descartado: aumenta costo del ping sin arreglar el falso positivo del exit 0 con límite en texto). Seguir con exit code (descartado: es la causa raíz del fallo).
+**Consecuencias / riesgo residual:** La lógica de decisión queda como función pura reutilizable/testeable; el cableado de `probeAvailability` al loop de reanudación queda para un step posterior (fuera de alcance de este step).
+
+> Generado por el loop · feature F-0028 · step 4
+
+---
 ## ADR-0040 · 2026-06-29 · arancelCostoTNA é informativo — não subtrai do spread
 
 **Estado:** aceptada

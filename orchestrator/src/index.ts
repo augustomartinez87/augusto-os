@@ -17,7 +17,7 @@ import { commitStep, createFeatureBranch, mergeIntoMain, pushMain, getDefaultBra
 import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { notifyDeployed, notifyReleaseFailed, notifyStepBlocked, pollApprovalOnce } from './telegram.js'
 import { isBotAlive } from './bot-heartbeat.js'
-import { log, sleepUntil } from './limits.js'
+import { log, sleepUntil, probeAvailability } from './limits.js'
 import { setActiveTarget, getTargetConfig } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta, type AdrDraft } from './adr.js'
@@ -202,9 +202,16 @@ async function runLoop(state: OrchestratorState) {
   if (state.pausedUntil) {
     const until = new Date(state.pausedUntil)
     if (until > new Date()) {
-      await sleepUntil(until)
-      state.pausedUntil = null
-      saveState(state)
+      const alreadyAvailable = await probeAvailability()
+      if (alreadyAvailable) {
+        log('[main] Probe de arranque indica disponibilidad — cancelando pausa anticipada.')
+        state.pausedUntil = null
+        saveState(state)
+      } else {
+        await sleepUntil(until)
+        state.pausedUntil = null
+        saveState(state)
+      }
     }
   }
 
