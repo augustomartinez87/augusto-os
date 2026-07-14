@@ -55,7 +55,9 @@ export function loadState(): OrchestratorState | null {
 
 export function saveState(state: OrchestratorState, statePath = STATE_PATH): void {
   state.updatedAt = new Date().toISOString()
-  writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8')
+  const tmp = statePath + '.tmp'
+  writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8')
+  renameSync(tmp, statePath)
 }
 
 export function initState(featureId: string, branch: string, steps: Omit<Step, 'commit' | 'sessionId' | 'retries' | 'status' | 'adrIds' | 'humanApproved' | 'failureHistory'>[]): OrchestratorState {

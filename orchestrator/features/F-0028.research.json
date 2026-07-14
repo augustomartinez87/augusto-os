@@ -1,0 +1,309 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Sistema — Hardening de limits + STATE: write atómico y sondeo real de disponibilidad (S-036)",
+    "archivos": [
+      "orchestrator/features/F-0028.md",
+      "orchestrator/src/state.ts",
+      "orchestrator/src/limits.ts",
+      "orchestrator/src/index.ts",
+      "orchestrator/src/models.ts",
+      "orchestrator/src/state.test.ts",
+      "orchestrator/src/limits.test.ts",
+      "orchestrator/src/architect.ts",
+      "orchestrator/src/executor.ts",
+      "orchestrator/src/git.ts",
+      "orchestrator/src/escalation.ts",
+      "orchestrator/src/planner.ts",
+      "orchestrator/src/reviewer.ts",
+      "orchestrator/src/progress.ts",
+      "orchestrator/src/gates.ts",
+      "orchestrator/src/evaluate.ts",
+      "orchestrator/package.json"
+    ],
+    "patrones": [
+      "saveState usa writeFileSync directo — debe cambiarse a archivo temporal + renameSync (renameSync ya está importado en state.ts:1 pero sin usar)",
+      "loadState hace JSON.parse directo — debe tolerar basura trailing (null bytes) extrayendo el primer JSON válido, logueando warning y reescribiendo limpio",
+      "handleUsageLimit llama a parseResetTime que hace fallback ciego a ahora+5h — debe reemplazarse por probeAvailability() con polling cada PROBE_INTERVAL_MS (15 min)",
+      "probeAvailability() debe ser inyectable (patrón callClaude? usado en architect.ts/planner.ts/reviewer.ts/escalation.ts) para testear sin CLI real",
+      "En index.ts:202-209, al arrancar con pausedUntil futuro, debe hacerse un probe antes de dormir — si hay disponibilidad, limpiar la pausa y continuar",
+      "patrón de opts inyectables: ArchitectOpts.callClaude, PlannerOpts.callClaude, ReviewerOpts.callClaude, EscalationOpts.{invokeFixerFn,runVerifierFn}",
+      "Modelos centralizados en models.ts: MODEL_PLANNER, MODEL_BUILDER, MODEL_INTAKE, MODEL_ARCHITECT, MODEL_REVIEWER (usar MODEL_INTAKE como modelo barato para el probe)"
+    ],
+    "dependencias": [
+      "execa: invocación del CLI de Claude (usado en architect.ts, planner.ts, executor.ts, escalation.ts, reviewer.ts)",
+      "zod: schema de STATE.json en state.ts (StateSchema, StepSchema)",
+      "vitest: framework de testing (state.test.ts, limits.test.ts, architect.test.ts, etc.)"
+    ],
+    "riesgos": [
+      "renameSync ya está importado en state.ts:1 pero sin uso — no confundir: hay que implementar el write temporal + rename, no solo importar",
+      "Archivos STATE.*.archived.json existentes (20+) deben seguir siendo legibles — loadState tolerante no debe romper backward compatibility",
+      "El probe debe ser de costo mínimo (1 llamada trivial por intervalo, nunca en paralelo) y respetar gating por OPERATOR_STATE",
+      "Sin dependencias nuevas — solo usar execa, zod, vitest que ya están en package.json",
+      "Compatibilidad total con npm start <feature> en curso: STATE sano nunca debe reescribirse de forma que pierda steps/commits",
+      "El probe usa el modelo barato como ping; no implementar routing multi-modelo (S-014) ni cambiar quién ejecuta steps"
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "saveState",
+        "lineas": "10",
+        "explicacion": "Spec de S-036: saveState debe escribir via archivo temporal + renameSync (atómico); actualmente hace writeFileSync directo",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "loadState",
+        "lineas": "11",
+        "explicacion": "Spec: loadState debe tolerar basura trailing (null bytes) — parsear, loguear warning y reescribir limpio",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "probeAvailability",
+        "lineas": "22-25",
+        "explicacion": "Spec: helper probeAvailability() en limits.ts que hace llamada barata al CLI (modelo barato, --max-turns 1, prompt trivial) y devuelve boolean",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "renameSync",
+        "lineas": "1",
+        "explicacion": "renameSync ya está importado en state.ts pero nunca se usa — el fix canónico es escribir a STATE.json.tmp y renombrar encima",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "saveState",
+        "lineas": "53-55",
+        "explicacion": "saveState usa writeFileSync directo — debe reemplazarse por write a .tmp + renameSync para escritura atómica",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "loadState",
+        "lineas": "45-51",
+        "explicacion": "loadState hace JSON.parse(raw) directo — debe tolerar basura trailing (null bytes) con raw_decode o extracción del primer JSON válido",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.ts",
+        "simbolo": "parseResetTime",
+        "lineas": "33-48",
+        "explicacion": "parseResetTime hace fallback a ahora+5h ciego cuando no hay retry-after ni resets at HH:MM — debe reemplazarse por probeAvailability polling",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.ts",
+        "simbolo": "handleUsageLimit",
+        "lineas": "58-64",
+        "explicacion": "handleUsageLimit llama a parseResetTime + sleepUntil — cuando no hay hora parseada debe usar probeAvailability en loop de poll",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.ts",
+        "simbolo": "sleepUntil",
+        "lineas": "50-56",
+        "explicacion": "sleepUntil duerme hasta una fecha fija — para el poll se necesitará un nuevo helper probeLoop con PROBE_INTERVAL_MS exportable",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "pausedUntil",
+        "lineas": "202-209",
+        "explicacion": "Al arrancar con pausedUntil futuro, el loop hace sleepUntil directamente — debe agregar un probe antes de dormir: si hay disponibilidad, limpiar pausa y continuar",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/models.ts",
+        "simbolo": "MODEL_INTAKE",
+        "lineas": "3",
+        "explicacion": "MODEL_INTAKE = 'claude-haiku-4-5-20251001' — modelo barato ideal para el probe de disponibilidad (costo mínimo)",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/architect.ts",
+        "simbolo": "ArchitectOpts.callClaude",
+        "lineas": "114",
+        "explicacion": "[NO VERIFICADO] Patrón de inyección para tests: callClaude?: (prompt: string) => Promise<string> — mismo patrón a usar para probeAvailability en limits.ts",
+        "confianza": 0
+      },
+      {
+        "path": "orchestrator/src/escalation.ts",
+        "simbolo": "EscalationOpts",
+        "lineas": "76-80",
+        "explicacion": "Otro ejemplo de opts inyectables para testing: EscalationOpts con invokeFixerFn y runVerifierFn — patrón a replicar para ProbeOpts",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.test.ts",
+        "simbolo": "makeState",
+        "lineas": "16-26",
+        "explicacion": "Helper de test que construye OrchestratorState — base para los tests nuevos de saveState atómico y loadState tolerante",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.test.ts",
+        "simbolo": "parseResetTime",
+        "lineas": "38-47",
+        "explicacion": "Test existente de parseResetTime con fallback ~5h — deberá actualizarse cuando se reemplace el fallback ciego por probeAvailability",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "PROBE_INTERVAL_MS",
+        "lineas": "23",
+        "explicacion": "Constante exportada sugerida (15 min) para el intervalo de polling del probe de disponibilidad",
+        "confianza": 1
+      }
+    ],
+    "resumen": "S-036 requiere 3 cambios principales en el orquestador: (1) saveState atómico usando archivo temporal + renameSync (ya importado pero sin usar en state.ts:1) más loadState tolerante a basura trailing; (2) reemplazar el fallback ciego de 5h en parseResetTime/handleUsageLimit por probeAvailability() inyectable con polling cada PROBE_INTERVAL_MS usando MODEL_INTAKE (Haiku) como ping barato; (3) agregar un probe al arranque (index.ts:202-209) cuando pausedUntil es futuro. El código existente sigue el patrón de opts inyectables (ArchitectOpts.callClaude, EscalationOpts) para testing sin red real, y las suites de state.test.ts y limits.test.ts son la base para los tests nuevos. No se permiten dependencias nuevas ni cambios en STATE.*.archived.json."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: Sistema — Hardening de limits + STATE: write atómico y sondeo real de disponibilidad (S-036)",
+    "archivos": [
+      "orchestrator/features/F-0028.md",
+      "orchestrator/src/state.ts",
+      "orchestrator/src/limits.ts",
+      "orchestrator/src/index.ts",
+      "orchestrator/src/state.test.ts",
+      "orchestrator/src/limits.test.ts",
+      "orchestrator/src/models.ts",
+      "orchestrator/src/executor.ts",
+      "orchestrator/src/planner.ts",
+      "orchestrator/src/architect.ts",
+      "orchestrator/src/reviewer.ts",
+      "orchestrator/src/escalation.ts",
+      "orchestrator/src/operator-state.ts",
+      "orchestrator/package.json"
+    ],
+    "patrones": [
+      "Injectable function pattern: `callClaude?: (prompt: string) => Promise<string>` en PlannerOpts/ArchitectOpts/ReviewerOpts — replicar para probeAvailability",
+      "Injectable opts pattern: `invokeFixerFn?` y `runVerifierFn?` en EscalationOpts — mismo approach para probe en tests",
+      "Atomic write pattern: escribir a STATE.json.tmp + renameSync(STATE.json.tmp, STATE.json) — renameSync ya está importado en state.ts:1 pero no se usa",
+      "loadState con tolerancia a trailing garbage: extraer primer JSON válido (raw_decode style), loguear warning y reescribir limpio",
+      "Manejo de temp dir en tests: mkdtempSync + rmSync recursive (state.test.ts) para aislar escrituras de STATE.json",
+      "Centralized model strings: MODEL_INTAKE (haiku) en models.ts como modelo barato para el probe"
+    ],
+    "dependencias": [
+      "execa (^9.3.0) — para invocar 'claude' CLI en probeAvailability",
+      "zod (^3.23.8) — para StateSchema/parse en state.ts, reutilizable en loadState tolerante",
+      "yaml (^2.4.5) — usado en operator-state.ts para gating, probe debe respetar OPERATOR_STATE",
+      "fs (renameSync, writeFileSync, readFileSync, existsSync) — nativas, sin deps nuevas"
+    ],
+    "riesgos": [
+      "El probe debe ser de costo mínimo (1 llamada trivial por intervalo, nunca en paralelo) usando MODEL_INTAKE (haiku) como ping, no debe afectar el gating por OPERATOR_STATE",
+      "Compatibilidad total con STATE.F-XXXX.archived.json existentes — no romper formato legacy",
+      "Sin dependencias nuevas (especificado en F-0028)",
+      "El probe al arranque (index.ts) con pausedUntil futuro debe hacerse ANTES de dormir, no después — de lo contrario la pausa ciega sigue ocurriendo",
+      "handleUsageLimit ya es llamado desde executor.ts (línea 7) — cambiar su comportamiento actual afecta el flujo de reintentos del builder"
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "F-0028",
+        "lineas": "1-59",
+        "explicacion": "Spec completo de S-036 con acceptance criteria, contexto de incidentes, diseño del probe, pasos sugeridos y restricciones clave. Es la guía ejecutable del implementador.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "saveState",
+        "lineas": "50-53",
+        "explicacion": "Función actual que escribe STATE.json con writeFileSync directo — NO es atómico. Debe reemplazarse por tmp+renameSync (renameSync ya importado en línea 1 sin uso).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "loadState",
+        "lineas": "41-48",
+        "explicacion": "Función actual que hace JSON.parse directo — explota si STATE.json tiene null bytes trailing. Debe tolerar basura post-JSON (raw_decode), loguear warning y reescribir versión limpia.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "renameSync",
+        "lineas": "1",
+        "explicacion": "YA importado de 'fs' pero nunca usado. La solución canónica del spec es escribir STATE.json.tmp y renameSync encima del archivo real para atomicidad.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.ts",
+        "simbolo": "parseResetTime",
+        "lineas": "28-40",
+        "explicacion": "Fallback ciego a ahora+5h (línea 39-40) cuando el output del CLI no tiene retry-after ni resets at HH:MM. Causó 2 incidentes de pausa innecesaria. Debe ser reemplazado por probeAvailability polling.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.ts",
+        "simbolo": "handleUsageLimit",
+        "lineas": "47-53",
+        "explicacion": "Usa parseResetTime + sleepUntil directamente. Cuando no hay hora parseable, debe entrar en loop de poll con probeAvailability en vez de dormir 5h fijas.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "runLoop",
+        "lineas": "170-177",
+        "explicacion": "Al arrancar con pausedUntil futuro, hace sleepUntil directamente SIN probe previo. El spec exige: hacer probeAvailability ANTES de dormir; si hay disponibilidad, limpiar la pausa y continuar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/models.ts",
+        "simbolo": "MODEL_INTAKE",
+        "lineas": "3",
+        "explicacion": "Modelo barato ('claude-haiku-4-5-20251001') que el spec sugiere usar para probeAvailability — llamada de costo mínimo con prompt trivial.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/planner.ts",
+        "simbolo": "PlannerOpts",
+        "lineas": "55-57",
+        "explicacion": "Patrón de inyección `callClaude?: (prompt: string) => Promise<string>` a replicar para el probe en limits.ts — mismo approach ya usado en architect.ts y reviewer.ts.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/escalation.ts",
+        "simbolo": "EscalationOpts",
+        "lineas": "73-80",
+        "explicacion": "Segundo patrón de inyección con `invokeFixerFn?` y `runVerifierFn?` — referencia directa para hacer probeAvailability inyectable en tests.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.test.ts",
+        "simbolo": "makeState",
+        "lineas": "16-28",
+        "explicacion": "Helper de tests que crea estado. Usar como base para tests de atomicidad de saveState (tmp+rename) y tolerancia de loadState a trailing garbage con fixture corrupto.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.test.ts",
+        "simbolo": "parseResetTime",
+        "lineas": "46-58",
+        "explicacion": "Tests existentes de parseResetTime. El fallback a 5h está testeado (línea 52-58) — estos tests deben actualizarse cuando se reemplace el fallback ciego por probe polling.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/executor.ts",
+        "simbolo": "handleUsageLimit",
+        "lineas": "7",
+        "explicacion": "Importado desde limits.ts y usado en el flujo de reintentos del builder — cualquier cambio en handleUsageLimit impacta directamente el comportamiento del executor.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/features/F-0028.md",
+        "simbolo": "probeAvailability",
+        "lineas": "30-40",
+        "explicacion": "Diseño completo del probe en el spec: helper en limits.ts que llama al CLI con modelo barato (MODEL_INTAKE), --max-turns 1, prompt 'ok'. Loop de poll cada PROBE_INTERVAL_MS (15 min). Inyectable para tests.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/package.json",
+        "simbolo": "dependencies",
+        "lineas": "16-22",
+        "explicacion": "Dependencias actuales: execa, lowdb, yaml, zod. El spec exige 'sin dependencias nuevas' — probe debe usar execa (ya presente) para invocar el CLI.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El spec F-0028 detalla tres bugs reales que ocurrieron en julio 2026: (1) saveState no es atómico (writeFileSync directo) — debe usar tmp+renameSync, con renameSync ya importado sin uso; (2) loadState no tolera trailing garbage en STATE.json — debe parsear el primer JSON válido, loguear y reescribir limpio; (3) parseResetTime cae a fallback ciego de 5h cuando no hay hora de reset — debe reemplazarse por probeAvailability() inyectable que sondea con modelo barato (Haiku) cada 15 min. Los archivos a modificar son state.ts (atomicidad + tolerancia), limits.ts (probe + polling) e index.ts (probe al arranque con pausedUntil futuro), siguiendo el patrón de inyección ya usado en PlannerOpts/ArchitectOpts/ReviewerOpts/EscalationOpts para testabilidad."
+  }
+]
