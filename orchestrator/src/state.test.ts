@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'fs'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import {
-  getNextPendingStep, getBlockedStep, markStepStatus, archiveState, appendFailureHistory,
+  loadState, getNextPendingStep, getBlockedStep, markStepStatus, archiveState, appendFailureHistory,
   type OrchestratorState, type Step,
 } from './state.js'
 
@@ -166,5 +166,70 @@ describe('archiveState', () => {
   it('is a no-op when STATE.json does not exist', () => {
     // tmpStatePath was never created → archiveState should return early without throwing
     expect(() => archiveState('F-GHOST', tmpStatePath)).not.toThrow()
+  })
+})
+
+// ── loadState — tolerancia a basura trailing (S-036) ─────────────────────────
+
+describe('loadState — tolerancia a basura trailing', () => {
+  it('parsea un STATE.json con null bytes trailing, loguea warning y reescribe limpio', () => {
+    const validState = makeState([makeStep(1, 'pending')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json + '\0\0\0\0', 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result).not.toBeNull()
+    expect(result?.featureId).toBe('F-TEST')
+    expect(result?.steps[0].status).toBe('pending')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('basura trailing'))
+
+    const rewritten = readFileSync(tmpStatePath, 'utf-8')
+    expect(rewritten).not.toContain('\0')
+
+    warnSpy.mockRestore()
+  })
+
+  it('parsea un STATE.json con texto arbitrario trailing', () => {
+    const validState = makeState([makeStep(2, 'running')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json + '\ncorrupted extra text', 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result?.steps[0].id).toBe(2)
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('no reescribe un STATE.json limpio', () => {
+    const validState = makeState([makeStep(1, 'done')])
+    const json = JSON.stringify(validState, null, 2)
+    writeFileSync(tmpStatePath, json, 'utf-8')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    loadState(tmpStatePath)
+
+    const contentAfter = readFileSync(tmpStatePath, 'utf-8')
+    expect(contentAfter).toBe(json)
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('devuelve null y loguea error si STATE.json no contiene JSON válido', () => {
+    writeFileSync(tmpStatePath, 'NOT JSON\0\0', 'utf-8')
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = loadState(tmpStatePath)
+
+    expect(result).toBeNull()
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('devuelve null cuando el archivo no existe', () => {
+    expect(loadState(tmpStatePath)).toBeNull()
   })
 })

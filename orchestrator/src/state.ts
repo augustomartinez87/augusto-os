@@ -42,14 +42,59 @@ export const StateSchema = z.object({
 export type Step = z.infer<typeof StepSchema>
 export type OrchestratorState = z.infer<typeof StateSchema>
 
-export function loadState(): OrchestratorState | null {
-  if (!existsSync(STATE_PATH)) return null
-  const raw = readFileSync(STATE_PATH, 'utf-8')
-  const parsed = StateSchema.safeParse(JSON.parse(raw))
+function extractFirstJson(raw: string): unknown | null {
+  let depth = 0
+  let inString = false
+  let escape = false
+  let started = false
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (escape) { escape = false; continue }
+    if (inString && ch === '\\') { escape = true; continue }
+    if (ch === '"') { inString = !inString; started = true; continue }
+    if (inString) continue
+    if (ch === '{' || ch === '[') { depth++; started = true }
+    else if (ch === '}' || ch === ']') {
+      depth--
+      if (depth === 0 && started) {
+        try { return JSON.parse(raw.slice(0, i + 1)) } catch { /* seguir escaneando */ }
+      }
+    }
+  }
+  return null
+}
+
+export function loadState(statePath = STATE_PATH): OrchestratorState | null {
+  if (!existsSync(statePath)) return null
+  const raw = readFileSync(statePath, 'utf-8')
+
+  let jsonValue: unknown
+  let hadTrailingGarbage = false
+
+  try {
+    jsonValue = JSON.parse(raw)
+  } catch {
+    const extracted = extractFirstJson(raw)
+    if (extracted === null) {
+      console.error('[state] STATE.json no contiene JSON válido')
+      return null
+    }
+    jsonValue = extracted
+    hadTrailingGarbage = true
+  }
+
+  const parsed = StateSchema.safeParse(jsonValue)
   if (!parsed.success) {
     console.error('[state] STATE.json inválido:', parsed.error.message)
     return null
   }
+
+  if (hadTrailingGarbage) {
+    console.warn('[state] STATE.json tenía basura trailing — reescribiendo limpio')
+    saveState(parsed.data, statePath)
+  }
+
   return parsed.data
 }
 
