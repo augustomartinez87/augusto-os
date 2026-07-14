@@ -136,6 +136,25 @@ describe('handleUsageLimit — poll path (sin hora explícita)', () => {
     expect(calls).toBe(1)
     expect(state.pausedUntil).toBeNull()
   })
+
+  it('probe falla N veces y luego pasa — sleepUntilFn nunca se llama, sleepMs usa PROBE_INTERVAL_MS', async () => {
+    const state = makeState()
+    let probeCount = 0
+    const sleepMsCalls: number[] = []
+    let sleepUntilCalled = false
+
+    const probeFn = async () => { probeCount++; return probeCount >= 3 }
+    const sleepMs = async (ms: number) => { sleepMsCalls.push(ms) }
+    const sleepUntilFn = async (_d: Date) => { sleepUntilCalled = true }
+
+    await handleUsageLimit('quota exhausted, please try later', state, { probeFn, sleepMs, sleepUntilFn })
+
+    expect(sleepUntilCalled).toBe(false)                                         // sin bloque fijo
+    expect(probeCount).toBe(3)                                                   // 2 fallos + 1 éxito
+    expect(sleepMsCalls).toHaveLength(3)                                         // poll sleep antes de cada probe
+    expect(sleepMsCalls.every(ms => ms === PROBE_INTERVAL_MS)).toBe(true)
+    expect(state.pausedUntil).toBeNull()
+  })
 })
 
 describe('handleUsageLimit — explicit-time path (retry-after / resets at)', () => {
@@ -193,12 +212,15 @@ describe('parseResetTime', () => {
     expect(result.getTime()).toBeLessThanOrEqual(before + 121_000)
   })
 
-  it('falls back to ~5h ahead (top of hour) when no explicit reset info is present', () => {
+  // Rama defensiva de parseResetTime. handleUsageLimit la llama solo cuando
+  // hasExplicitResetTime es true, por lo que este branch es dead code en ese flujo.
+  // El path sin hora explícita usa probeAvailability en su lugar (ver poll path tests).
+  it('fallback a ~5h adelante (top of hour) cuando no hay info de reset — aplica solo en aislamiento', () => {
     const before = Date.now()
     const result = parseResetTime('some unrelated error text')
     const diffHours = (result.getTime() - before) / (60 * 60 * 1000)
-    // Implementation zeroes minutes/seconds (setHours(h+5,0,0,0)), so the delta
-    // ranges from just over 4h (called near :59) to exactly 5h (called at :00).
+    // setHours(h+5,0,0,0) zeroes minutes/seconds, so the delta ranges from
+    // just over 4h (called near :59) to exactly 5h (called at :00).
     expect(diffHours).toBeGreaterThan(4)
     expect(diffHours).toBeLessThanOrEqual(5)
   })
