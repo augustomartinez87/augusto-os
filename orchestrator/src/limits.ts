@@ -1,7 +1,9 @@
 import { appendFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { execa } from 'execa'
 import { saveState, type OrchestratorState } from './state.js'
+import { MODEL_INTAKE } from './models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOG_PATH = path.join(__dirname, '..', 'orchestrator.log')
@@ -62,6 +64,44 @@ export async function handleUsageLimit(output: string, state: OrchestratorState)
   await sleepUntil(resetAt)
   state.pausedUntil = null
   saveState(state)
+}
+
+export const PROBE_INTERVAL_MS = 15 * 60 * 1000
+
+export interface ProbeOpts {
+  probeFn?: () => Promise<boolean>
+}
+
+// Disponibilidad = el CLI NO reportó límite de uso. MISMA señal que executor.ts:195
+// (`isUsageLimitError(output) || exitCode === 429`), invertida.
+//
+// NO se usa `exitCode === 0` a propósito: es una señal rota para este ping.
+//  - Falso negativo: `--max-turns 1` corta en exit 1 aun en una llamada exitosa
+//    cuando el modelo emite tool_use en el turno 1 (ver models.ts:10-12). Eso
+//    significa que la API respondió (hay tokens) pero exit 0 diría "no disponible"
+//    y nunca se reanudaría → la "pausa ciega" que F-0028 viene a arreglar.
+//  - Falso positivo: exit 0 con "usage limit" en el texto → reanudaría y volvería a
+//    chocar el límite de inmediato.
+// Se mira stdout Y stderr, porque el límite puede llegar en cualquiera de los dos.
+export function isProbeAvailable(output: string, exitCode: number | null): boolean {
+  return !isUsageLimitError(output) && exitCode !== 429
+}
+
+export async function probeAvailability(opts?: ProbeOpts): Promise<boolean> {
+  if (opts?.probeFn) return opts.probeFn()
+  // `--max-turns 1` = costo mínimo: un solo turno del modelo barato. Su exit code no
+  // se usa para decidir (ver isProbeAvailable); solo importa si reportó límite.
+  const result = await execa('claude', [
+    '--model', MODEL_INTAKE,
+    '--max-turns', '1',
+    '-p', 'ok',
+  ], {
+    reject: false,
+    all: true,
+    stdin: 'ignore',
+  })
+  const output = result.all ?? result.stdout ?? ''
+  return isProbeAvailable(output, result.exitCode ?? null)
 }
 
 const BASE_DELAY_MS = 2_000

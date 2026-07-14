@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isUsageLimitError, isContextWindowError, parseResetTime } from './limits.js'
+import { isUsageLimitError, isContextWindowError, parseResetTime, probeAvailability, isProbeAvailable, PROBE_INTERVAL_MS } from './limits.js'
 
 // ── isUsageLimitError ──────────────────────────────────────────────────────────
 
@@ -40,6 +40,57 @@ describe('isContextWindowError', () => {
 
   it('does not flag unrelated output', () => {
     expect(isContextWindowError('{"result":"ok"}')).toBe(false)
+  })
+})
+
+// ── PROBE_INTERVAL_MS ──────────────────────────────────────────────────────────
+
+describe('PROBE_INTERVAL_MS', () => {
+  it('is 15 minutes in milliseconds', () => {
+    expect(PROBE_INTERVAL_MS).toBe(15 * 60 * 1000)
+  })
+})
+
+// ── probeAvailability ──────────────────────────────────────────────────────────
+
+describe('probeAvailability', () => {
+  it('returns true when injectable probeFn resolves true', async () => {
+    const result = await probeAvailability({ probeFn: async () => true })
+    expect(result).toBe(true)
+  })
+
+  it('returns false when injectable probeFn resolves false', async () => {
+    const result = await probeAvailability({ probeFn: async () => false })
+    expect(result).toBe(false)
+  })
+})
+
+// ── isProbeAvailable (lógica de decisión del probe real) ─────────────────────────
+// Cubre la rama que probeAvailability ejecuta contra el CLI real, que los tests con
+// probeFn inyectado nunca tocan. Disponibilidad = "no hay señal de límite", NO exit 0.
+
+describe('isProbeAvailable', () => {
+  it('is available on a clean success (exit 0, no limit text)', () => {
+    expect(isProbeAvailable('{"type":"result","is_error":false}', 0)).toBe(true)
+  })
+
+  it('is available when --max-turns 1 cuts a successful call to exit 1', () => {
+    // Falso negativo que hundió los intentos previos: la API respondió (hay tokens)
+    // pero el loop se cortó al emitir tool_use en el turno 1. Debe reanudar igual.
+    expect(isProbeAvailable('assistant emitted tool_use then ran out of turns', 1)).toBe(true)
+  })
+
+  it('is NOT available when exit is 0 but the output reports a usage limit', () => {
+    // Falso positivo: reanudar acá volvería a chocar el límite de inmediato.
+    expect(isProbeAvailable('You have hit your usage limit', 0)).toBe(false)
+  })
+
+  it('is NOT available on a 429 exit code', () => {
+    expect(isProbeAvailable('', 429)).toBe(false)
+  })
+
+  it('tolerates a null exit code (treated as no 429)', () => {
+    expect(isProbeAvailable('ok', null)).toBe(true)
   })
 })
 
