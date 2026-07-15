@@ -27,6 +27,60 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0082 · 2026-07-14 · `AUTOPILOT.lock` pasa a cubrir la ejecución completa del loop, no solo la ventana de spawn de autopilot
+
+**Estado:** aceptada — mergeado a `master` (commit `3eeccc2`, sin push todavía)
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** `index.ts main()` adquiere `AUTOPILOT.lock` (vía nueva `acquireRunLock()`, que envuelve el `acquireLock()`/`releaseLock()` ya existentes de `autopilot.ts` sin tocarlos) como primera acción real, antes de tocar `STATE.json` o el working tree, tanto en arranque nuevo como en resume. Se libera en un `finally` que envuelve toda la ejecución (`runLoop`, merge, push). Si el lock está tomado por un proceso vivo (heartbeat fresco vía `loop-heartbeat.ts`), no bloquea ni reintenta: loguea de quién es (featureId/fase/pid) y sale con exit code 1.
+
+**Contexto:** Causa raíz de S-041 — `STATE_PATH` es una ruta única y fija sin namespacing por feature/target, y un `npm start` manual nunca consultaba `AUTOPILOT.lock` (ese mutex solo protegía la ventana de spawn de autopilot contra auto-duplicarse). Dos runs concurrentes — manual+manual o manual+autopilot, mismo target o no — podían leer/escribir `STATE.json` y el working tree de un target al mismo tiempo sin ninguna coordinación. Incidente real: F-0028 step 3 (2026-07-13/14), `STATE.json` quedó `blocked`/`commit: null` con un commit real (`099927c`) que sí era válido.
+
+**Alternativas descartadas:** Lock por-target (permitiría correr features de Kredy y Argos en simultáneo) y `git worktree` por feature (aislaría el working tree por completo) — ambas descartadas explícitamente en el spec por sobreingeniería para un sistema de un solo operador; quedan como opción futura si el volumen de trabajo concurrente lo justifica.
+
+**Consecuencias / riesgo residual:** El lock es global — dos runs sobre targets *distintos* (ej. Kredy y Spensiv a la vez) quedan bloqueados entre sí aunque no compartan working tree ni haya riesgo real de colisión; se pierde ese paralelismo a cambio de simplicidad. Ventana residual de milisegundos entre que autopilot libera el lock tras spawnear el hijo (fire-and-forget, no espera a que el hijo lo retome) y que el hijo lo re-adquiere al arrancar — aceptada, no se construyó handshake padre-hijo para cerrarla. `state.ts` y `git.ts` no se tocaron: el fix resuelve la colisión de `STATE.json` y de working tree compartido como efecto colateral de serializar el acceso, sin namespacear el archivo ni aislar el árbol de trabajo.
+
+> origen: S-041 (Claude Code, sesión manual fuera del loop) · commit `3eeccc2` (sin mergear) · 2026-07-14
+
+---
+
+## ADR-0081 · 2026-07-14 · Guard `isDirectRun` en `index.ts` para poder importar `acquireRunLock` desde tests
+
+**Estado:** aceptada — mergeado a `master` (commit `3eeccc2`, sin push todavía)
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Los efectos de nivel superior de `index.ts` (`--approve`, y la invocación final `main().catch(...)`) quedan detrás de `isDirectRun = pathToFileURL(process.argv[1]).href === import.meta.url`, para que `index.test.ts` pueda importar `acquireRunLock` sin disparar el loop real al cargar el módulo.
+
+**Contexto:** El spec de S-041 pedía extraer la lógica de lock a `index.ts` (no a un módulo nuevo) y testearla. `index.ts` es el entrypoint del CLI: antes de este guard, importarlo desde un test corría `main()`/`--approve` como side-effect del import.
+
+**Alternativas descartadas:** Mover `acquireRunLock` a un módulo separado (`run-lock.ts`) — descartada porque el spec pedía explícitamente que la función viviera en `index.ts`, junto al resto del entrypoint.
+
+**Consecuencias / riesgo residual:** Ninguna funcional — `tsx src/index.ts` (los scripts `start`/`dev`/`approve`) sigue comportándose igual, `process.argv[1]` apunta al propio archivo. Si en el futuro `index.ts` se invoca de una forma no estándar (re-exportado, etc.), `isDirectRun` podría dar falso negativo y no arrancar `main()` — no aplica a los scripts npm actuales.
+
+> origen: S-041 (Claude Code, sesión manual fuera del loop) · commit `3eeccc2` (sin mergear) · 2026-07-14
+
+---
+
+## ADR-0080 · 2026-07-14 · Exposición de deudor cross-AP — numerador global, denominador por-AP
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** `checkDebtorLimit` usa `getGlobalDebtorExposureByCuil` (suma cross-AP por CUIL, normalizado vía `lib/cuit.ts`) como numerador; el límite (% del portfolio) sigue siendo por-AP vía `getPortfolioLiveExposure(db, userId)` sin cambios.
+
+**Contexto:** Un mismo CUIL podía resetear su exposición cambiando de Agente Productor porque `Person` es una tabla per-`userId` sin unique global de `cuit`, y `checkDebtorLimit`/`getDebtorExposure` calculaban todo scoped al libro de un solo AP.
+
+**Alternativas descartadas:** Fusionar también el denominador entre APs — descartado explícitamente por el spec: cada AP mide el % sobre su propio apetito de riesgo, no sobre uno fusionado entre AP.
+
+**Consecuencias / riesgo residual:** `getGlobalDebtorExposureByCuil` devuelve `byAp` (desglose por AP) para logs/debug interno, pero no está conectado a ninguna UI todavía — no se expone al AP evaluando el préstamo (privacidad entre AP). Si a futuro se necesita mostrar el desglose al operador, hay que decidir dónde sin filtrar datos de otro AP. `getDebtorExposure`/`reconcileExposure` quedan intactas (detalle local por-AP).
+
+> origen: SP-018 (Claude Code, sesión manual fuera del loop) · commit `478e836` · 2026-07-14
+
+---
+
 ## ADR-0079 · 2026-07-14 · Disponibilidad del probe por detección de límite, no por exit code
 
 **Estado:** aceptada
