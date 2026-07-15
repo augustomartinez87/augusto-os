@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import {
   loadState, saveState, initState, markStepStatus, appendFailureHistory,
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
@@ -23,8 +23,8 @@ import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta, type AdrDraft } from './adr.js'
 import { appendProgress } from './progress.js'
 import { getOperatorState } from './operator-state.js'
-import { resolveBacklogId, markBacklogState, clearPick } from './autopilot.js'
-import { writeLoopHeartbeat } from './loop-heartbeat.js'
+import { resolveBacklogId, markBacklogState, clearPick, acquireLock, releaseLock, LOCK_PATH } from './autopilot.js'
+import { writeLoopHeartbeat, readLoopHeartbeat, LOOP_HB_PATH } from './loop-heartbeat.js'
 import type { IntakeResult } from './intake.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -59,10 +59,16 @@ function featureAlreadyFinished(featureId: string): string | null {
   return null
 }
 
+// Solo ejecutar los efectos de lado del CLI (--approve, main()) cuando este
+// archivo corre como entrypoint directo (`npm start` / `tsx src/index.ts`), no
+// cuando index.test.ts lo importa para testear acquireRunLock — de lo
+// contrario cada `vitest run` dispararía el loop real al importar el módulo.
+const isDirectRun = !!process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url
+
 // ── CLI: approve command ──────────────────────────────────────────────────────
 
 const args = process.argv.slice(2)
-if (args[0] === '--approve') {
+if (isDirectRun && args[0] === '--approve') {
   const state = loadState()
   if (!state) { console.error('No STATE.json encontrado'); process.exit(1) }
   clearHumanGate(state)
@@ -70,43 +76,83 @@ if (args[0] === '--approve') {
   process.exit(0)
 }
 
+// ── Run lock (S-041) ──────────────────────────────────────────────────────────
+// AUTOPILOT.lock protegía originalmente solo la ventana de spawn de autopilot
+// (tryAutopilotPick). Un `npm start <featureId>` manual nunca lo consultaba, así
+// que dos runs — manual+manual o manual+autopilot — podían leer/escribir
+// STATE.json y el working tree del mismo target al mismo tiempo. Extendemos el
+// mismo lock para que cubra la duración COMPLETA de un run del loop (main()).
+
+/**
+ * Intenta tomar AUTOPILOT.lock para todo este run del loop. Si está tomado por
+ * un proceso vivo (heartbeat fresco o dentro del período de gracia), no
+ * bloquea ni reintenta: loguea de quién es el lock y devuelve false para que
+ * el caller aborte con exit code de fallo.
+ */
+export function acquireRunLock(lockPath = LOCK_PATH, hbPath = LOOP_HB_PATH): boolean {
+  if (acquireLock(10 * 60 * 1000, lockPath, hbPath)) return true
+
+  const hb = readLoopHeartbeat(hbPath)
+  if (hb) {
+    const ageSec = Math.round((Date.now() - new Date(hb.lastHeartbeat).getTime()) / 1000)
+    log(
+      `[main] ⚠ Lock ocupado por feature=${hb.featureId} fase=${hb.phase} ` +
+      `(pid ${hb.pid}, heartbeat hace ${ageSec}s) — abortando este run para no pisar STATE.json/working tree.`,
+    )
+  } else {
+    log('[main] ⚠ Lock ocupado por otro proceso (sin heartbeat de loop legible) — abortando este run.')
+  }
+  return false
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Read system context first
-  readSystemContext()
-
-  let state = loadState()
-
-  if (!state) {
-    const featureId = args[0]
-    if (!featureId) {
-      console.error('Uso: npm start <featureId>\n  featureId = nombre del archivo en features/ sin .md')
-      process.exit(1)
-    }
-    // Guard anti-reejecución: si el feature ya finalizó, no re-planificar (gasta tokens).
-    const finished = featureAlreadyFinished(featureId)
-    if (finished && !args.includes('--force')) {
-      log(`[main] ⚠ ${featureId} YA se ejecutó y finalizó (${finished}).`)
-      log(`[main] Re-ejecutarlo invoca al planner (Opus) + executor (Sonnet) y gasta tokens sin necesidad.`)
-      log(`[main] Si estás seguro de re-ejecutarlo igual: npm start ${featureId} --force`)
-      process.exit(0)
-    }
-    state = await startFeature(featureId)
-  } else {
-    // Resuming — re-resolve target from spec
-    const specPath = path.join(FEATURES_DIR, `${state.featureId}.md`)
-    if (existsSync(specPath)) {
-      const spec = readFileSync(specPath, 'utf-8')
-      const targetMatch = spec.match(/^target:\s*(.+)$/m)
-      const target = targetMatch?.[1]?.trim() ?? 'spensiv'
-      setActiveTarget(target)
-      log(`[main] Resumiendo feature ${state.featureId} — target: ${target}`)
-      assertNoProdDb()
-    }
+  // Primera acción real: tomar el lock antes de tocar STATE.json o el working tree.
+  if (!acquireRunLock()) {
+    process.exit(1)
   }
 
-  await runLoop(state)
+  try {
+    // Read system context first
+    readSystemContext()
+
+    let state = loadState()
+
+    if (!state) {
+      const featureId = args[0]
+      if (!featureId) {
+        console.error('Uso: npm start <featureId>\n  featureId = nombre del archivo en features/ sin .md')
+        releaseLock()
+        process.exit(1)
+      }
+      // Guard anti-reejecución: si el feature ya finalizó, no re-planificar (gasta tokens).
+      const finished = featureAlreadyFinished(featureId)
+      if (finished && !args.includes('--force')) {
+        log(`[main] ⚠ ${featureId} YA se ejecutó y finalizó (${finished}).`)
+        log(`[main] Re-ejecutarlo invoca al planner (Opus) + executor (Sonnet) y gasta tokens sin necesidad.`)
+        log(`[main] Si estás seguro de re-ejecutarlo igual: npm start ${featureId} --force`)
+        releaseLock()
+        process.exit(0)
+      }
+      state = await startFeature(featureId)
+    } else {
+      // Resuming — re-resolve target from spec
+      const specPath = path.join(FEATURES_DIR, `${state.featureId}.md`)
+      if (existsSync(specPath)) {
+        const spec = readFileSync(specPath, 'utf-8')
+        const targetMatch = spec.match(/^target:\s*(.+)$/m)
+        const target = targetMatch?.[1]?.trim() ?? 'spensiv'
+        setActiveTarget(target)
+        log(`[main] Resumiendo feature ${state.featureId} — target: ${target}`)
+        assertNoProdDb()
+      }
+    }
+
+    await runLoop(state)
+  } finally {
+    releaseLock()
+  }
 }
 
 async function loadOrRunScout(featureId: string, target: string, title: string, scoutRoot: string): Promise<string | undefined> {
@@ -527,7 +573,9 @@ function buildPRBody(state: OrchestratorState): string {
   return `## Feature ${state.featureId}\n\nImplementado automáticamente por el orquestador Tier 1.\n\n### Pasos\n${stepList}${adrSection}\n\n### QA\nScreenshots en \`orchestrator/qa-artifacts/${state.featureId}/\`\n\n> Revisar con Claude in Chrome para validación de UX.`
 }
 
-main().catch(err => {
-  log(`[main] ERROR FATAL: ${err.message}`)
-  process.exit(1)
-})
+if (isDirectRun) {
+  main().catch(err => {
+    log(`[main] ERROR FATAL: ${err.message}`)
+    process.exit(1)
+  })
+}
