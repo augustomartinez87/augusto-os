@@ -84,3 +84,25 @@ El siguiente intento, apuntar `node` directo a `node_modules/tsx/dist/cli.mjs` (
 La solución: `ecosystem.config.cjs` arma a mano los mismos flags que `cli.mjs` le pasaría a su hijo (`--require .../tsx/dist/preflight.cjs --import file:///.../tsx/dist/loader.mjs --env-file=.env`) y hace que **pm2 spawnee ese proceso directo**, sin wrapper de por medio. Así `windowsHide: true` aplica al único proceso que corre `sync.ts`, y no hay re-exec interno que se escape del control de pm2.
 
 Si el script `sync` en `package.json` cambia (por ejemplo, agregan flags nuevos), hay que reflejar el cambio a mano en `interpreter_args`/`args` de `ecosystem.config.cjs` — no hay sincronización automática con `package.json`.
+
+---
+
+## 5. Archivos truncados / `.git/index.lock` atascado en CUALQUIER repo target (no solo augusto-os)
+
+Síntoma: `npx tsc --noEmit` tira errores de sintaxis raros (JSX sin cerrar, string sin terminar) en archivos que una sesión de Claude Code acababa de tocar y commitear bien. Causa conocida (S-042, incidente real 2026-07-15 en `kredy`): una escritura de archivo quedó interrumpida a mitad de camino — visto cuando 2 sesiones de Claude Code CLI corren en paralelo sobre el mismo repo fuera del loop (`npm start` nunca las serializa porque no pasan por `index.ts`/`acquireRunLock` de S-041, que solo cubre runs del orquestador). El `.git/index.lock` que suele quedar al lado puede estar huérfano (el proceso que lo creó ya murió) — no asumas que hay que matar algo antes de borrarlo, confirmá primero.
+
+**Diagnóstico:**
+1. `pm2 status` — confirmar que `orch-sync` está `online` sin reinicios recientes (si tiene ↺ alto, investigar aparte, no es esto).
+2. `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select-Object ProcessId, CommandLine | Format-List` — mirar `CommandLine` (no `Path`, que solo da el ejecutable) para ver a qué repo/script apunta cada proceso. Si algo con `git.exe` en el nombre aparece vivo y apuntando al repo afectado, matalo (`Stop-Process -Id <id> -Force`) antes de seguir.
+3. En el repo afectado: `git diff HEAD -- <archivo sospechoso>` — si el diff muestra SOLO líneas borradas (nunca agregadas, o solo fragmentos de línea sueltos al final), es truncación pura y es seguro descartar el working tree de ese archivo. Si aparece contenido nuevo real mezclado, parar y no tocar — no es este bug.
+
+**Recuperación (solo si el diff confirma truncación pura):**
+```
+Remove-Item .git\index.lock -Force
+git checkout HEAD -- <archivo1> <archivo2> ...
+git status
+npx tsc --noEmit
+```
+El último commit tiene el contenido completo (es lo que Claude Code typecheckeó antes de commitear) — restaurar desde ahí no pierde nada real.
+
+**No corras 2 sesiones de Claude Code CLI en paralelo sobre el mismo repo target.** No hay enforcement técnico de esto todavía (ver S-042) — es disciplina manual por ahora.
