@@ -1,0 +1,426 @@
+[
+  {
+    "objetivo": "Mapa del repo para: tres-saltenas — Navegación entre pantallas + auto-registro sin invitación",
+    "archivos": [
+      "package.json",
+      "prisma/schema.prisma",
+      "src/middleware.ts",
+      "src/app/layout.tsx",
+      "src/app/page.tsx",
+      "src/app/sign-in/[[...sign-in]]/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/app/ventas/page.tsx",
+      "src/app/produccion/page.tsx",
+      "src/app/insumos/page.tsx",
+      "src/app/recetas/page.tsx",
+      "src/app/gastos/page.tsx",
+      "src/app/mi-plata/page.tsx",
+      "src/app/retiros/page.tsx",
+      "src/trpc/react.tsx",
+      "src/server/api/trpc.ts",
+      "src/server/api/root.ts",
+      "src/server/api/routers/dashboard.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/venta.ts",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/routers/gasto.ts",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/config.ts",
+      "src/server/api/routers/producto.ts",
+      "src/lib/db.ts",
+      "src/lib/costeo.ts",
+      "src/lib/lotes.ts",
+      "src/lib/produccion.ts",
+      "src/lib/insumos.ts",
+      "src/lib/compras.ts",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "Cada pantalla es un page.tsx dentro de src/app/ con ruta directa (ej. /compras, /ventas, /produccion) sin componente de navegación compartido",
+      "Todas las tRPC procedures usan publicProcedure — NO hay autenticación en las rutas API",
+      "Los forms usan el patrón useState + trpc.useMutation con onSuccess para invalidar queries via utils",
+      "Los archivos de lógica de negocio están en src/lib/ como funciones puras exportadas",
+      "El layout raíz (RootLayout) usa ClerkProvider + TRPCProvider como wrapper único",
+      "Hardcodeo de IDs fijos: PRODUCTO_ID = 'empanada-jyq' y CONFIG_MOD_ID = 'config-mod' en varios routers"
+    ],
+    "dependencias": [
+      "next@16.2.10 (App Router)",
+      "react@19.2.4",
+      "@clerk/nextjs@^7.5.14 (autenticación)",
+      "@prisma/client@^5.22.0 + prisma@^5.22.0 (ORM, PostgreSQL/Neon)",
+      "@trpc/server@^11.18.0 + @trpc/client@^11.18.0 + @trpc/react-query@^11.18.0",
+      "@tanstack/react-query@^5.101.2",
+      "zod@^4.4.3 (validación)",
+      "superjson@^2.2.6 (serialización)",
+      "tailwindcss@^4",
+      "typescript@^5"
+    ],
+    "riesgos": [
+      "NO existe navegación entre pantallas: no hay Link, useRouter, navbar, sidebar ni menú — las páginas están aisladas, accesibles solo por ruta directa en la URL",
+      "NO existe auto-registro sin invitación: no hay página SignUp, no hay componente de Clerk para registro, solo SignIn",
+      "Todas las procedures tRPC son públicas (publicProcedure) — cualquier usuario puede leer/escribir sin autenticación aunque Clerk esté presente",
+      "Clerk middleware (clerkMiddleware) protege todo pero sin lógica de redirect — no hay chequeo de sesión en las rutas",
+      "Hardcodeo de IDs fijos (PRODUCTO_ID='empanada-jyq', CONFIG_MOD_ID='config-mod') que pueden romperse si cambia el seed",
+      "La página de Recetas (src/app/recetas/page.tsx) es un placeholder vacío: 'Módulo pendiente'",
+      "No hay componente Layout compartido entre páginas — cada pantalla repite el mismo shell visual (max-w-lg mx-auto p-4)"
+    ],
+    "evidencia": [
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "1",
+        "explicacion": "Middleware de Clerk que protege todas las rutas. Sin configuración adicional de signUpUrl ni bypass para auto-registro.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/sign-in/[[...sign-in]]/page.tsx",
+        "simbolo": "SignIn",
+        "lineas": "1-6",
+        "explicacion": "Única página de autenticación existente. Solo hay SignIn, no hay SignUp ni registro self-service.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/layout.tsx",
+        "simbolo": "ClerkProvider",
+        "lineas": "8-10",
+        "explicacion": "RootLayout envuelve toda la app con ClerkProvider y TRPCProvider. No hay navegación compartida ni header en el layout.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "12",
+        "explicacion": "Todas las procedures se definen como publicProcedure (sin autenticación). No existe protectedProcedure ni middleware de auth en tRPC.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/page.tsx",
+        "simbolo": "DashboardPage",
+        "lineas": "47-130",
+        "explicacion": "Página principal (Dashboard). No contiene links de navegación a otras secciones.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "ComprasPage",
+        "lineas": "8",
+        "explicacion": "Página de Compras. No hay navegación hacia/desde esta página. Formulario con mutation vía tRPC.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Clerk",
+        "lineas": "1-3",
+        "explicacion": "[NO VERIFICADO] Spec del proyecto. No menciona navegación ni auto-registro como features — el spec asume Clerk para auth pero no detalla el flujo de registro.",
+        "confianza": 0
+      },
+      {
+        "path": "package.json",
+        "simbolo": "@clerk/nextjs",
+        "lineas": "12",
+        "explicacion": "Dependencia de Clerk presente. Sin dependencias adicionales de navegación más allá de next (Link/useRouter vienen de next).",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/dashboard.ts",
+        "simbolo": "PRODUCTO_ID",
+        "lineas": "9-10",
+        "explicacion": "ID hardcodeado 'empanada-jyq' usado en consultas de dashboard. Patrón repetido en varios routers.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/recetas/page.tsx",
+        "simbolo": "RecetasPage",
+        "lineas": "1-4",
+        "explicacion": "Página placeholder con mensaje 'Módulo pendiente'. Confirma que no toda la navegación está implementada.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tres-saltenas es una app Next.js 16 + tRPC + Prisma + Clerk para costeo de empanadas, con 8 módulos funcionales (Dashboard, Compras, Ventas, Producción, Insumos, Gastos, Retiros, Mi plata) y uno pendiente (Recetas). Actualmente NO existe ningún componente de navegación entre pantallas — las páginas son islas accesibles solo escribiendo la ruta en el navegador, sin navbar, sidebar, links ni layout compartido. Tampoco existe flujo de auto-registro sin invitación: Clerk está configurado únicamente con SignIn; no hay página SignUp ni lógica de registro self-service. Todas las tRPC procedures son públicas (publicProcedure), sin autenticación efectiva en las rutas API. Se recomienda implementar un componente NavBar/Layout compartido y agregar SignUp de Clerk para el auto-registro."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: tres-saltenas — Navegación entre pantallas + auto-registro sin invitación",
+    "archivos": [
+      "src/app/layout.tsx",
+      "src/app/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/app/insumos/page.tsx",
+      "src/app/produccion/page.tsx",
+      "src/app/ventas/page.tsx",
+      "src/app/gastos/page.tsx",
+      "src/app/recetas/page.tsx",
+      "src/app/retiros/page.tsx",
+      "src/app/mi-plata/page.tsx",
+      "src/app/sign-in/[[...sign-in]]/page.tsx",
+      "src/middleware.ts",
+      "src/trpc/react.tsx",
+      "src/server/api/trpc.ts",
+      "src/server/api/root.ts",
+      "package.json",
+      "prisma/schema.prisma",
+      "BOOTSTRAP-PROMPT.md",
+      "SESSION-HANDOFF.md",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "Cada pantalla es un page.tsx en src/app/<seccion>/ con 'use client' y layout max-w-lg mx-auto p-4",
+      "RootLayout envuelve en ClerkProvider > TRPCProvider (trpc/react.tsx)",
+      "tRPC publicProcedure sin auth — no hay protección por ruta en el servidor",
+      "middleware.ts usa clerkMiddleware() mínimo, sin auth.protect() ni createRouteMatcher",
+      "Las páginas comparten patrón de formulario: useState + trpc.useMutation + handleSubmit + parseLocalDate",
+      "Los módulos funcionales usan trpc.<router>.<procedure>.useQuery() / useMutation() con invalidate en onSuccess"
+    ],
+    "dependencias": [
+      "@clerk/nextjs@^7.5.14 (ClerkProvider, SignIn, clerkMiddleware)",
+      "next/link (para navegación entre páginas — no usado actualmente)",
+      "next/navigation (useRouter, usePathname — no usado actualmente)",
+      "@tanstack/react-query (para invalidación de queries tras mutación)",
+      "@trpc/react-query / @trpc/client (comunicación API)",
+      "zod@^4.4.3 (validación de inputs en tRPC)"
+    ],
+    "riesgos": [
+      "NO EXISTE ningún componente de navegación (ni BottomNav, ni Sidebar, ni navbar, ni links entre páginas). Cada página es isla — solo se accede escribiendo la URL.",
+      "El diseño es invite-only explícito (BOOTSTRAP-PROMPT.md §5: 'sin signup público'). Implementar auto-registro sin invitación contradice la especificación y requeriría cambiar la configuración de Clerk.",
+      "No hay SignUp page ni ruta /sign-up en el repo — solo existe /sign-in con <SignIn /> de Clerk.",
+      "SESSION-HANDOFF.md advierte que Clerk está con signup público accidentalmente activo, pero la intención es mantenerlo cerrado.",
+      "middleware.ts no protege rutas — cualquier ruta es accesible sin autenticación (riesgo de seguridad si se habilita auto-registro sin protección).",
+      "Las pantallas existentes usan main > max-w-lg mx-auto p-4 — habría que decidir si la navegación va dentro o fuera de ese contenedor.",
+      "RootLayout no tiene espacio预留 para un nav global — habría que modificarlo."
+    ],
+    "evidencia": [
+      {
+        "path": "src/app/page.tsx",
+        "simbolo": "DashboardPage",
+        "lineas": "53-120",
+        "explicacion": "Página principal (Dashboard) — punto de entrada actual. No tiene links de navegación a otras secciones.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/layout.tsx",
+        "simbolo": "RootLayout",
+        "lineas": "6-16",
+        "explicacion": "Layout raíz. Envuelve children en ClerkProvider > TRPCProvider. No incluye ningún componente de navegación global. Es donde se debería agregar un BottomNav o navbar compartido entre pantallas.",
+        "confianza": 1
+      },
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "1-5",
+        "explicacion": "Middleware de Clerk en su versión mínima (sin auth.protect()). No protege rutas. Para auto-registro se necesita decidir qué rutas son públicas y cuáles requieren auth.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/sign-in/[[...sign-in]]/page.tsx",
+        "simbolo": "SignInPage",
+        "lineas": "1-8",
+        "explicacion": "Única página de auth existente. Usa <SignIn /> de Clerk. NO existe ruta SignUp (/sign-up no está implementada).",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "12-16",
+        "explicacion": "Todos los procedimientos tRPC usan publicProcedure — no hay distinción de auth server-side. Si se habilita auto-registro, esto puede ser suficiente, pero no hay trazabilidad de usuario.",
+        "confianza": 1
+      },
+      {
+        "path": "BOOTSTRAP-PROMPT.md",
+        "simbolo": "sin signup público",
+        "lineas": "26-29",
+        "explicacion": "El bootstrap spec dice explícitamente 'sin signup público' para Clerk. La decisión de diseño es invite-only. Auto-registro requeriría revertir esta decisión.",
+        "confianza": 1
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "Falta: desactivar signup público en el dashboard de Clerk",
+        "lineas": "24-26",
+        "explicacion": "[NO VERIFICADO] Documenta que el signup público está accidentalmente activo en Clerk dashboard y debe desactivarse. Confirma que la intención es invite-only.",
+        "confianza": 0
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "ComprasPage",
+        "lineas": "22-140",
+        "explicacion": "Ejemplo de página de módulo. Sigue el patrón común: 'use client', max-w-lg mx-auto p-4, trpc hooks, formulario con useState. No tiene link de navegación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "1-20",
+        "explicacion": "Router tRPC raíz. Todos los routers (compra, insumo, producto, lote, venta, gasto, retiro, config, dashboard) son públicos. No hay concepto de sesión de usuario en el backend.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/recetas/page.tsx",
+        "simbolo": "RecetasPage",
+        "lineas": "1-4",
+        "explicacion": "Página placeholder de Recetas — muestra que el módulo está pendiente. No tiene navegación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/trpc/react.tsx",
+        "simbolo": "TRPCProvider",
+        "lineas": "10-28",
+        "explicacion": "Provider tRPC cliente. Se usa en layout.tsx. No maneja auth — solo configura httpBatchLink a /api/trpc.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "@clerk/nextjs",
+        "lineas": "10-20",
+        "explicacion": "Dependencia @clerk/nextjs@^7.5.14 — disponible para implementar SignUp, protect, etc. No se usa SignUp actualmente.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Auth Clerk: solo Dani y Augusto tienen acceso",
+        "lineas": "60-65",
+        "explicacion": "[NO VERIFICADO] Especificación MVP: solo 2 usuarios por invitación. Auto-registro sin invitación está fuera de spec.",
+        "confianza": 0
+      }
+    ],
+    "resumen": "El repo tiene 10 pantallas funcionales (Dashboard, Compras, Insumos, Producción, Ventas, Gastos, Recetas placeholder, Retiros, Mi Plata, Sign-In) pero carece de TODO componente de navegación entre ellas — no existe Link, BottomNav, Sidebar ni navbar de ningún tipo, cada página es un callejón sin salida. En cuanto a auth, el diseño es deliberadamente invite-only (solo Dani y Augusto), sin ruta SignUp ni flujo de auto-registro; el middleware Clerk está en modo mínimo sin protección de rutas. Implementar 'navegación entre pantallas' requiere crear un componente de navegación global (tipo BottomNav mobile-first) e inyectarlo en RootLayout. Implementar 'auto-registro sin invitación' requiere revertir la decisión de diseño explícita del MVP, agregar ruta /sign-up con <SignUp /> de Clerk, y posiblemente ajustar la configuración del dashboard de Clerk y la seguridad de las rutas."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: tres-saltenas — Navegación entre pantallas + auto-registro sin invitación",
+    "archivos": [
+      "src/app/layout.tsx",
+      "src/middleware.ts",
+      "src/server/api/trpc.ts",
+      "src/server/api/root.ts",
+      "src/app/sign-in/[[...sign-in]]/page.tsx",
+      "package.json",
+      "SESSION-HANDOFF.md",
+      "SPEC-MVP.md",
+      "src/app/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/app/insumos/page.tsx",
+      "src/app/produccion/page.tsx",
+      "src/app/ventas/page.tsx",
+      "src/app/gastos/page.tsx",
+      "src/app/retiros/page.tsx",
+      "src/app/mi-plata/page.tsx",
+      "src/app/recetas/page.tsx",
+      "src/app/api/trpc/[trpc]/route.ts",
+      "prisma/schema.prisma"
+    ],
+    "patrones": [
+      "Todas las pages usan 'use client' + trpc hooks + layout max-w-lg mx-auto",
+      "Ninguna página importa Link, useRouter, ni ningún componente de navegación",
+      "Todos los routers tRPC usan publicProcedure sin autenticación",
+      "Date parsing duplicado en cada página (parseLocalDate) — código repetido",
+      "Las mutaciones invalidan queries vía trpc.useUtils() en onSuccess"
+    ],
+    "dependencias": [
+      "@clerk/nextjs@^7.5.14",
+      "@trpc/server@^11.18.0",
+      "@trpc/client@^11.18.0",
+      "@trpc/react-query@^11.18.0",
+      "next@16.2.10",
+      "prisma@^5.22.0",
+      "react@19.2.4"
+    ],
+    "riesgos": [
+      "NAVEGACIÓN: No existe ningún componente de navegación (navbar, sidebar, links). Cada pantalla es standalone. El usuario no puede moverse entre páginas.",
+      "AUTO-REGISTRO: Clerk está configurado con signup público (no desactivado). Como dice SESSION-HANDOFF.md: 'hoy cualquiera con el link puede registrarse' — riesgo de seguridad real.",
+      "AUTH EN RUTAS: middleware.ts usa clerkMiddleware() sin auth.protect() — no hay enforcement de autenticación en ninguna ruta.",
+      "AUTH EN API: Todos los routers tRPC usan publicProcedure — el backend no verifica sesión. Incluso datos sensibles (costoUnitarioActual, stockActual) son públicos.",
+      "SIGN-UP PAGE: No existe página /sign-up. Si se habilita signup en Clerk sin UI propia, Clerk usará su página por defecto, pero no hay control sobre el flujo.",
+      "TESTS: Solo hay un smoke test (src/__tests__/smoke.test.ts). No hay tests unitarios ni de integración para los routers tRPC ni para la lógica de negocio.",
+      "PRISMA PINNING: package.json fija prisma@^5.22.0. 'npm install prisma@latest' rompe el schema (Prisma v7 cambia datasource).",
+      "COUPLING: El layout.tsx tiene ClerkProvider + TRPCProvider anidados en orden fijo. Cualquier cambio en la estructura de providers afecta a todas las pages.",
+      "COUPLING tRPC: Todas las queries/mutations dependen de appRouter definido en root.ts. Agregar navegación no lo rompe, pero si se modifica la estructura de providers, todo el data-fetching se cae.",
+      "MIDDLEWARE INTRUSIÓN: SESSION-HANDOFF.md documenta que el loop de augusto-os tiene tendencia a colar auth global en middleware.ts sin pedido explícito (gotcha #8).",
+      "PUSH AUTOMÁTICO A MAIN: No hay gate que impida git push origin main (gotcha #9 de SESSION-HANDOFF.md). Si el loop mergea, pushea a main aunque no haya deploy real."
+    ],
+    "evidencia": [
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "1-3",
+        "explicacion": "Middleware de Clerk en versión mínima, sin protect() ni route matchers. No protege ninguna ruta. Cualquiera accede a todo aunque no esté logueado.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "12-12",
+        "explicacion": "Todos los procedures se definen como publicProcedure (t.procedure). No hay autenticación en ninguna ruta de la API tRPC.",
+        "confianza": 1
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "Falta: desactivar signup público",
+        "lineas": "19-20",
+        "explicacion": "[NO VERIFICADO] Documentación explícita: el signup público de Clerk está activo, cualquiera con el link puede registrarse. Es un riesgo de seguridad conocido y documentado.",
+        "confianza": 0
+      },
+      {
+        "path": "src/app/layout.tsx",
+        "simbolo": "ClerkProvider",
+        "lineas": "11-18",
+        "explicacion": "Layout raíz con ClerkProvider > TRPCProvider. No hay navegación global (navbar/sidebar). Cualquier navegación entre pantallas debe agregarse aquí o en un layout anidado.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/page.tsx",
+        "simbolo": "DashboardPage",
+        "lineas": "56-58",
+        "explicacion": "Dashboard page — no hay ningún Link, botón de navegación ni referencia a otras rutas. Es una pantalla aislada sin salida a otras secciones.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "ComprasPage",
+        "lineas": "11-13",
+        "explicacion": "Página de Compras — misma situación: sin navegación hacia/desde otras páginas. No hay header común ni breadcrumbs.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "5-5",
+        "explicacion": "Router de insumos usa publicProcedure. Datos sensibles como costoUnitarioActual y stockActual son accesibles sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "prisma",
+        "lineas": "30-30",
+        "explicacion": "Prisma pineado en ^5.22.0. Instalar prisma@latest (v7) rompe el schema porque v7 cambia datasource de datasource a prisma.config.ts.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/smoke.test.ts",
+        "simbolo": "expect(1 + 1).toBe(2)",
+        "lineas": "6-8",
+        "explicacion": "Único test existente en el repo: un smoke test vacío. No hay tests para routers, lógica de negocio, ni navegación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/api/trpc/[trpc]/route.ts",
+        "simbolo": "fetchRequestHandler",
+        "lineas": "3-11",
+        "explicacion": "Handler de tRPC sin autenticación. createTRPCContext solo inyecta db, no hay sesión de Clerk disponible en el contexto.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "datasource db",
+        "lineas": "8-10",
+        "explicacion": "Schema Prisma con formato clásico (url + directUrl). Si alguien migra a Prisma v7, esto deja de funcionar y requiere refactor completo a prisma.config.ts + driver adapters.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/sign-in/[[...sign-in]]/page.tsx",
+        "simbolo": "SignIn",
+        "lineas": "3-7",
+        "explicacion": "Página de sign-in usando componente Clerk. No existe página /sign-up. El signup hoy depende enteramente del dashboard de Clerk (público).",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo no tiene ningún componente de navegación entre pantallas (navbar, sidebar, links) — cada página es una isla sin forma de moverse entre módulos. Además, el auto-registro sin invitación es un riesgo de seguridad real: Clerk tiene signup público activo, no hay protección en rutas ni en la API tRPC (todo es publicProcedure), y no existe página de sign-up. Se recomienda: (1) agregar un layout compartido con navegación (navbar/sidebar), (2) desactivar signup público en Clerk y agregar flujo de invitación, (3) agregar auth.protect() en middleware y migrar procedures sensibles a protectedProcedure, (4) escribir tests antes de tocar la navegación/registro para no romper funcionalidad existente sin cobertura."
+  }
+]

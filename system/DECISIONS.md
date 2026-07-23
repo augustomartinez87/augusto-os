@@ -27,6 +27,56 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0085 · 2026-07-23 · Uso de `<Show when="signed-in">` en lugar de `<SignedIn>` (Clerk v7)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se usa `<Show when="signed-in">` del paquete `@clerk/nextjs` como equivalente al componente `SignedIn` que la tarea especificaba, porque `SignedIn` no existe en Clerk v7 instalado.
+**Contexto:** La tarea pedía explícitamente `<SignedIn>`, pero `@clerk/nextjs@7.5.14` eliminó ese componente y lo reemplazó por `Show` con prop `when`. El typecheck confirmó que `SignedIn` no es un export válido del paquete instalado.
+**Alternativas descartadas:** Crear un wrapper client-side con `useAuth()` que condicione el render — más verbose y sin ventaja real sobre `Show`.
+**Consecuencias / riesgo residual:** Si algún día se actualiza `@clerk/nextjs` a una versión que reintroduzca `SignedIn`, el cambio es trivial. La semántica en runtime es idéntica.
+
+> Generado por el loop · feature F-0029 · step 2
+
+---
+## ADR-0084 · 2026-07-15 · SP-014 "recordar cobro" — dos endpoints (protegido + público) en vez de uno scoped por `userId`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente (el prompt SP-014 asumía un scoping que no existe en el código)
+**Target:** kredy
+
+**Decisión:** `getCollectionReminders` se implementó en dos entry points sobre un mismo helper compartido (`server/services/collection-reminders.service.ts`): `loans.getCollectionReminders` (protectedProcedure, `ctx.user.id`, cartera completa de Augusto incluidos préstamos orgánicos) y `ap.apMyCollectionReminders` (publicProcedure, `token` → `agentConfigId`, cartera propia de un AP puntual — mismo criterio de atribución que `apMyPortfolio`: loans con `ApCommission.agentConfigId` match). El alias de cobro en el mensaje es el `AgentConfig.collectionAlias` del AP dueño (vía `Opportunity.agentConfigId`) con fallback al `collectionAlias` del `AgentConfig` `isSelf` de Augusto para préstamos orgánicos.
+
+**Contexto:** SP-014 pedía un único procedure "protected, scoped al AP logueado vía `userId` de sesión". Kredy es single-tenant: solo Augusto tiene sesión Clerk, `Loan.userId` es siempre su `User.id`. No existe un `userId` por AP — el AP no tiene cuenta Clerk, opera vía el portal público token-based `/ap?token=xxx` (`AgentConfig.token` → `agentConfigId`, publicProcedure), igual que `apPipeline`/`apMyPortfolio`/`apMyAccount` ya existentes en `server/routers/ap.ts`. Implementar el endpoint como un único `protectedProcedure` scoped por `ctx.user.id` habría mostrado a Augusto su cartera completa (correcto) pero nunca le habría dado a un AP individual un botón de recordatorio para *su propia* cartera sin pasar por la sesión de Augusto — que era justamente el objetivo del sprint ("que el AP... le mande... sin salir de Kredy").
+
+**Alternativas descartadas:** (1) Un solo endpoint protegido con un parámetro `agentConfigId` opcional — descartada porque el portal `/ap` no tiene sesión Clerk, no puede llamar un `protectedProcedure` en absoluto. (2) Mutación pública para que el AP cargue el teléfono de un deudor inline (`persons.setPhone` vía token) — descartada por superficie de escritura pública adicional sobre datos de `Person`; el fallback de teléfono faltante quedó solo en la vista protegida de Augusto (`onSetPhone`), y en el portal público de AP una fila sin teléfono muestra "Sin teléfono cargado" sin acción.
+
+**Consecuencias / riesgo residual:** Dos endpoints y una función de reducción compartida (`reduceToNearestInstallmentByPerson`) en vez de uno — más superficie, pero sin duplicar la lógica de negocio (dedupe por deudor, ventana de días, resolución de alias). Riesgo residual: si en el futuro un AP sí obtiene cuenta Clerk propia (multi-tenant real), el endpoint protegido necesitará un filtro adicional por AP que hoy no existe (hoy Augusto ve todo, sin excepción, vía `loans.getCollectionReminders`).
+
+> origen: SP-014 (system/prompts/SP-014-recordatorios-cobro-whatsapp.md), ejecución manual Sonnet fuera del loop · 2026-07-15
+
+---
+
+## ADR-0083 · 2026-07-15 · SP-014 "recordar cobro" — "Copiar todos" en vez de abrir N pestañas wa.me en secuencia
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La acción bulk del panel `CollectionRemindersPanel` es **"Copiar todos"** (concatena todos los mensajes generados, uno por deudor, al portapapeles). No se implementó "abrir todos los wa.me en pestañas". El envío 1-a-1 vía wa.me queda cubierto por el botón "Enviar recordatorio" **por fila** (ya es "un click por deudor" — satisface esa parte del spec sin lógica bulk adicional).
+
+**Contexto:** SP-014 pedía elegir entre (a) abrir los links wa.me en secuencia, un click por deudor, o (b) un botón de copiar por fila, y documentar cuál y por qué. Abrir N pestañas `wa.me` disparadas por un solo click de un botón "abrir todos" es frágil: los navegadores bloquean popups que no sean resultado directo y síncrono de un gesto de usuario, así que solo la primera (o ninguna) se abriría de forma confiable fuera de Chrome con configuración permisiva. El componente ya existente `bulk-collection-message.tsx` (mensaje de cobro al cobrador, no al deudor) resolvió el mismo problema con copy-only; se mantuvo esa convención para consistencia.
+
+**Alternativas descartadas:** Abrir los N wa.me en pestañas secuenciales con un solo click — descartada por el bloqueo de popups ya mencionado, que degradaría a "el AP hace click y no pasa nada" en la mayoría de los navegadores/mobile.
+
+**Consecuencias / riesgo residual:** El AP/Augusto sigue teniendo que hacer un click por deudor para abrir WhatsApp (vía el botón de fila), igual que si no existiera el botón bulk — "Copiar todos" es una utilidad adicional (pegar en una nota, reenviar a otro canal), no un atajo real para el envío 1-a-1. Si en el futuro se prioriza reducir esa fricción, la alternativa sería abrir los links de a uno con un delay/confirmación entre cada uno (requiere interacción del usuario en cada paso, no automatizable de un solo click).
+
+> origen: SP-014 (system/prompts/SP-014-recordatorios-cobro-whatsapp.md), ejecución manual Sonnet fuera del loop · 2026-07-15
+
+---
+
 ## ADR-0082 · 2026-07-14 · `AUTOPILOT.lock` pasa a cubrir la ejecución completa del loop, no solo la ventana de spawn de autopilot
 
 **Estado:** aceptada — mergeado a `master` (commit `3eeccc2`, sin push todavía)

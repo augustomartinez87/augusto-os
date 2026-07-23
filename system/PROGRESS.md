@@ -744,3 +744,46 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0026/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-14 — F-0028 completado
+
+## Feature F-0028
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En state.ts, hacer saveState atómico: escribir el JSON a STATE.json.tmp con writeFileSync y luego renameSync(STATE.json.tmp, STATE.json) para reemplazar el archivo real (usar el renameSync ya importado). Eliminar todo writeFileSync directo sobre STATE.json. (ee2b1481)
+- [x] Step 2: En state.ts, hacer loadState tolerante a basura trailing: extraer el primer valor JSON válido del contenido (estilo raw_decode), y si había basura post-JSON, loguear un warning y reescribir el archivo limpio vía saveState. STATE sano nunca debe reescribirse perdiendo steps/commits; mantener compatibilidad con STATE.*.archived.json. (18b86706)
+- [x] Step 3: Agregar tests en state.test.ts: (a) saveState escribe atómicamente y no deja .tmp; (b) loadState con un fixture corrupto real (JSON válido + null bytes/texto trailing) lo parsea, loguea warning y reescribe versión limpia; (c) un STATE sano se lee/escribe sin pérdida de datos. (099927c2)
+- [x] Step 4: En limits.ts, agregar la constante exportada PROBE_INTERVAL_MS (15 min) y el helper probeAvailability() inyectable (patrón callClaude? de architect/planner/reviewer) que invoca el CLI de claude con MODEL_INTAKE, --max-turns 1 y prompt trivial ('ok'), devolviendo boolean según exit/status. Costo mínimo, nunca en paralelo. (154c1247)
+- [x] Step 5: En limits.ts, modificar handleUsageLimit: cuando NO hay hora de reset parseable (evitando el fallback ciego de +5h), entrar en loop de poll cada PROBE_INTERVAL_MS con probeAvailability() y reanudar apenas un probe pasa; cuando SÍ hay hora real, mantener sleepUntil + un probe de confirmación al despertar. Conservar parseResetTime. (0dc450e7)
+- [x] Step 6: En index.ts, al arrancar con pausedUntil futuro en STATE.json, ejecutar probeAvailability() ANTES de dormir: si hay disponibilidad, limpiar la pausa (pausedUntil) y continuar el loop; si no, mantener el sleep. Respetar el gating por OPERATOR_STATE existente. (6d8e75e6)
+- [x] Step 7: Agregar tests en limits.test.ts para la reanudación temprana: probe inyectable que falla N veces y luego pasa, verificando que handleUsageLimit reanuda tras el probe exitoso sin dormir el bloque fijo. Actualizar los tests existentes de parseResetTime/fallback que asuman el sleep de 5h. (2ef2d174)
+
+### Decisiones (ADR)
+- ADR-0079 — Disponibilidad del probe por detección de límite, no por exit code [Instrucción de Augusto]
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0028/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-23 — F-0029 completado
+
+## Feature F-0029
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el componente client `src/components/NavBar.tsx`: tira horizontal de pills con `overflow-x-auto`, contenedor `max-w-lg mx-auto`, sticky arriba. Usa `usePathname()` de next/navigation para resaltar la pill activa (mismo patrón de contraste que el selector PERIODOS en src/app/page.tsx). Links a Dashboard (/), Ventas (/ventas), Compras (/compras), Producción (/produccion), Insumos (/insumos), Gastos (/gastos), Retiros (/retiros), Mi Plata (/mi-plata) y Recetas (/recetas) usando next/link. Mobile-first (~375px) sin cortar contenido. (c09db816)
+- [x] Step 2: Integrar NavBar en `src/app/layout.tsx`: renderizarlo envuelto en `<SignedIn>` de @clerk/nextjs, antes de children, para que aparezca en todas las páginas de contenido con sesión activa y NO en /sign-in ni /sign-up. No modificar el orden de ClerkProvider > TRPCProvider. (fee94f8a)
+- [x] Step 3: Crear `src/app/sign-up/[[...sign-up]]/page.tsx` con el componente `<SignUp/>` de @clerk/nextjs, replicando el mismo layout/estilo que sign-in existente (centrado, `min-h-screen`). (e202c781)
+- [x] Step 4: Agregar cross-links: en la página de sign-in un link a /sign-up y en la página de sign-up un link a /sign-in (usando next/link), para navegar entre ambas sin escribir la URL a mano. (92688668)
+
+### Decisiones (ADR)
+- ADR-0085 — Uso de `<Show when="signed-in">` en lugar de `<SignedIn>` (Clerk v7) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0029/`
+
+> Revisar con Claude in Chrome para validación de UX.

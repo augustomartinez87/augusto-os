@@ -213,3 +213,73 @@
 - [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
 - [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
 - [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
+- [2026-06-26T03:57:11.717557+00:00] (web) mejorar visualmente el dashboard...
+- [2026-06-26T18:08:55.033391+00:00] (web) robar ideas de https://vestyapp.io/ para argos
+- [2026-06-27T19:29:50.70295+00:00] (web) en kredy verificar que el form de personas, tenga como campos obligatorios o semi obligatorios, los que siosi se necesitan para que se generaran el contrato y el pagaré
+- [2026-06-29T20:15:42.228586+00:00] (web) argos, chequear: https://chatgpt.com/c/6a36a727-4cd8-83e9-ac3f-a7579daf8116?mweb_fallback=1
+- [2026-06-29T20:16:07.448907+00:00] (web) implementar distintas ias: https://chatgpt.com/c/6a3dad96-4878-83e9-8c7d-9a8854dbaab5?mweb_fallback=1 quiero a chatgpt como consultor externo
+- [2026-06-29T20:21:11.470554+00:00] (web) augusto os: https://chatgpt.com/c/6a3f2582-b5c0-83e9-8e13-c6ebcda6a365?mweb_fallback=1
+- [2026-06-29T20:21:24.550871+00:00] (web) eficiencia en tokens: https://grok.com/c/70ee7e64-7fd8-4bac-a144-b99192dbf730?rid=21b28237-f7a7-44d7-bbd2-6cd5bbecae3a
