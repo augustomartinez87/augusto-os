@@ -123,39 +123,42 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  try {
-    setActiveTarget(target)
-  } catch (err) {
-    console.error(`[check-repo-health] Target inválido: ${(err as Error).message}`)
-    process.exit(1)
-  }
+  setActiveTarget(target)
 
   const repoRoot = getRepoRoot()
-  console.log(`[check-repo-health] repo root: ${repoRoot}`)
+  console.log(`[check-repo-health] repo root: ${repoRoot}\n`)
 
   const checks: CheckResult[] = []
 
   const wt = await checkWorkingTree(repoRoot)
   checks.push(wt)
+  console.log(`${wt.ok ? '✅' : '⚠️'} ${wt.name}: ${wt.detail}`)
 
   const lock = checkIndexLock(repoRoot)
   checks.push(lock)
+  console.log(`${lock.ok ? '✅' : '⚠️'} ${lock.name}: ${lock.detail}`)
 
   const tc = await checkTypecheck(repoRoot)
   checks.push(tc)
+  console.log(`${tc.ok ? '✅' : '⚠️'} ${tc.name}: ${tc.detail}`)
 
-  for (const c of checks) {
-    const icon = c.ok ? '✓' : '✗'
-    console.log(`${icon} ${c.name}: ${c.detail}`)
-  }
+  const okCount = checks.filter(c => c.ok).length
+  const issueCount = checks.length - okCount
+  const summary =
+    issueCount === 0
+      ? `${okCount}/${checks.length} chequeos OK`
+      : `${okCount}/${checks.length} chequeos OK, ${issueCount} con issues`
+  console.log(`\nResumen: ${summary}`)
 
-  const allOk = checks.every(c => c.ok)
-  process.exit(allOk ? 0 : 1)
+  process.exit(okCount === checks.length ? 0 : 1)
 }
 
 // Solo auto-ejecutar como CLI: sin este guard, importar el módulo desde un test
 // dispara main() y su process.exit(), lo que anula el propósito de inyectar runFn.
 const invokedPath = process.argv[1]
 if (invokedPath && pathToFileURL(invokedPath).href === import.meta.url) {
-  main()
+  main().catch((err: Error) => {
+    console.error('[check-repo-health] Error fatal:', err.message)
+    process.exit(1)
+  })
 }

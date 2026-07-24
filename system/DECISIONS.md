@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0095 · 2026-07-24 · Combinar stdout+stderr para el output de error de tsc
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** `checkTypecheck` combina `result.stdout` y `result.stderr` antes de truncar, en lugar de usar solo `stdout`.
+**Contexto:** La función `run` local en `check-repo-health.ts` separa stdout y stderr (a diferencia de `verifier.ts` que usa `all: true`). `tsc --noEmit` escribe sus errores a stdout, pero para robustez ante variantes de tsc o entornos que redirijan stderr, se combinan ambos.
+**Alternativas descartadas:** Usar solo `result.stdout` (suficiente para tsc estándar). Agregar un segundo helper `run` con `all: true` solo para typecheck (más fiel a verifier.ts pero introduce duplicación innecesaria).
+**Consecuencias / riesgo residual:** Si stdout y stderr contienen contenido solapado en algún caso edge, el output podría mostrar líneas repetidas. En la práctica con tsc esto no ocurre.
+
+> Generado por el loop · feature F-0032 · step 4
+
+---
 ## ADR-0094 · 2026-07-24 · Caso "no es repo git" retorna ok: true en lugar de ok: false
 
 **Estado:** aceptada
