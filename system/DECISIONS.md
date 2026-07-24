@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0091 · 2026-07-24 · Step 5 sin commit + separación del commit ajeno por contención de working tree
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Step 5 se cierra sin commit propio (typecheck y tests ya pasaban: 0 errores, 384/384), dejando el working tree limpio para que `commitStep` registre el no-op. El commit ajeno `8e36acd` (auditoría UX de tres-saltenas) se preservó en el ref `backlog/tres-saltenas-ux-audit` y se removió de la feature branch vía reset a `9b157b1`.
+**Contexto:** Los dos intentos previos fallaron en review por "el único archivo tocado es BACKLOG.md". La causa no era código sino contención: otra sesión de Claude editaba `system/BACKLOG.md` en el mismo working tree mientras corría el loop, y `commitStep` (git.ts:57) hace `git add -A`, barriendo lo ajeno al commit del step. Se observó en vivo (commit ajeno a las 10:52:20 + `.git/HEAD.lock` huérfano). Es el modo de falla S-042 ya documentado.
+**Alternativas descartadas:** (a) Inventar un cambio de código para que el step "tenga diff" — rechazado por falso y fuera de alcance. (b) `git revert` del commit ajeno — rechazado: dejaría igual un diff de BACKLOG.md y borraría las filas de Dani al mergear a master. (c) Cherry-pick a master — prohibido por restricción de no tocar main. (d) Reescribir el step 1 para sacar la fila S-044 — rechazado: desincronizaría el sha que `STATE.json` referencia en la línea 10, reproduciendo el incidente S-041.
+**Consecuencias / riesgo residual:** Queda la fila S-044 (1 línea ajena) dentro del commit del step 1, aceptada como deuda menor ya aprobada en review. El ref `backlog/tres-saltenas-ux-audit` queda vivo y hay que decidir a mano dónde integrarlo (no se puede desde el loop por la restricción de no tocar main). El riesgo estructural de S-042 sigue sin enforcement técnico: si otra sesión escribe en `augusto-os/` durante el loop, el fallo se reproduce.
+
+> Generado por el loop · feature F-0031 · step 5
+
+---
 ## ADR-0090 · 2026-07-24 · Uso de trim() en lugar de ?? para detectar strings vacíos en resolveQaBaseUrl
 
 **Estado:** aceptada
