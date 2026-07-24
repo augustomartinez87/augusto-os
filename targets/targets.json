@@ -57,11 +57,11 @@
       "qaBaseUrl": "http://localhost:3000",
       "devDatabaseUrl": "${TRES_SALTENAS_DEV_DATABASE_URL}",
       "devDirectUrl": "${TRES_SALTENAS_DEV_DATABASE_URL}",
-      "_devSetupNote": "Prod Neon 'tres-saltenas' creado 2026-07-08 (host ep-tiny-voice-atetw10j, PG18). Falta: crear branch/proyecto 'tres-saltenas-dev' (sandbox del loop) y completar devDatabaseUrl real.",
+      "_devSetupNote": "Swap de roles 2026-07-24 (Cowork, aprobado por Augusto): el proyecto Neon que Vercel prod usaba de hecho (host ep-frosty-wildflower-atkvtbza, antes llamado 'tres-saltenas-dev') tenía los datos reales de Dani — se renombró a 'tres-saltenas' y pasa a ser prod oficial, cero migración de datos. El proyecto vacío que antes se llamaba 'tres-saltenas' (host ep-tiny-voice-atetw10j) se renombró a 'tres-saltenas-dev' y es el sandbox nuevo del loop — está vacío, falta correr `prisma db push` contra la URL directa antes de que el loop pueda usarlo. Motivo del swap: TRES_SALTENAS_DEV_DATABASE_URL apuntaba al host con datos reales, es decir el loop automático tenía member para escribir contra la data de Dani — violaba el mismo invariante de S-000. Ver TS-023 en BACKLOG.md.",
       "prodDbPatterns": [
-        "ep-tiny-voice-atetw10j",
-        "ep-tiny-voice-atetw10j-pooler.c-9.us-east-1.aws.neon.tech",
-        "ep-tiny-voice-atetw10j.c-9.us-east-1.aws.neon.tech"
+        "ep-frosty-wildflower-atkvtbza",
+        "ep-frosty-wildflower-atkvtbza-pooler.c-9.us-east-1.aws.neon.tech",
+        "ep-frosty-wildflower-atkvtbza.c-9.us-east-1.aws.neon.tech"
       ]
     },
     "sistema": {
