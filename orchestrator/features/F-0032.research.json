@@ -1,0 +1,281 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Sistema — check-repo-health, diagnóstico rápido para sesiones manuales fuera del loop (S-042)",
+    "archivos": [
+      "orchestrator/features/F-0032.md",
+      "orchestrator/src/targets.ts",
+      "orchestrator/src/intake-cli.ts",
+      "orchestrator/src/verifier.ts",
+      "orchestrator/src/git.ts",
+      "orchestrator/src/evaluate-cli.ts",
+      "orchestrator/package.json",
+      "orchestrator/src/index.ts",
+      "orchestrator/src/escalation.test.ts",
+      "targets/targets.json"
+    ],
+    "patrones": [
+      "CLI standalone: process.argv[2] → setActiveTarget() → getRepoRoot() / getTargetConfig() (ver intake-cli.ts:53-56)",
+      "execa invocación con reject:false, all:true, cwd: getRepoRoot() (ver verifier.ts:13-19)",
+      "copy del helper run() desde verifier.ts:13-21 (NO importarlo para no acoplar)",
+      "git status --porcelain con execa (ver git.ts:92-95, hasUncommittedChanges())",
+      "existsSync + statSync para .git/index.lock (path.join(cwd, '.git', 'index.lock'))",
+      "Mock de execa en tests vía vi.fn() inyectado (ver escalation.test.ts:38-40)",
+      "Script en package.json con patrón: tsx --env-file=.env src/<script>.ts"
+    ],
+    "dependencias": [
+      "execa (^9.3.0) — ya en orchestrator/package.json dependencies",
+      "tsx (^4.15.0) — ya en devDependencies",
+      "fs (existsSync, statSync, readFileSync) — módulo nativo de Node",
+      "path (path.join) — módulo nativo de Node",
+      "vitest — ya en devDependencies para tests"
+    ],
+    "riesgos": [
+      "NO importar run() de verifier.ts — hay que copiar el helper localmente (spec explícito: 'copiar el helper run(), no importarlo')",
+      "NO modificar targets.ts, verifier.ts, git.ts ni index.ts — script standalone obligatorio",
+      "No debe requerir DB ni variables de entorno de ningún target (dbModel: none compatible)",
+      "Sin dependencias nuevas — solo usar execa que ya está en package.json",
+      "Script solo diagnóstico — NO debe bloquear, serializar ni borrar locks (eso es fuera de alcance)",
+      "El .git/index.lock puede ser huérfano (sin proceso vivo) — solo informar mtime, no asumir ni matar"
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/features/F-0032.md",
+        "simbolo": "F-0032",
+        "lineas": "1-55",
+        "explicacion": "Spec completo del sistema check-repo-health con acceptance criteria, contexto (S-042), pasos sugeridos, fuera de alcance y restricciones clave. Contiene la especificación exacta a implementar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "setActiveTarget",
+        "lineas": "27-32",
+        "explicacion": "Función clave para resolver el target por nombre desde targets.json. Debe llamarse primero, mismo patrón que intake-cli.ts. Lanza error si el target no existe.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "getRepoRoot",
+        "lineas": "34-40",
+        "explicacion": "Retorna el path del target activo (target.path) — necesario como cwd para git status, tsc --noEmit y existsSync del .git/index.lock.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "getTargetConfig",
+        "lineas": "62-72",
+        "explicacion": "Retorna el objeto Target completo con paths expandidos. Útil si el check-repo-health necesitara leer config adicional del target (aunque el spec no lo requiere explícitamente).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/intake-cli.ts",
+        "simbolo": "main",
+        "lineas": "47-79",
+        "explicacion": "Patrón de CLI standalone a replicar: recibe process.argv[2], llama setActiveTarget(), maneja errores con console.error + process.exit(1). El check-repo-health debe seguir exactamente esta estructura.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/verifier.ts",
+        "simbolo": "run",
+        "lineas": "13-19",
+        "explicacion": "Helper asíncrono que invoca execa con reject:false, all:true, cwd:getRepoRoot(). El spec dice copiar esta función localmente (NO importarla) para no acoplar el health-check al flujo del loop.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/verifier.ts",
+        "simbolo": "runVerifier",
+        "lineas": "21-29",
+        "explicacion": "Contiene la invocación exacta de 'npx tsc --noEmit' que el check-repo-health debe replicar. Mismo comando, mismo cwd, mismo patrón execa. Referencia directa del spec.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "hasUncommittedChanges",
+        "lineas": "92-95",
+        "explicacion": "Función existente que corre 'git status --porcelain' y retorna boolean. El check-repo-health podría reusar esta función directamente (NO está en la lista de archivos prohibidos de modificar).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "git",
+        "lineas": "8-14",
+        "explicacion": "Helper interno de git.ts que usa execa('git', args, {cwd, reject:false}). Patrón de uso de execa con git que sirve de referencia para el check-repo-health.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/package.json",
+        "simbolo": "scripts",
+        "lineas": "9-17",
+        "explicacion": "Lista de scripts existentes (intake, evaluar, start, etc.) donde debe agregarse 'check-repo-health': 'tsx --env-file=.env src/check-repo-health.ts'. Sigue el mismo patrón que los demás scripts.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/package.json",
+        "simbolo": "execa",
+        "lineas": "20",
+        "explicacion": "Dependencia existente ^9.3.0 — el spec exige no agregar nuevas dependencias, execa ya está disponible y es suficiente para correr git, npx tsc, etc.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "acquireRunLock",
+        "lineas": "90-106",
+        "explicacion": "Función que toma el lock del loop para evitar contención. El check-repo-health NO debe usar esto (es para loops, no para sesiones manuales). Sirve como referencia de lo que NO hay que tocar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/evaluate-cli.ts",
+        "simbolo": "main",
+        "lineas": "10-28",
+        "explicacion": "Segundo ejemplo de CLI standalone (además de intake-cli.ts) con patrón: leer argv, validar, ejecutar lógica, console.log, manejo de errores con exit(1). Refuerza el patrón a seguir.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/escalation.test.ts",
+        "simbolo": "vi.fn().mockResolvedValue",
+        "lineas": "38-40",
+        "explicacion": "Patrón de inyección de mocks para execa: se pasa invokeFixerFn/runVerifierFn como parámetros. El spec pide mismo patrón de inyección para mockear execa en los tests del check-repo-health.",
+        "confianza": 1
+      },
+      {
+        "path": "targets/targets.json",
+        "simbolo": "targets",
+        "lineas": "1-89",
+        "explicacion": "Archivo de configuración de targets. El check-repo-health lo leerá indirectamente vía getRepoRoot()/getTargetConfig(). Cada target tiene un path absoluto que será el cwd de git/tsc.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "currentBranch",
+        "lineas": "16-18",
+        "explicacion": "[NO VERIFICADO] Podría ser útil para reportar en qué rama está el repo durante el diagnóstico, aunque el spec no lo pide explícitamente.",
+        "confianza": 0.6
+      }
+    ],
+    "resumen": "El spec completo del sistema check-repo-health (S-042) está detallado en orchestrator/features/F-0032.md con acceptance criteria, pasos de implementación y restricciones. Existen cuatro piezas de código reusables clave: (1) setActiveTarget/getRepoRoot en targets.ts para resolver el path del target, (2) el patrón CLI standalone de intake-cli.ts, (3) el helper run() con execa para 'npx tsc --noEmit' en verifier.ts (a copiar, no importar), y (4) hasUncommittedChanges en git.ts para 'git status --porcelain'. Todo está disponible en el orchestrator sin nuevas dependencias — solo crear orchestator/src/check-repo-health.ts, copiar el patrón run() de verifier.ts, y agregar el script en package.json."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Sistema — check-repo-health, diagnóstico rápido para sesiones manuales fuera del loop (S-042)",
+    "archivos": [
+      "orchestrator/features/F-0032.md",
+      "orchestrator/src/targets.ts",
+      "orchestrator/src/verifier.ts",
+      "orchestrator/src/intake-cli.ts",
+      "orchestrator/src/git.ts",
+      "orchestrator/package.json",
+      "targets/targets.json",
+      "orchestrator/src/planner.test.ts",
+      "orchestrator/src/limits.test.ts"
+    ],
+    "patrones": [
+      "import { setActiveTarget, getRepoRoot, getTargetConfig } from './targets.js'  // mismo patrón que intake-cli.ts:7",
+      "async function run(cmd: string, args: string[]): Promise<{ ok: boolean; output: string }>  // copiar este helper de verifier.ts:13-21, NO importarlo",
+      "const result = await execa('npx', ['tsc', '--noEmit'], { cwd, reject: false, all: true })  // typecheck con cwd del target",
+      "const status = await execa('git', ['status', '--porcelain'], { cwd, reject: false })  // git status para working tree",
+      "existsSync(path.join(cwd, '.git', 'index.lock'))  // detección de lock huérfano con statSync(...).mtime",
+      "vi.mock('./targets.js', () => ({...}))  // patrón de mocking en tests (planner.test.ts:4-10)",
+      "process.exit(0/1)  // exit code 0 si todo limpio, 1 si hay issues"
+    ],
+    "dependencias": [
+      "execa (^9.3.0, ya en dependencies)",
+      "fs (built-in: existsSync, statSync, readFileSync)",
+      "path (built-in)"
+    ],
+    "riesgos": [
+      "setActiveTarget() usa estado global mutable (targets.ts:28 'activeTarget') — no es thread-safe; para el uso standalone planeado (sesiones manuales fuera del loop) es aceptable, pero si alguien lo corre mientras el loop principal está activo en el mismo proceso podría corromper el estado del loop.",
+      "Los paths en targets.json son rutas absolutas Windows (C:/Users/Augusto/...) — el script puede fallar en otro OS o si el monorepo no está montado exactamente en esa ruta. getRepoRoot() devuelve el path tal cual está en targets.json.",
+      "No debe depender de DB ni variables de entorno de ningún target (por el target 'argos' con dbModel:none y 'sistema' también dbModel:none) — la copia del helper run() de verifier.ts debe omitir getDbEnvOverride() porque el health-check no ejecuta contra la DB.",
+      "La feature spec dice explícitamente 'copiar el helper run(), no importarlo de verifier.ts para no acoplar el health-check al flujo del loop' — ignorar esta restricción acoplaría el script a verifier.ts y a sus dependencias (db-guard).",
+      "Los tests existentes usan inyección de dependencias (vi.mock + funciones injectables) en lugar de mockear execa directamente — no hay precedente en el repo de vi.mock('execa') [NO VERIFICADO: no encontré ningún test que mockee execa directamente, solo inyección de funciones como callClaude/probeFn].",
+      "El script debe registrar un nuevo comando en package.json scripts: 'check-repo-health': 'tsx --env-file=.env src/check-repo-health.ts' — si no se agrega, npm run check-repo-health fallará.",
+      "El target 'sistema' tiene scoutRoot diferente de path — el health-check usa getRepoRoot() (que retorna path), no getScoutRoot(), lo cual es correcto porque tsc debe correr en el directorio del orchestrator. Pero hay que asegurarse de que el chequeo de git status --porcelain también use ese mismo cwd.",
+      "La detección de .git/index.lock requiere que el directorio tenga un subdirectorio .git/ — si el path del target no es un repo git válido, existsSync devuelve false silenciosamente; el script debería considerar este caso como advertencia."
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/features/F-0032.md",
+        "simbolo": "F-0032",
+        "lineas": "1-100",
+        "explicacion": "Feature spec completo del check-repo-health. Define acceptance criteria, restricciones clave (sin dependencias nuevas, no modificar targets.ts/verifier.ts/git.ts/index.ts, sin DB requerida) y pasos de implementación.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "setActiveTarget",
+        "lineas": "30-37",
+        "explicacion": "Función a reusar para setear el target activo desde el CLI (mismo patrón que intake-cli.ts). Usa estado global mutable (variable 'activeTarget' línea 28).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "getRepoRoot",
+        "lineas": "43-50",
+        "explicacion": "Retorna el path absoluto del target desde targets.json. Se usa como cwd para git status, tsc --noEmit y detección de .git/index.lock.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "activeTarget",
+        "lineas": "28",
+        "explicacion": "Variable global mutable (tipo string | null) que cachea el target activo. No es thread-safe. getRepoRoot() y getTargetConfig() lanzan Error si es null.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/verifier.ts",
+        "simbolo": "run",
+        "lineas": "13-21",
+        "explicacion": "Helper async que ejecuta un comando via execa con cwd=getRepoRoot(), reject:false, all:true. Incluye getDbEnvOverride() en env — la copia para check-repo-health debe omitir esa línea. La spec dice copiar, no importar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/verifier.ts",
+        "simbolo": "runVerifier",
+        "lineas": "23-29",
+        "explicacion": "Llama a run('npx', ['tsc', '--noEmit']) — mismo comando exacto que debe usar check-repo-health. Confirma el patrón de invocación.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/intake-cli.ts",
+        "simbolo": "setActiveTarget",
+        "lineas": "7,89",
+        "explicacion": "Patrón de CLI standalone a seguir: importa setActiveTarget desde ./targets.js y lo llama con el target recibido como argumento CLI.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "hasUncommittedChanges",
+        "lineas": "125-128",
+        "explicacion": "Función existente que ya corre git status --porcelain. La spec de F-0032 pide hacerlo directamente con execa en el nuevo script (para no acoplar a git.ts), pero confirma el comando exacto y la semántica.",
+        "confianza": 1
+      },
+      {
+        "path": "targets/targets.json",
+        "simbolo": "sistema",
+        "lineas": "89-101",
+        "explicacion": "Config del target 'sistema' con path absoluto Windows y scoutRoot diferente. dbModel:none — confirma que el health-check no necesita DB. El path apunta a orchestrator/ dentro del monorepo.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/package.json",
+        "simbolo": "scripts",
+        "lineas": "7-15",
+        "explicacion": "Scripts actuales del orchestrator. Falta el script check-repo-health. La spec requiere agregarlo. execa ya está en dependencies (línea 18).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/planner.test.ts",
+        "simbolo": "vi.mock",
+        "lineas": "4-10",
+        "explicacion": "Patrón de mocking usado en tests existentes: vi.mock('./targets.js', () => ({...})). Este es el patrón a seguir para mockear targets en los tests del health-check.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/limits.test.ts",
+        "simbolo": "probeAvailability",
+        "lineas": "44-50",
+        "explicacion": "Ejemplo de testing con funciones injectables (probeFn) en lugar de mockear execa directamente. Patrón alternativo al vi.mock para el test de check-repo-health.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El check-repo-health (F-0032/S-042) es un script CLI standalone que debe reusar setActiveTarget/getRepoRoot de targets.ts y copiar el helper run() de verifier.ts sin importarlo, usando execa para git status --porcelain y tsc --noEmit. El riesgo principal es el estado global mutable de setActiveTarget (no thread-safe), paths absolutos Windows en targets.json que pueden no funcionar cross-platform, y la necesidad de mockear execa en tests sin precedente directo en el repo (los tests existentes usan inyección de funciones en lugar de vi.mock('execa')). Las restricciones clave incluyen no agregar dependencias nuevas, no modificar targets.ts/verifier.ts/git.ts/index.ts, y no requerir DB ni variables de entorno de ningún target."
+  }
+]

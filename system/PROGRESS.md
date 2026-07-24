@@ -815,3 +815,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0030/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-24 — F-0031 completado
+
+## Feature F-0031
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `orchestrator/src/targets.ts`, exportar una función pura `resolveQaBaseUrl(envUrl: string | undefined, targetQaBaseUrl: string | undefined): string` que devuelva, en orden de prioridad: `envUrl` si es un string no vacío (trim), luego `targetQaBaseUrl` si es un string no vacío (trim), y como último fallback el literal `'http://localhost:3000'`. Usar chequeo de string vacío (no `??` a secas) porque el target 'sistema' tiene `qaBaseUrl: ""` en `targets/targets.json` y `??` no captura el string vacío, lo que rompería el fallback exigido por el acceptance criteria. No modificar la interfaz `Target` ni `getTargetConfig()`. (e5d58552)
+- [x] Step 2: En `orchestrator/src/index.ts` línea ~447, reemplazar `const baseUrl = process.env.QA_BASE_URL ?? 'http://localhost:3000'` por una llamada a `resolveQaBaseUrl(process.env.QA_BASE_URL, getTargetConfig().qaBaseUrl)`, agregando `resolveQaBaseUrl` al import ya existente de `'./targets.js'` (línea 21). No cambiar la firma ni la lógica interna de `runQA()` en `qa.ts` — solo el valor que se le pasa como `baseUrl`. (a267630e)
+- [x] Step 3: Crear `orchestrator/src/targets.test.ts` con tests unitarios de `resolveQaBaseUrl` que cubran: (a) sin QA_BASE_URL y target con `qaBaseUrl: 'http://localhost:5173'` → devuelve 5173 (caso argos); (b) con QA_BASE_URL seteada → esa gana sobre el valor del target; (c) target con `qaBaseUrl: ''` (caso 'sistema') → fallback a `'http://localhost:3000'`; (d) target con `qaBaseUrl` undefined → mismo fallback; (e) QA_BASE_URL vacía o solo espacios → no gana, se usa el target. Usar vitest siguiendo el estilo de los tests existentes en `orchestrator/src/`. (89f210fc)
+- [x] Step 4: Revisar los mocks de `getTargetConfig` existentes en `orchestrator/src/planner.test.ts` (línea ~6) y cualquier otro test que mockee `./targets.js`, y agregarles la propiedad `qaBaseUrl` para que el objeto mockeado sea consistente con la interfaz `Target`. Verificar además que ningún test ni mensaje de log/error de `orchestrator/src/qa.ts` asuma el literal `http://localhost:3000` como valor fijo; el hint de `qa.ts` sobre `QA_BASE_URL=<url>` debe mantenerse porque el env var sigue siendo override válido. (9b157b1c)
+- [x] Step 5: Correr typecheck (`npx tsc --noEmit` o el script equivalente del package.json del orchestrator) y `npm test`, y corregir cualquier error de tipos, import o test roto que surja del cambio. No tocar `targets/targets.json`, no agregar dependencias nuevas. (9b157b1c)
+
+### Decisiones (ADR)
+- ADR-0090 — Uso de trim() en lugar de ?? para detectar strings vacíos en resolveQaBaseUrl [Instrucción de Augusto]
+- ADR-0091 — Step 5 sin commit + separación del commit ajeno por contención de working tree [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0031/`
+
+> Revisar con Claude in Chrome para validación de UX.
