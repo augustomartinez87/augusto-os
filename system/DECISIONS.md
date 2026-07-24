@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0093 · 2026-07-24 · check-repo-health separa stdout de stderr y no auto-ejecuta main() al importarse
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** El helper `run` de `check-repo-health.ts` devuelve `{ ok, stdout, stderr }` en vez de mergear ambos streams con `all: true`, y sólo se parsea `stdout`; además `main()` queda detrás de un guard `import.meta.url === pathToFileURL(process.argv[1])` para que el módulo sea importable desde tests.
+**Contexto:** Dos intentos previos fallaron en review por el mismo bug: errores y warnings de git terminaban parseados como "archivos sucios". La causa no era el chequeo faltante de `result.ok` (que el intento 2 agregó) sino el contrato del helper: `all: true` mergea stdout+stderr irreversiblemente, y git emite warnings a stderr con exit code 0 (ej. `LF will be replaced by CRLF` en Windows), que sobreviven a cualquier chequeo de exit code. En paralelo, el `main()` en el top-level hacía que importar el módulo ejecutara el script y su `process.exit()`, anulando el propósito del `runFn` inyectable.
+**Alternativas descartadas:** Se descartó seguir parcheando `checkWorkingTree` con filtros heurísticos sobre el texto mergeado (ej. descartar líneas que empiecen con `warning:`/`fatal:`) porque es frágil, depende del idioma/versión de git y no distingue un archivo llamado `warning: x` de un warning real. También se descartó usar `git status --porcelain -z` por ahora: resuelve paths con caracteres raros pero no el problema del merge de streams.
+**Consecuencias / riesgo residual:** El helper `run` de este script diverge del patrón `{ ok, output }` que podrían usar otros scripts, pero converge con la convención ya vigente en `git.ts`. Los chequeos que se agreguen después a este script deben seguir parseando `stdout` y usar `stderr` sólo para diagnóstico. Queda abierto que `parseGitStatus` no desescapa paths con caracteres no-ASCII o espacios que git entrecomilla en porcelain v1 (aparecen entre comillas en el listado); es cosmético para un script de diagnóstico y se resolvería migrando a `-z`.
+
+> Generado por el loop · feature F-0032 · step 2
+
+---
 ## ADR-0092 · 2026-07-24 · run() recibe cwd como parámetro en lugar de llamar getRepoRoot() internamente
 
 **Estado:** aceptada

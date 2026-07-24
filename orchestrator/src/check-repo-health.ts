@@ -1,3 +1,5 @@
+import { existsSync, statSync } from 'node:fs'
+import path from 'node:path'
 import { execa } from 'execa'
 import { pathToFileURL } from 'node:url'
 import { setActiveTarget, getRepoRoot } from './targets.js'
@@ -59,6 +61,49 @@ export async function checkWorkingTree(cwd: string, runFn: RunFn = run): Promise
   }
 }
 
+type FsDeps = {
+  existsSync: (p: string) => boolean
+  statSync: (p: string) => { mtimeMs: number }
+}
+
+function formatAge(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `hace ${h}h ${m}m`
+  if (m > 0) return `hace ${m}m ${s}s`
+  return `hace ${s}s`
+}
+
+export function checkIndexLock(
+  cwd: string,
+  fsDeps: FsDeps = { existsSync, statSync },
+  now: () => number = () => Date.now(),
+): CheckResult {
+  const gitDir = path.join(cwd, '.git')
+  if (!fsDeps.existsSync(gitDir)) {
+    return {
+      name: 'index-lock',
+      ok: true,
+      detail: `Advertencia: ${cwd} no parece ser un repo git válido (no existe .git/) — chequeo de lock omitido`,
+    }
+  }
+
+  const lockPath = path.join(gitDir, 'index.lock')
+  if (!fsDeps.existsSync(lockPath)) {
+    return { name: 'index-lock', ok: true, detail: 'Sin lock (index.lock no existe)' }
+  }
+
+  const { mtimeMs } = fsDeps.statSync(lockPath)
+  const age = formatAge(now() - mtimeMs)
+  return {
+    name: 'index-lock',
+    ok: false,
+    detail: `Existe .git/index.lock (${age}). Puede ser un proceso git en curso o un lock huérfano. Si no hay procesos git activos, puede eliminarse manualmente.`,
+  }
+}
+
 async function main(): Promise<void> {
   const target = process.argv[2]
   if (!target) {
@@ -80,6 +125,9 @@ async function main(): Promise<void> {
 
   const wt = await checkWorkingTree(repoRoot)
   checks.push(wt)
+
+  const lock = checkIndexLock(repoRoot)
+  checks.push(lock)
 
   for (const c of checks) {
     const icon = c.ok ? '✓' : '✗'
