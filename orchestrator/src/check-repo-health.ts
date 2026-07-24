@@ -104,6 +104,18 @@ export function checkIndexLock(
   }
 }
 
+export async function checkTypecheck(cwd: string, runFn: RunFn = run): Promise<CheckResult> {
+  const result = await runFn('npx', ['tsc', '--noEmit'], cwd)
+  if (result.ok) {
+    return { name: 'typecheck', ok: true, detail: 'typecheck OK' }
+  }
+  const combined = [result.stdout, result.stderr].filter(Boolean).join('\n')
+  const lines = combined.split('\n')
+  const truncated =
+    lines.length > 40 ? `...(truncado, mostrando últimas 40 líneas)\n${lines.slice(-40).join('\n')}` : combined
+  return { name: 'typecheck', ok: false, detail: `typecheck falló:\n${truncated}` }
+}
+
 async function main(): Promise<void> {
   const target = process.argv[2]
   if (!target) {
@@ -128,6 +140,9 @@ async function main(): Promise<void> {
 
   const lock = checkIndexLock(repoRoot)
   checks.push(lock)
+
+  const tc = await checkTypecheck(repoRoot)
+  checks.push(tc)
 
   for (const c of checks) {
     const icon = c.ok ? '✓' : '✗'

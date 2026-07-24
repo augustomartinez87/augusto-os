@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0094 · 2026-07-24 · Caso "no es repo git" retorna ok: true en lugar de ok: false
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Cuando `.git/` no existe, `checkIndexLock` devuelve `ok: true` con un mensaje de advertencia en `detail`, en lugar de `ok: false`.
+**Contexto:** El spec pide "devolver una advertencia informativa" pero no especifica el valor de `ok`. El chequeo del lock tiene semántica binaria: hay lock o no hay. Si no hay `.git/`, no hay lock detectable, así que técnicamente el problema no existe — solo el contexto es inusual.
+**Alternativas descartadas:** Retornar `ok: false` tratando la ausencia de `.git/` como un error de configuración. Se descartó porque forzaría al script a salir con exit code 1 por una situación que puede ser intencional (target recién clonado, path incorrecto), y eso confunde el diagnóstico.
+**Consecuencias / riesgo residual:** Si el target apunta a un directorio que no es un repo, el script reporta `✓ index-lock` pero el detail explica que el chequeo fue omitido. El operador debe leer el detail, no solo el icono. Si se quiere que este caso sea un error, basta cambiar `ok: true` a `ok: false` en esa rama.
+
+> Generado por el loop · feature F-0032 · step 3
+
+---
 ## ADR-0093 · 2026-07-24 · check-repo-health separa stdout de stderr y no auto-ejecuta main() al importarse
 
 **Estado:** aceptada
