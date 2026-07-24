@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0091 · 2026-07-24 · Step 5 sin commit + separación del commit ajeno por contención de working tree
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Step 5 se cierra sin commit propio (typecheck y tests ya pasaban: 0 errores, 384/384), dejando el working tree limpio para que `commitStep` registre el no-op. El commit ajeno `8e36acd` (auditoría UX de tres-saltenas) se preservó en el ref `backlog/tres-saltenas-ux-audit` y se removió de la feature branch vía reset a `9b157b1`.
+**Contexto:** Los dos intentos previos fallaron en review por "el único archivo tocado es BACKLOG.md". La causa no era código sino contención: otra sesión de Claude editaba `system/BACKLOG.md` en el mismo working tree mientras corría el loop, y `commitStep` (git.ts:57) hace `git add -A`, barriendo lo ajeno al commit del step. Se observó en vivo (commit ajeno a las 10:52:20 + `.git/HEAD.lock` huérfano). Es el modo de falla S-042 ya documentado.
+**Alternativas descartadas:** (a) Inventar un cambio de código para que el step "tenga diff" — rechazado por falso y fuera de alcance. (b) `git revert` del commit ajeno — rechazado: dejaría igual un diff de BACKLOG.md y borraría las filas de Dani al mergear a master. (c) Cherry-pick a master — prohibido por restricción de no tocar main. (d) Reescribir el step 1 para sacar la fila S-044 — rechazado: desincronizaría el sha que `STATE.json` referencia en la línea 10, reproduciendo el incidente S-041.
+**Consecuencias / riesgo residual:** Queda la fila S-044 (1 línea ajena) dentro del commit del step 1, aceptada como deuda menor ya aprobada en review. El ref `backlog/tres-saltenas-ux-audit` queda vivo y hay que decidir a mano dónde integrarlo (no se puede desde el loop por la restricción de no tocar main). El riesgo estructural de S-042 sigue sin enforcement técnico: si otra sesión escribe en `augusto-os/` durante el loop, el fallo se reproduce.
+
+> Generado por el loop · feature F-0031 · step 5
+
+---
+## ADR-0090 · 2026-07-24 · Uso de trim() en lugar de ?? para detectar strings vacíos en resolveQaBaseUrl
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Se usa `envUrl?.trim()` y `targetQaBaseUrl?.trim()` como condición de truthy en lugar de `?? ` encadenado, para que strings vacíos o con solo espacios activen el fallback a `'http://localhost:3000'`.
+**Contexto:** El target 'sistema' tiene `qaBaseUrl: ""` en targets.json. El operador `??` solo captura `null`/`undefined`, no el string vacío, por lo que `"" ?? 'http://localhost:3000'` devolvería `""` y rompería el fallback exigido por el acceptance criteria.
+**Alternativas descartadas:** Usar `||` (trata falsy en general, incluyendo `"0"` o `"false"` como strings que caerían al fallback indebidamente); normalizar targets.json poniendo `undefined` o eliminar el campo en sistema (cambiaría la interfaz Target o el JSON, fuera de alcance explícito).
+**Consecuencias / riesgo residual:** Strings con solo espacios en blanco también caen al fallback — comportamiento razonable pero no especificado explícitamente en el spec.
+
+> Generado por el loop · feature F-0031 · step 1
+
+---
+## ADR-0089 · 2026-07-23 · Reusar dbTrampa para el segundo describe en lugar de `{} as any`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se reutilizó el Proxy `dbTrampa` (que lanza si se lo toca) en lugar de pasar `{} as any` como db mock para el segundo describe block.
+**Contexto:** El spec dice `{ db, userId: null } as any` pero no especifica qué db mock usar. Reutilizar `dbTrampa` refuerza que la protección ocurre antes de llegar a la DB — si el middleware fallara, el test explotaría con un error distinto a UNAUTHORIZED, haciendo el fallo más descriptivo.
+**Alternativas descartadas:** Pasar `{} as any` como db (más simple, pero si el middleware fallara el error sería un TypeError oscuro sobre un método inexistente).
+**Consecuencias / riesgo residual:** Ninguna — el comportamiento del test es idéntico a efectos del criterio de aceptación.
+
+> Generado por el loop · feature F-0030 · step 8
+
+---
+## ADR-0088 · 2026-07-23 · Los tests de tRPC inyectan userId en el contexto en vez de relajar enforceAuth
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Ante el fallo masivo de tests al migrar los routers a `protectedProcedure`, se corrigieron los tests pasando `{ db, userId: "test-user" }` al `createCallerFactory`, dejando `enforceAuth` intacto. Se sumó `src/__tests__/auth.test.ts` que verifica que las llamadas sin `userId` devuelven `UNAUTHORIZED`.
+**Contexto:** Los tests construyen el caller de tRPC a mano con un contexto falso sin `userId`. Al migrar a `protectedProcedure` todos fallaron con UNAUTHORIZED, lo que parecía una regresión pero era la protección funcionando. La alternativa tentadora —desactivar `enforceAuth` en entorno de test— habría hecho pasar la suite mientras dejaba la feature sin cobertura real.
+**Alternativas descartadas:** Se descartó un bypass de `enforceAuth` bajo `NODE_ENV=test` (anula el valor de la suite como red de seguridad de F-0030) y mockear `@clerk/nextjs/server` con `vi.mock` (innecesario: el contexto ya se construye a mano y `auth()` nunca se ejecuta en estos tests).
+**Consecuencias / riesgo residual:** Todo test nuevo sobre routers protegidos debe pasar `userId` en el contexto, siguiendo la convención ya usada en compras/insumos/lote. Queda abierto que `createRouteMatcher` está deprecado en @clerk/nextjs v7.5.14 y se remueve en el próximo major: `src/middleware.ts` va a necesitar migrarse a chequeos por recurso, aunque `protectedProcedure` ya cubre la superficie tRPC y el middleware queda sólo como defensa en profundidad.
+
+> Generado por el loop · feature F-0030 · step 6
+
+---
+## ADR-0087 · 2026-07-23 · Los tests de lógica de negocio stubean un contexto autenticado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Los unit tests de routers protegidos construyen el contexto tRPC con `{ db, userId: "test-user" }` en lugar de solo `{ db }`. No se debilita `enforceAuth` ni se agrega bypass por entorno.
+**Contexto:** Al migrar los routers de operaciones a `protectedProcedure`, los 9 call sites de `createCaller` fallaron con UNAUTHORIZED porque su ctx stub quedó desactualizado respecto de la forma `{ db, userId }` que introdujo el step 2. Había que decidir dónde absorber el cambio.
+**Alternativas descartadas:** Se descartó (a) volver a `publicProcedure`, que anula el feature; (b) hacer que `enforceAuth` no aplique cuando `NODE_ENV === "test"`, porque mete una rama de auth que nunca corre en producción y vuelve el middleware no testeable; (c) un helper compartido `createAuthedCaller`, que no se justifica por 9 líneas y agrega superficie.
+**Consecuencias / riesgo residual:** Estos tests cubren lógica de negocio, no enforcement de auth — que hoy no tiene test propio y descansa en las 6 líneas de `enforceAuth` más `auth.protect()` en el middleware. Cuando se migren los 5 routers restantes (`config`, `dashboard`, `gasto`, `retiro`, `venta`) sus tests van a romper por la misma causa y necesitan el mismo ajuste; si el patrón se repite en más de un step, ahí sí conviene extraer el helper.
+
+> Generado por el loop · feature F-0030 · step 5
+
+---
+## ADR-0086 · 2026-07-23 · Firma de opts usa `{ req: Request }` en lugar de `{ headers: Headers }`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se declaró `_opts: { req: Request }` alineado con lo que `fetchRequestHandler` del adapter fetch de tRPC v11 pasa (`FetchCreateContextFnOptions = { req: Request, resHeaders: Headers }`). El parámetro se prefijó con `_` porque Clerk v7 lee el auth vía AsyncLocalStorage de Next.js, sin necesidad de acceder al objeto.
+**Contexto:** El spec sugería `{ headers: Headers }` como posible shape pero aclaraba "o el shape que consuma el route handler". `fetchRequestHandler` pasa `{ req, resHeaders }`, no `{ headers }`. Usar `{ req: Request }` es compatible por contravarianza de parámetros en TypeScript: `{ req, resHeaders } extends { req }` es verdadero, por lo que la asignación en `route.ts` typechecea correctamente.
+**Alternativas descartadas:** Usar `{ headers: Headers }` habría roto el typecheck porque `fetchRequestHandler` no pasa ese shape; usar el tipo importado `FetchCreateContextFnOptions` habría añadido un import innecesario.
+**Consecuencias / riesgo residual:** El step siguiente (crear `authedProcedure`) puede leer `ctx.userId` directamente. Los tests existentes que pasan `{ db } as any` ya no typechequean si el caller se tipea estrictamente, pero eso se resuelve en el step de tests.
+
+> Generado por el loop · feature F-0030 · step 2
+
+---
 ## ADR-0085 · 2026-07-23 · Uso de `<Show when="signed-in">` en lugar de `<SignedIn>` (Clerk v7)
 
 **Estado:** aceptada

@@ -1,0 +1,271 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: tres-saltenas — Forzar autenticación real (middleware + tRPC), hoy no protege nada",
+    "archivos": [
+      "src/server/api/trpc.ts",
+      "src/server/api/root.ts",
+      "src/app/api/trpc/[trpc]/route.ts",
+      "src/middleware.ts",
+      "src/app/layout.tsx",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/routers/producto.ts",
+      "src/server/api/routers/venta.ts",
+      "src/server/api/routers/gasto.ts",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/config.ts",
+      "src/server/api/routers/dashboard.ts"
+    ],
+    "patrones": [
+      "publicProcedure se usa en TODOS los endpoints — no existe privateProcedure ni authedProcedure",
+      "createTRPCContext es async () => ({ db }) — no recibe parámetros, no extrae auth del request",
+      "Los routers se crean con createTRPCRouter({...}) y cada endpoint usa .query() o .mutation() sobre publicProcedure",
+      "El route handler de tRPC (src/app/api/trpc/[trpc]/route.ts) pasa createTRPCContext sin req a fetchRequestHandler",
+      "El middleware.ts usa clerkMiddleware() con matcher que cubre /api/trpc — ya protege páginas pero no procedimientos tRPC",
+      "El layout.tsx usa ClerkProvider con Show cuando signed-in — pero no hay validación server-side"
+    ],
+    "dependencias": [
+      "@clerk/nextjs (^7.5.14) — ya instalado, proporciona clerkMiddleware, auth(), currentUser()",
+      "@trpc/server (^11.18.0) — ya instalado, proporciona TRPCError, middleware de tRPC",
+      "@clerk/nextjs/server — para importar auth() en el backend (no importado actualmente)"
+    ],
+    "riesgos": [
+      "createTRPCContext no recibe parámetros (es async () => ... ), por lo que no puede acceder al objeto req de Clerk. Habrá que cambiar su firma a async (opts: CreateContextOptions) para recibir req y extraer auth con auth() de @clerk/nextjs/server.",
+      "TODAS las procedures (9 routers ≈ 18 endpoints) usan publicProcedure. Habrá que crear un authedProcedure que verifique auth en el contexto y reemplazar publicProcedure por authedProcedure en cada endpoint que requiera protección.",
+      "El middleware de Clerk ya está activo, pero no bloquea llamadas tRPC sin sesión — solo las pages. La protección real debe estar en el contexto tRPC y en las procedures.",
+      "No existe ningún throw con TRPCError code UNAUTHORIZED ni FORBIDDEN en ningún router."
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "15",
+        "explicacion": "Único tipo de procedure exportado. Todos los endpoints (creates, lists, queries, mutations) usan esto. No existe alternativa autenticada.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "createTRPCContext",
+        "lineas": "4-6",
+        "explicacion": "Contexto tRPC que actualmente solo retorna db. No recibe req ni ningún parámetro, por lo que no puede leer auth desde la request de Clerk. Es el punto clave donde hay que inyectar userId/session.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "createTRPCRouter",
+        "lineas": "12",
+        "explicacion": "Factory para crear routers. Se usará igual, no necesita cambios.",
+        "confianza": 1
+      },
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "1-2",
+        "explicacion": "Middleware de Clerk ya configurado. Protege páginas y cubre /api/trpc en matcher. No hay configuración de rutas públicas. Ya provee auth en req para que tRPC lo consuma.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/api/trpc/[trpc]/route.ts",
+        "simbolo": "createTRPCContext",
+        "lineas": "10",
+        "explicacion": "Pasa createTRPCContext sin args. Si se modifica la firma para recibir CreateContextOptions, aquí se pasará automáticamente el objeto con req.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "2, 13, 51",
+        "explicacion": "Ejemplo de router que usa publicProcedure en create y list. Ninguno verifica autenticación. Todos los demás routers (insumo, lote, producto, venta, gasto, retiro, config, dashboard) siguen el mismo patrón exacto.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/layout.tsx",
+        "simbolo": "ClerkProvider",
+        "lineas": "14",
+        "explicacion": "Provider de Clerk en el layout raíz. Ya existe infraestructura cliente-side de auth, pero el backend tRPC no la valida.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "12-22",
+        "explicacion": "Router raíz que agrupa los 9 routers. No necesita cambios estructurales, pero todos los routers internos deben migrar a authedProcedure.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El proyecto tiene Clerk instalado y configurado (middleware + ClerkProvider + páginas sign-in/sign-up), pero la capa tRPC no protege NADA: todas las procedures son publicProcedure, el contexto createTRPCContext no recibe req ni extrae auth, y ningún endpoint verifica el usuario. Para implementar autenticación real hay que (1) modificar createTRPCContext para recibir CreateContextOptions y llamar a auth() de @clerk/nextjs/server para obtener userId, (2) crear un authedProcedure que use t.middleware para verificar userId y lanzar TRPCError UNAUTHORIZED si falta, y (3) reemplazar publicProcedure por authedProcedure en todos los endpoints de los 9 routers."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: tres-saltenas — Forzar autenticación real (middleware + tRPC), hoy no protege nada",
+    "archivos": [
+      "src/middleware.ts",
+      "src/server/api/trpc.ts",
+      "src/app/api/trpc/[trpc]/route.ts",
+      "src/server/api/root.ts",
+      "src/app/layout.tsx",
+      "src/app/sign-in/[[...sign-in]]/page.tsx",
+      "src/app/sign-up/[[...sign-up]]/page.tsx",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/routers/producto.ts",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/routers/venta.ts",
+      "src/server/api/routers/gasto.ts",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/config.ts",
+      "src/server/api/routers/dashboard.ts",
+      "src/__tests__/compras.test.ts",
+      "src/__tests__/lote.test.ts",
+      "src/__tests__/venta.test.ts",
+      "src/__tests__/gasto.test.ts",
+      "src/__tests__/retiro.test.ts",
+      "src/__tests__/insumos.test.ts",
+      "src/__tests__/dashboard.test.ts",
+      "package.json"
+    ],
+    "patrones": [
+      "publicProcedure → protectedProcedure: crear un procedure protegido con tRPC middleware que llame a Clerk auth() y verifique userId",
+      "createTRPCContext: modificar para incluir auth() de Clerk usando headers() de next/headers",
+      "clerkMiddleware(): agregar auth.protect() en middleware.ts o rutas específicas con matcher selectivo",
+      "createCallerFactory + tests: todo caller creado con { db } as any dejará de funcionar si el contexto exige auth — hay que mockear auth en cada test"
+    ],
+    "dependencias": [
+      "@clerk/nextjs",
+      "@trpc/server",
+      "next/headers"
+    ],
+    "riesgos": [
+      "Todos los tests existentes (7 archivos) usan createCallerFactory con { db } as any sin auth. Si se agrega auth al contexto tRPC, TODOS rompen y requieren mockear auth() en cada test suite.",
+      "createTRPCContext actualmente solo devuelve { db }. Clerk auth() necesita headers() en server components, lo que acopla el contexto al runtime de Next.js y puede complicar tests.",
+      "middleware.ts no tiene auth.protect() — ClerkMiddleware corre pero no bloquea nada. Cualquiera sin sesión accede a todas las rutas y procedimientos tRPC.",
+      "Todos los 9 routers (compra, insumo, producto, lote, venta, gasto, retiro, config, dashboard) usan exclusivamente publicProcedure. No hay distinción entre rutas públicas y protegidas: hay que revisar una por una si deben ser protegidas o no.",
+      "El matcher de middleware.ts cubre /(api|trpc)(.*) — si se agrega protect() global, también afectará endpoints que quizás deban ser públicos. Requiere matcher granular.",
+      "Hay página de sign-up pública (/sign-up) — SESSION-HANDOFF.md advierte que cualquiera con el link puede registrarse. Hay que deshabilitar signup público en dashboard de Clerk.",
+      "La tRPC route handler (route.ts) no inyecta auth en el contexto. Clerk auth() debe llamarse ahí o en createTRPCContext, pero al ser un fetch handler (edge), requiere manejo cuidadoso de headers.",
+      "Riesgo de que el ejecutor automático intente modificar middleware.ts sin coordinación (documentado en SESSION-HANDOFF.md gotcha #8)."
+    ],
+    "evidencia": [
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "1-5",
+        "explicacion": "Middleware de Clerk en versión mínima — se ejecuta pero no llama a auth.protect(). No bloquea ninguna ruta. El matcher cubre /(api|trpc)(.*) pero no hay enforcement.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "createTRPCContext",
+        "lineas": "6-8",
+        "explicacion": "Contexto de tRPC que SOLO devuelve { db }. No incluye auth ni userId de Clerk. Es el punto principal donde hay que inyectar la sesión del usuario autenticado.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "14-15",
+        "explicacion": "Único tipo de procedure exportado. No existe protectedProcedure. Todos los procedimientos en todos los routers usan este mismo publicProcedure sin protección.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "6, 8, 38",
+        "explicacion": "Ejemplo representativo: compraRouter.create y compraRouter.list usan publicProcedure. Mutation 'create' modifica stock e insumos sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "8, 12, 25",
+        "explicacion": "insumoRouter.list devuelve costoUnitarioActual (dato sensible de negocio) via publicProcedure. updateStockMinimo modifica la DB sin auth.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "9, 12, 28",
+        "explicacion": "loteRouter.create descuenta stock de insumos (operación destructiva) vía publicProcedure. Crea lotes sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/venta.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "6, 9, 15",
+        "explicacion": "ventaRouter.create registra ingresos sin auth. ventaRouter.list expone datos de ventas libremente.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/gasto.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "7, 10, 24, 36",
+        "explicacion": "gastoRouter.create/ list/ byPeriod — todos públicos. Gastos pueden ser creados y consultados sin sesión.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "6, 9, 20, 31",
+        "explicacion": "retiroRouter.create/ list/ byPeriod — retiros de dinero (monto) pueden registrarse sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/config.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "4",
+        "explicacion": "configRouter.get expone sueldoObjetivoSemanal (dato financiero) sin protección.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/dashboard.ts",
+        "simbolo": "publicProcedure",
+        "lineas": "110",
+        "explicacion": "dashboardRouter.resumenPorPeriodo — expone costos, márgenes, ingresos, gastos globales sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/api/trpc/[trpc]/route.ts",
+        "simbolo": "createTRPCContext",
+        "lineas": "10",
+        "explicacion": "El route handler de tRPC pasa createTRPCContext sin auth. No se inyecta sesión de Clerk en ningún momento de la request.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/layout.tsx",
+        "simbolo": "ClerkProvider",
+        "lineas": "10",
+        "explicacion": "ClerkProvider está en el layout raíz y Clerk está configurado. La UI usa <Show when='signed-in'> para NavBar, pero el backend no verifica nada.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/compras.test.ts",
+        "simbolo": "createCaller",
+        "lineas": "40, 55, 66, 82",
+        "explicacion": "Todos los tests crean caller con `createCaller({ db } as any)` — pasando un mock sin auth. Si el contexto exige auth() en el futuro, estos tests fallarán.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/dashboard.test.ts",
+        "simbolo": "createCaller",
+        "lineas": "52, 73, 80, 89, 98, 106, 115, 124",
+        "explicacion": "Dashboard tests también pasan `{ db } as any` sin auth. Son los tests con más procedimientos mockeados y más frágiles ante un cambio de contexto.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/lote.test.ts",
+        "simbolo": "createCaller",
+        "lineas": "96, 114",
+        "explicacion": "Tests de loteRouter.create usan `{ db } as any`. Los mocks son complejos (transacciones, recetaItems). Agregar auth aumenta la carga de mockeo.",
+        "confianza": 1
+      },
+      {
+        "path": "package.json",
+        "simbolo": "@clerk/nextjs",
+        "lineas": "16",
+        "explicacion": "Dependencia ^7.5.14 ya presente. Clerk está instalado pero infrautilizado — solo se usa en layout para UI, no para proteger backend.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tiene Clerk instalado y configurado en la UI (layout con ClerkProvider, sign-in/sign-up pages), pero **ninguna protección del lado servidor**: middleware.ts corre clerkMiddleware vacío sin auth.protect(), y los 9 routers tRPC (compra, insumo, producto, lote, venta, gasto, retiro, config, dashboard) usan exclusivamente publicProcedure sin verificar sesión. El principal riesgo técnico es que agregar auth al contexto tRPC romperá los 7 archivos de tests existentes, que crean callers con `{ db } as any` sin mockear auth. Además, hay que decidir si la protección se implementa a nivel middleware (global en rutas) o a nivel tRPC (protectedProcedure), o ambos, y definir qué procedimientos pueden seguir siendo públicos (si corresponde)."
+  }
+]

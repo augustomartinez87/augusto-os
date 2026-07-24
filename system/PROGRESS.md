@@ -787,3 +787,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0029/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-23 — F-0030 completado
+
+## Feature F-0030
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/middleware.ts`: importar `clerkMiddleware` y `createRouteMatcher` de `@clerk/nextjs/server`, definir `const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"])` y dentro del callback `clerkMiddleware(async (auth, req) => { if (!isPublicRoute(req)) await auth.protect() })`. Verificar contra los tipos del paquete instalado (@clerk/nextjs ^7.5.14) la firma exacta de `auth.protect()` en v7 antes de escribir el código (no asumir sintaxis de v5/v6). Mantener el `config.matcher` actual sin cambios. (10fcf392)
+- [x] Step 2: En `src/server/api/trpc.ts`: cambiar la firma de `createTRPCContext` para que sea `async (opts: { headers: Headers }) => ...` (o el shape que consuma el route handler) y dentro llamar a `auth()` de `@clerk/nextjs/server` para obtener `userId`, retornando `{ db, userId }`. Envolver la llamada de forma que no rompa el typecheck. No tocar todavía `publicProcedure` ni los routers. (2cc5b9c8)
+- [x] Step 3: En `src/app/api/trpc/[trpc]/route.ts`: ajustar la invocación de `createTRPCContext` dentro de `fetchRequestHandler` para pasarle el objeto con `req`/`headers` que ahora exige la nueva firma (ej. `createContext: () => createTRPCContext({ headers: req.headers })`), de modo que el handler siga typecheckeando. (55ef418e)
+- [x] Step 4: En `src/server/api/trpc.ts`: agregar `protectedProcedure` usando `t.procedure.use(t.middleware(...))` que verifique `ctx.userId` y lance `new TRPCError({ code: "UNAUTHORIZED" })` si es null/undefined; en caso contrario hacer `next({ ctx: { ...ctx, userId: ctx.userId } })` para que el tipo quede como `string` (non-nullable) aguas abajo. Exportar `protectedProcedure` junto a `publicProcedure` (todavía sin migrar routers). (848b2984)
+- [x] Step 5: Migrar a `protectedProcedure` los routers de operaciones: `src/server/api/routers/compra.ts`, `insumo.ts`, `lote.ts` y `producto.ts` — reemplazar cada uso de `publicProcedure` por `protectedProcedure` y actualizar el import desde `~/server/api/trpc`. No cambiar inputs, outputs ni lógica de negocio. (edb4debf)
+- [x] Step 6: Migrar a `protectedProcedure` los routers restantes: `src/server/api/routers/venta.ts`, `gasto.ts`, `retiro.ts`, `config.ts` y `dashboard.ts` — reemplazar cada uso de `publicProcedure` por `protectedProcedure` y actualizar imports. Verificar con un grep final que no quede ningún `publicProcedure` en uso bajo `src/server/api/routers/`. (7379c697)
+- [x] Step 7: Actualizar los 7 archivos de tests (`src/__tests__/compras.test.ts`, `lote.test.ts`, `venta.test.ts`, `gasto.test.ts`, `retiro.test.ts`, `insumos.test.ts`, `dashboard.test.ts`): en cada `createCaller({ db } as any)` pasar también un `userId` de prueba (ej. `createCaller({ db, userId: "test-user" } as any)`), de modo que el middleware de `protectedProcedure` no lance UNAUTHORIZED y todos los tests existentes sigan pasando sin cambiar sus asserts. (7379c697)
+- [x] Step 8: Agregar un test nuevo (ej. `src/__tests__/auth.test.ts`) que cree un caller con contexto sin `userId` (`{ db, userId: null } as any`) y verifique que al menos un procedure representativo de query y uno de mutation rechazan con `TRPCError` de código `UNAUTHORIZED`, cubriendo el criterio de aceptación de tRPC. (964877d5)
+- [x] Step 9: Correr `npm run typecheck`, `npm run lint` y `npm test` (o los scripts equivalentes definidos en `package.json`) y corregir cualquier error residual de tipos o lint derivado del cambio de firma de `createTRPCContext` y de la migración a `protectedProcedure`, sin alterar lógica de negocio. (fa618c07)
+
+### Decisiones (ADR)
+- ADR-0086 — Firma de opts usa `{ req: Request }` en lugar de `{ headers: Headers }` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0087 — Los tests de lógica de negocio stubean un contexto autenticado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0088 — Los tests de tRPC inyectan userId en el contexto en vez de relajar enforceAuth [Supuesto del agente] **⚠ REVISAR**
+- ADR-0089 — Reusar dbTrampa para el segundo describe en lugar de `{} as any` [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0030/`
+
+> Revisar con Claude in Chrome para validación de UX.

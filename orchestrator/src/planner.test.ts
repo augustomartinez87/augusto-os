@@ -3,7 +3,7 @@ import { MAX_TURNS } from './models.js'
 
 vi.mock('./targets.js', () => ({
   getActiveTargetName: () => 'argos',
-  getTargetConfig: () => ({ stack: 'vite+supabase', path: '/fake', dbModel: 'none' }),
+  getTargetConfig: () => ({ stack: 'vite+supabase', path: '/fake', dbModel: 'none', qaBaseUrl: 'http://localhost:5173' }),
   getRepoRoot: () => '/fake',
 }))
 

@@ -18,7 +18,7 @@ import { setHumanGate, clearHumanGate, requiresHumanApproval } from './gates.js'
 import { notifyDeployed, notifyReleaseFailed, notifyStepBlocked, pollApprovalOnce } from './telegram.js'
 import { isBotAlive } from './bot-heartbeat.js'
 import { log, sleepUntil, probeAvailability } from './limits.js'
-import { setActiveTarget, getTargetConfig } from './targets.js'
+import { setActiveTarget, getTargetConfig, resolveQaBaseUrl } from './targets.js'
 import { assertNoProdDb } from './db-guard.js'
 import { appendAdr, readAdrMeta, type AdrDraft } from './adr.js'
 import { appendProgress } from './progress.js'
@@ -444,7 +444,7 @@ async function runLoop(state: OrchestratorState) {
     }
 
     if (step.ui) {
-      const baseUrl = process.env.QA_BASE_URL ?? 'http://localhost:3000'
+      const baseUrl = resolveQaBaseUrl(process.env.QA_BASE_URL, getTargetConfig().qaBaseUrl)
       const routes = (process.env.QA_ROUTES ?? '/').split(',')
       const qa = await runQA(state.featureId, step.id, baseUrl, routes)
       if (!qa.ok) {
