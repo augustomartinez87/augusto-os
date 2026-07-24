@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0092 · 2026-07-24 · run() recibe cwd como parámetro en lugar de llamar getRepoRoot() internamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** El helper `run(cmd, args, cwd)` acepta `cwd` como argumento explícito en vez de llamar `getRepoRoot()` dentro de la función, como lo hace `verifier.ts`.
+**Contexto:** Los chequeos siguientes (git status, tsc, index.lock) todos usan el mismo `cwd = getRepoRoot()`, pero pasarlo como parámetro hace la función más testeable y desacoplada del estado global de targets. La spec dice "copiar el helper" pero no especifica si mantener o eliminar la dependencia interna a `getRepoRoot()`.
+**Alternativas descartadas:** Mantener el call interno a `getRepoRoot()` como en `verifier.ts` — habría replicado la firma exacta pero atado el helper al estado global, dificultando tests sin `setActiveTarget` previo.
+**Consecuencias / riesgo residual:** Los call sites deben pasar `cwd` explícitamente. `main()` ya tiene `const repoRoot = getRepoRoot()` disponible para pasárselo.
+
+> Generado por el loop · feature F-0032 · step 1
+
+---
 ## ADR-0091 · 2026-07-24 · Step 5 sin commit + separación del commit ajeno por contención de working tree
 
 **Estado:** aceptada
