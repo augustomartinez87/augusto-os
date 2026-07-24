@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseGitStatus, checkWorkingTree, type RunOutput } from './check-repo-health.js'
+
+vi.mock('./targets.js', () => ({
+  setActiveTarget: vi.fn(),
+  getRepoRoot: () => '/fake/repo',
+}))
+
+import { parseGitStatus, checkWorkingTree, checkIndexLock, checkTypecheck, type RunOutput } from './check-repo-health.js'
 
 function runOk(stdout: string, stderr = ''): RunOutput {
   return { ok: true, stdout, stderr }
@@ -71,5 +77,53 @@ describe('checkWorkingTree', () => {
 
     expect(result.ok).toBe(true)
     expect(result.detail).not.toContain('warning')
+  })
+})
+
+// ── checkIndexLock ─────────────────────────────────────────────────────────────
+
+describe('checkIndexLock', () => {
+  it('returns ok:true when lock file does not exist', () => {
+    const fsDeps = {
+      existsSync: vi.fn().mockImplementation((p: string) => !p.endsWith('index.lock')),
+      statSync: vi.fn(),
+    }
+    const result = checkIndexLock('/repo', fsDeps)
+    expect(result).toEqual({ name: 'index-lock', ok: true, detail: 'Sin lock (index.lock no existe)' })
+  })
+
+  it('returns ok:false reporting age when lock file exists', () => {
+    const mtimeMs = 1_000_000_000_000
+    const nowMs = 1_000_000_060_000 // 60 s después → "hace 1m 0s"
+    const fsDeps = {
+      existsSync: vi.fn().mockReturnValue(true),
+      statSync: vi.fn().mockReturnValue({ mtimeMs }),
+    }
+    const result = checkIndexLock('/repo', fsDeps, () => nowMs)
+    expect(result.ok).toBe(false)
+    expect(result.detail).toContain('index.lock')
+    expect(result.detail).toContain('hace 1m 0s')
+  })
+})
+
+// ── checkTypecheck ─────────────────────────────────────────────────────────────
+
+describe('checkTypecheck', () => {
+  it('returns ok:true when tsc exits cleanly', async () => {
+    const runFn = vi.fn().mockResolvedValue(runOk(''))
+    const result = await checkTypecheck('/repo', runFn)
+    expect(result).toEqual({ name: 'typecheck', ok: true, detail: 'typecheck OK' })
+  })
+
+  it('returns ok:false including tsc output when typecheck fails', async () => {
+    const runFn = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: 'src/foo.ts(1,1): error TS2345: Something went wrong',
+      stderr: '',
+    })
+    const result = await checkTypecheck('/repo', runFn)
+    expect(result.ok).toBe(false)
+    expect(result.detail).toContain('typecheck falló')
+    expect(result.detail).toContain('TS2345')
   })
 })
