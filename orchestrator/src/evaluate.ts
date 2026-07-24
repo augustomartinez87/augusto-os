@@ -87,11 +87,11 @@ async function defaultCallClaude(prompt: string): Promise<string> {
     '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--strict-mcp-config',
-    '-p', prompt,
+    '-p',
   ], {
     cwd: REPO_ROOT,
     reject: false,
-    stdin: 'ignore',
+    input: prompt,
   })
 
   if (result.exitCode !== 0) {

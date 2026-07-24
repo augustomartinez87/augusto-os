@@ -99,7 +99,7 @@ async function invokeFixer(
     '--dangerously-skip-permissions',
     '--allowedTools', 'Read,Edit,Write,Bash,Glob,Grep',
     '--strict-mcp-config',
-    '-p', prompt,
+    '-p',
   ]
 
   if (fixerSessionId) {
@@ -114,7 +114,7 @@ async function invokeFixer(
     cwd: getRepoRoot(),
     reject: false,
     all: true,
-    stdin: 'ignore',
+    input: prompt,
     env: { ...process.env, ...getDbEnvOverride() },
   })
 

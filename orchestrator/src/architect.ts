@@ -122,11 +122,11 @@ async function defaultCallClaude(prompt: string, featureId: string): Promise<str
     '--output-format', 'json',
     '--dangerously-skip-permissions',
     '--strict-mcp-config',
-    '-p', prompt,
+    '-p',
   ], {
     cwd: REPO_ROOT,
     reject: false,
-    stdin: 'ignore',
+    input: prompt,
   })
 
   const { text, parsed } = parseClaudeJson(result.stdout ?? '')
