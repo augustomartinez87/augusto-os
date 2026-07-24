@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0090 · 2026-07-24 · Uso de trim() en lugar de ?? para detectar strings vacíos en resolveQaBaseUrl
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** Se usa `envUrl?.trim()` y `targetQaBaseUrl?.trim()` como condición de truthy en lugar de `?? ` encadenado, para que strings vacíos o con solo espacios activen el fallback a `'http://localhost:3000'`.
+**Contexto:** El target 'sistema' tiene `qaBaseUrl: ""` en targets.json. El operador `??` solo captura `null`/`undefined`, no el string vacío, por lo que `"" ?? 'http://localhost:3000'` devolvería `""` y rompería el fallback exigido por el acceptance criteria.
+**Alternativas descartadas:** Usar `||` (trata falsy en general, incluyendo `"0"` o `"false"` como strings que caerían al fallback indebidamente); normalizar targets.json poniendo `undefined` o eliminar el campo en sistema (cambiaría la interfaz Target o el JSON, fuera de alcance explícito).
+**Consecuencias / riesgo residual:** Strings con solo espacios en blanco también caen al fallback — comportamiento razonable pero no especificado explícitamente en el spec.
+
+> Generado por el loop · feature F-0031 · step 1
+
+---
 ## ADR-0089 · 2026-07-23 · Reusar dbTrampa para el segundo describe en lugar de `{} as any`
 
 **Estado:** aceptada
