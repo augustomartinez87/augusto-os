@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0095 · 2026-07-24 · Combinar stdout+stderr para el output de error de tsc
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** `checkTypecheck` combina `result.stdout` y `result.stderr` antes de truncar, en lugar de usar solo `stdout`.
+**Contexto:** La función `run` local en `check-repo-health.ts` separa stdout y stderr (a diferencia de `verifier.ts` que usa `all: true`). `tsc --noEmit` escribe sus errores a stdout, pero para robustez ante variantes de tsc o entornos que redirijan stderr, se combinan ambos.
+**Alternativas descartadas:** Usar solo `result.stdout` (suficiente para tsc estándar). Agregar un segundo helper `run` con `all: true` solo para typecheck (más fiel a verifier.ts pero introduce duplicación innecesaria).
+**Consecuencias / riesgo residual:** Si stdout y stderr contienen contenido solapado en algún caso edge, el output podría mostrar líneas repetidas. En la práctica con tsc esto no ocurre.
+
+> Generado por el loop · feature F-0032 · step 4
+
+---
+## ADR-0094 · 2026-07-24 · Caso "no es repo git" retorna ok: true en lugar de ok: false
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Cuando `.git/` no existe, `checkIndexLock` devuelve `ok: true` con un mensaje de advertencia en `detail`, en lugar de `ok: false`.
+**Contexto:** El spec pide "devolver una advertencia informativa" pero no especifica el valor de `ok`. El chequeo del lock tiene semántica binaria: hay lock o no hay. Si no hay `.git/`, no hay lock detectable, así que técnicamente el problema no existe — solo el contexto es inusual.
+**Alternativas descartadas:** Retornar `ok: false` tratando la ausencia de `.git/` como un error de configuración. Se descartó porque forzaría al script a salir con exit code 1 por una situación que puede ser intencional (target recién clonado, path incorrecto), y eso confunde el diagnóstico.
+**Consecuencias / riesgo residual:** Si el target apunta a un directorio que no es un repo, el script reporta `✓ index-lock` pero el detail explica que el chequeo fue omitido. El operador debe leer el detail, no solo el icono. Si se quiere que este caso sea un error, basta cambiar `ok: true` a `ok: false` en esa rama.
+
+> Generado por el loop · feature F-0032 · step 3
+
+---
+## ADR-0093 · 2026-07-24 · check-repo-health separa stdout de stderr y no auto-ejecuta main() al importarse
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** El helper `run` de `check-repo-health.ts` devuelve `{ ok, stdout, stderr }` en vez de mergear ambos streams con `all: true`, y sólo se parsea `stdout`; además `main()` queda detrás de un guard `import.meta.url === pathToFileURL(process.argv[1])` para que el módulo sea importable desde tests.
+**Contexto:** Dos intentos previos fallaron en review por el mismo bug: errores y warnings de git terminaban parseados como "archivos sucios". La causa no era el chequeo faltante de `result.ok` (que el intento 2 agregó) sino el contrato del helper: `all: true` mergea stdout+stderr irreversiblemente, y git emite warnings a stderr con exit code 0 (ej. `LF will be replaced by CRLF` en Windows), que sobreviven a cualquier chequeo de exit code. En paralelo, el `main()` en el top-level hacía que importar el módulo ejecutara el script y su `process.exit()`, anulando el propósito del `runFn` inyectable.
+**Alternativas descartadas:** Se descartó seguir parcheando `checkWorkingTree` con filtros heurísticos sobre el texto mergeado (ej. descartar líneas que empiecen con `warning:`/`fatal:`) porque es frágil, depende del idioma/versión de git y no distingue un archivo llamado `warning: x` de un warning real. También se descartó usar `git status --porcelain -z` por ahora: resuelve paths con caracteres raros pero no el problema del merge de streams.
+**Consecuencias / riesgo residual:** El helper `run` de este script diverge del patrón `{ ok, output }` que podrían usar otros scripts, pero converge con la convención ya vigente en `git.ts`. Los chequeos que se agreguen después a este script deben seguir parseando `stdout` y usar `stderr` sólo para diagnóstico. Queda abierto que `parseGitStatus` no desescapa paths con caracteres no-ASCII o espacios que git entrecomilla en porcelain v1 (aparecen entre comillas en el listado); es cosmético para un script de diagnóstico y se resolvería migrando a `-z`.
+
+> Generado por el loop · feature F-0032 · step 2
+
+---
+## ADR-0092 · 2026-07-24 · run() recibe cwd como parámetro en lugar de llamar getRepoRoot() internamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** El helper `run(cmd, args, cwd)` acepta `cwd` como argumento explícito en vez de llamar `getRepoRoot()` dentro de la función, como lo hace `verifier.ts`.
+**Contexto:** Los chequeos siguientes (git status, tsc, index.lock) todos usan el mismo `cwd = getRepoRoot()`, pero pasarlo como parámetro hace la función más testeable y desacoplada del estado global de targets. La spec dice "copiar el helper" pero no especifica si mantener o eliminar la dependencia interna a `getRepoRoot()`.
+**Alternativas descartadas:** Mantener el call interno a `getRepoRoot()` como en `verifier.ts` — habría replicado la firma exacta pero atado el helper al estado global, dificultando tests sin `setActiveTarget` previo.
+**Consecuencias / riesgo residual:** Los call sites deben pasar `cwd` explícitamente. `main()` ya tiene `const repoRoot = getRepoRoot()` disponible para pasárselo.
+
+> Generado por el loop · feature F-0032 · step 1
+
+---
 ## ADR-0091 · 2026-07-24 · Step 5 sin commit + separación del commit ajeno por contención de working tree
 
 **Estado:** aceptada
