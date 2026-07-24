@@ -84,3 +84,12 @@ export function getTargetConfig(): Target {
     devDirectUrl: expandEnvVars(target.devDirectUrl),
   }
 }
+
+export function resolveQaBaseUrl(
+  envUrl: string | undefined,
+  targetQaBaseUrl: string | undefined,
+): string {
+  if (envUrl?.trim()) return envUrl.trim()
+  if (targetQaBaseUrl?.trim()) return targetQaBaseUrl.trim()
+  return 'http://localhost:3000'
+}
