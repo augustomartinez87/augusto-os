@@ -129,11 +129,11 @@ async function defaultCallClaude(prompt: string, repoRoot: string, featureId: st
     '--dangerously-skip-permissions',
     '--allowedTools', '',
     '--strict-mcp-config',
-    '-p', prompt,
+    '-p',
   ], {
     cwd: repoRoot,
     reject: false,
-    stdin: 'ignore',
+    input: prompt,
     all: true,
   })
 

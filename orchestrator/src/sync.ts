@@ -171,10 +171,25 @@ async function pushLogTail(featureId: string): Promise<void> {
 }
 
 const seenIdeas = new Set<string>()
+// Dedup persistente: `seenIdeas` es en memoria y se pierde en cada restart del proceso.
+// Sin esto, cada reinicio de `sync` releía TODAS las ideas de `orch_ideas` (que no se borran)
+// y las reapendeaba a FEATURE-INTAKE.md de nuevo, duplicando el archivo sin límite.
+// Se lee el archivo real y se usa el timestamp `created_at` (único por idea) como clave.
+function existingIntakeTimestamps(): Set<string> {
+  if (!existsSync(INTAKE)) return new Set()
+  const keys = new Set<string>()
+  for (const ln of readFileSync(INTAKE, 'utf-8').split('\n')) {
+    const m = ln.match(/^- \[(.+?)\] \(web\) /)
+    if (m) keys.add(m[1])
+  }
+  return keys
+}
+
 async function pullWebIdeas(): Promise<void> {
   const ideas = await rest('GET', 'orch_ideas?source=eq.web&select=id,text,created_at&order=created_at.asc')
+  const alreadyInFile = existingIntakeTimestamps()
   for (const i of ideas ?? []) {
-    if (seenIdeas.has(i.id)) continue
+    if (seenIdeas.has(i.id) || alreadyInFile.has(i.created_at)) continue
     seenIdeas.add(i.id)
     appendFileSync(INTAKE, `\n- [${i.created_at}] (web) ${i.text}`, 'utf-8')
     log(`[sync] idea desde la web → FEATURE-INTAKE.md`)

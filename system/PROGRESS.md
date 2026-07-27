@@ -837,3 +837,53 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0031/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-24 — F-0032 completado
+
+## Feature F-0032
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `orchestrator/src/check-repo-health.ts` con el esqueleto del CLI standalone: leer `<target>` de `process.argv[2]`, validar que se haya pasado (si no, `console.error` con uso y `process.exit(1)`), llamar `setActiveTarget(target)` y `getRepoRoot()` importados de `./targets.js` (mismo patrón que `intake-cli.ts:47-79`). Copiar localmente el helper `run(cmd: string, args: string[], cwd: string): Promise<{ ok: boolean; output: string }>` basado en `verifier.ts:13-21` (execa con `reject: false`, `all: true`, `cwd`) OMITIENDO `getDbEnvOverride()` — no importar nada de `verifier.ts`. Definir el tipo `CheckResult { name: string; ok: boolean; detail: string }` que usarán los chequeos siguientes. Por ahora `main()` solo imprime el repo root resuelto y sale con 0. No modificar `targets.ts`, `verifier.ts`, `git.ts` ni `index.ts`. (ad794fc4)
+- [x] Step 2: En `check-repo-health.ts`, agregar el chequeo de working tree: función exportada `parseGitStatus(porcelainOutput: string): string[]` que parsea la salida de `git status --porcelain` en una lista de archivos sucios (ignorando líneas vacías y trimeando el prefijo de status), y función exportada `checkWorkingTree(cwd: string, runFn = run): Promise<CheckResult>` que invoca `run('git', ['status', '--porcelain'], cwd)` y devuelve `ok: true` si no hay archivos, o `ok: false` con el listado formateado. Recibir `runFn` como parámetro inyectable con default (mismo patrón de inyección que `escalation.test.ts:38-40` / `limits.test.ts:44-50`) para poder testear sin mockear execa. Cablearlo en `main()`. (afe7ef34)
+- [x] Step 3: En `check-repo-health.ts`, agregar el chequeo de lock: función exportada `checkIndexLock(cwd: string, fsDeps = { existsSync, statSync }, now = () => Date.now()): CheckResult` que verifica `existsSync(path.join(cwd, '.git', 'index.lock'))`; si no existe devuelve `ok: true`; si existe, lee `statSync(...).mtime` y reporta la antigüedad en formato legible (ej. "hace 12m 30s") con `ok: false`, SIN matar procesos ni asumir que hay un proceso vivo. Manejar el caso de que el target no sea un repo git válido (no exista `.git/`) devolviendo una advertencia informativa. Dependencias de fs y reloj inyectables por parámetro para testeo determinista. Cablearlo en `main()`. (01cda65d)
+- [x] Step 4: En `check-repo-health.ts`, agregar el chequeo de typecheck: función exportada `checkTypecheck(cwd: string, runFn = run): Promise<CheckResult>` que invoca `run('npx', ['tsc', '--noEmit'], cwd)` (mismo comando y cwd que `verifier.ts:23-29`) y devuelve `ok: true` con detalle "typecheck OK" o `ok: false` incluyendo el output de error (truncado a las últimas ~40 líneas para que el resumen siga siendo legible). Cablearlo en `main()`. (5182dbd8)
+- [x] Step 5: En `check-repo-health.ts`, implementar el reporte final y el exit code: `main()` corre los tres chequeos en orden, imprime cada uno con prefijo ✅/⚠️ y su detalle, y al final un resumen legible (cantidad de chequeos OK vs. con issues). `process.exit(0)` si todos los chequeos son `ok`, `process.exit(1)` si alguno falla. Envolver la ejecución en un catch que imprima el error con `console.error` y salga con código 1 (mismo manejo que `intake-cli.ts` / `evaluate-cli.ts`), incluyendo el caso de target inexistente que lanza `setActiveTarget`. (b7600d05)
+- [x] Step 6: Agregar el script `"check-repo-health": "tsx --env-file=.env src/check-repo-health.ts"` en la sección `scripts` de `orchestrator/package.json`, siguiendo el mismo patrón que los scripts existentes (`intake`, `evaluar`). No agregar dependencias nuevas — `execa` y `tsx` ya están declaradas. (b7600d05)
+- [x] Step 7: Crear `orchestrator/src/check-repo-health.test.ts` con tests unitarios en vitest usando `vi.mock('./targets.js', ...)` (patrón de `planner.test.ts:4-10`) e inyección de dependencias (sin mockear execa directamente): (a) `parseGitStatus` con salida vacía → lista vacía, y con varias líneas → lista de archivos correcta; (b) `checkWorkingTree` con `runFn` mockeado devolviendo output vacío → `ok: true`, y con cambios → `ok: false` listando los archivos; (c) `checkIndexLock` con `existsSync` mockeado en false → `ok: true`, y en true con un `mtime` fijo y un `now` fijo → `ok: false` reportando la antigüedad esperada; (d) `checkTypecheck` con `runFn` mockeado OK → `ok: true`, y con fallo → `ok: false` incluyendo el output. Verificar que typecheck, lint y toda la suite del orchestrator pasen. (e7ec168a)
+
+### Decisiones (ADR)
+- ADR-0092 — run() recibe cwd como parámetro en lugar de llamar getRepoRoot() internamente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0093 — check-repo-health separa stdout de stderr y no auto-ejecuta main() al importarse [Supuesto del agente] **⚠ REVISAR**
+- ADR-0094 — Caso "no es repo git" retorna ok: true en lugar de ok: false [Supuesto del agente] **⚠ REVISAR**
+- ADR-0095 — Combinar stdout+stderr para el output de error de tsc [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0032/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-24 — F-0033 completado
+
+## Feature F-0033
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Contraste: agregar una clase de color de texto explícita con contraste AA (`text-gray-900`) a TODOS los `<input>` (`type="number"`, `type="text"`, `type="date"`) de las 6 páginas de formulario en `src/app/{ventas,compras,produccion,insumos,gastos,retiros}/page.tsx`, para que el texto tipeado deje de heredar el `rgb(237,237,237)` del tema oscuro sobre la card blanca. No cambiar ningún otro estilo ni lógica. (5d79a113)
+- [x] Step 2: Validación por-campo garantizada en `/ventas`: agregar `noValidate` al `<form>` de `src/app/ventas/page.tsx`, un estado de errores por campo con useState, y validación manual en `handleSubmit` antes de llamar a `createMutation.mutate(...)`. Al fallar, resaltar el/los campo(s) con `border-red-500` (en vez de `border-gray-300`) y mostrar mensaje de texto en rojo debajo del campo. No tocar el router de venta. (b2eabff5)
+- [x] Step 3: Confirmación de valores atípicos en `/ventas`: antes de `createMutation.mutate(...)` en `src/app/ventas/page.tsx`, si `precioUnitario` es >= 10x el valor por defecto/último valor esperado (o cantidad >= 100), mostrar un `window.confirm` con el valor formateado tal como quedaría guardado; sólo continuar si Dani confirma. Umbrales hardcodeados en el archivo. Verificar que una venta válida normal sigue guardándose sin fricción. (4d196714)
+- [x] Step 4: Aplicar el mismo patrón de validación por-campo (`noValidate` + errores por campo + `border-red-500` + mensaje inline) y de confirmación de valores atípicos (`window.confirm` sobre `monto`, umbral >= 10x) a `/retiros` en `src/app/retiros/page.tsx`, sin tocar el router de retiro. (d19d6d37)
+- [x] Step 5: Replicar el patrón de validación por-campo con feedback visual (`noValidate` + errores por campo + `border-red-500` + mensaje inline) en los formularios restantes: `src/app/{compras,produccion,insumos,gastos}/page.tsx`, sin modificar la lógica de negocio de sus routers. Confirmar que cargas válidas siguen funcionando igual. (965056aa)
+- [x] Step 6: Correr `npm run typecheck`, `npm run lint` y `npm test`; corregir cualquier error introducido por los cambios de formulario (respetando la regla `react-hooks/set-state-in-effect` de eslint-config-next 16) hasta que las tres tareas pasen sin errores. (965056aa)
+
+### Decisiones (ADR)
+- ADR-0096 — Umbral de precio basado en 10× DEFAULT, no en último valor guardado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0097 — Umbral de retiro atípico: $50.000 hardcodeado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0098 — Umbrales de valores atípicos hardcodeados por dominio [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0033/`
+
+> Revisar con Claude in Chrome para validación de UX.

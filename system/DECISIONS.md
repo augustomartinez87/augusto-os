@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0098 · 2026-07-24 · Umbrales de valores atípicos hardcodeados por dominio
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se fijaron tres umbrales independientes: precioTotal ≥ $50 000 para compras, monto ≥ $50 000 para gastos, y cantidadProducida ≥ 500 unidades para producción. Insumos (stockMínimo) no tiene umbral de confirmación.
+**Contexto:** El spec indica que los umbrales deben hardcodearse, pero no especifica los valores concretos. Se eligieron valores razonables para una pequeña empresa de empanadas (compras/gastos: compras de materias primas rara vez superan $50 000 por transacción; producción: lotes de 500+ empanadas son inusuales).
+**Alternativas descartadas:** Un único umbral genérico para todos los formularios, o umbrales distintos (ej. $100 000 para compras ya que los precios de insumos en ARS son altos). Los valores elegidos son conservadores: si generan falsos positivos, el costo es bajo (un click de "OK" en el confirm nativo).
+**Consecuencias / riesgo residual:** Si el negocio escala o la inflación eleva los precios, estos umbrales pueden quedar obsoletos. Son fáciles de ajustar en el código pero no son configurables en runtime.
+
+> Generado por el loop · feature F-0033 · step 5
+
+---
+## ADR-0097 · 2026-07-24 · Umbral de retiro atípico: $50.000 hardcodeado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se definió `MONTO_ALERTA = 50_000` directamente, sin constante de referencia intermedia, porque los retiros no tienen un "monto por defecto" análogo al `PRECIO_UNITARIO_DEFAULT` de ventas.
+**Contexto:** La tarea especifica "umbral >= 10x" pero en ventas ese 10x aplica sobre un precio unitario conocido ($1.500). Para retiros no existe un monto de referencia en el sistema — no hay config en DB ni en el formulario.
+**Alternativas descartadas:** Definir `MONTO_REFERENCIA = 5_000` y `MONTO_ALERTA = MONTO_REFERENCIA * 10` para hacer explícito el "10x", pero añade una constante sin uso real más allá de documentar el razonamiento.
+**Consecuencias / riesgo residual:** Si la escala de retiros típicos cambia (inflación, crecimiento del negocio), el umbral queda stale igual que cualquier constante hardcodeada. Ajustable trivialmente editando la línea.
+
+> Generado por el loop · feature F-0033 · step 4
+
+---
+## ADR-0096 · 2026-07-24 · Umbral de precio basado en 10× DEFAULT, no en último valor guardado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** `PRECIO_UNITARIO_ALERTA` se define como `PRECIO_UNITARIO_DEFAULT * 10` ($15 000). El spec decía "10x el valor por defecto/último valor esperado"; se eligió el default hardcodeado porque no hay acceso al "último valor guardado" sin una query adicional.
+**Contexto:** Leer el historial de ventas para extraer el último precio agregaría una query asíncrona y lógica de fallback que complejiza el submit sin beneficio real para una app de este tamaño.
+**Alternativas descartadas:** Usar el último `venta.precioUnitario` del historial (ya disponible en `ventasQuery.data`) como referencia dinámica — descartado por agregar lógica sin clara ventaja práctica.
+**Consecuencias / riesgo residual:** Si el precio real de venta cambia de $1 500, el umbral de alerta queda desfasado hasta que alguien actualice `PRECIO_UNITARIO_DEFAULT`. Esto ya era un riesgo reconocido en la investigación scout.
+
+> Generado por el loop · feature F-0033 · step 3
+
+---
 ## ADR-0095 · 2026-07-24 · Combinar stdout+stderr para el output de error de tsc
 
 **Estado:** aceptada

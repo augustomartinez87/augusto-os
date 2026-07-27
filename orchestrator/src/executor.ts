@@ -143,7 +143,7 @@ export async function executeStep(
     '--dangerously-skip-permissions',
     '--allowedTools', 'Read,Edit,Write,Bash,Glob,Grep',
     '--strict-mcp-config',
-    '-p', prompt,
+    '-p',
   ]
 
   if (step.sessionId) {
@@ -158,7 +158,7 @@ export async function executeStep(
     cwd: getRepoRoot(),
     reject: false,
     all: true,
-    stdin: 'ignore',
+    input: prompt,
     env: { ...process.env, ...getDbEnvOverride() },
   })
 
