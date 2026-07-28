@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0101 · 2026-07-28 · Gradiente siempre visible en lugar de gradiente condicional por scroll position
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** El gradiente `from-white` se muestra siempre, sin detectar si el scroll ya llegó al final para ocultarlo.
+**Contexto:** La tarea explícitamente acepta "versión simple (mostrarlo siempre)" y prohíbe agregar JS elaborado o animaciones. Ocultar el gradiente al llegar al borde derecho requeriría un `onScroll` handler y estado React adicional.
+**Alternativas descartadas:** Gradiente condicional vía `useRef` + `onScroll` que desaparece cuando `scrollLeft + clientWidth >= scrollWidth`; descartado por complejidad innecesaria.
+**Consecuencias / riesgo residual:** En viewport ancho donde todos los links entran sin scroll, el gradiente sigue visible y tapa ligeramente el último link. Aceptable dado el alcance del feature.
+
+> Generado por el loop · feature F-0036 · step 2
+
+---
+## ADR-0100 · 2026-07-27 · Stock y costo se actualizan en un único `insumo.update` dentro de la transacción
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** tres-saltenas
+
+**Decisión:** Se fusionaron el decremento de `stockActual` y la actualización de `costoUnitarioActual` en una sola llamada a `insumo.update`, en lugar de hacer dos llamadas separadas dentro de la misma transacción.
+**Contexto:** El spec describe los pasos (b) y (c) por separado, lo que podría leerse como dos operaciones distintas. Sin embargo, ambas operan sobre el mismo registro de `Insumo` y no hay dependencia de orden entre ellas (el valor de `costoUnitarioActual` no depende del `stockActual` actualizado).
+**Alternativas descartadas:** Dos llamadas separadas a `insumo.update` dentro de la transacción — funcionalmente equivalente pero genera una round-trip extra a la DB sin beneficio.
+**Consecuencias / riesgo residual:** Ninguna observable. Si en el futuro el cálculo de costo dependiera del stock actualizado, habría que separar las llamadas.
+
+> Generado por el loop · feature F-0034 · step 5
+
+---
+## ADR-0099 · 2026-07-27 · Helper de saldo devuelve el desglose completo, no solo el número
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** tres-saltenas
+
+**Decisión:** `obtenerDesgloseSaldoNegocio(db)` devuelve `{ingresos, compras, gastos, retiros, saldo}` y es consumido tanto por `dashboard.saldoNegocio` (usa el objeto entero) como por `retiro.create` (toma `.saldo`). Se eliminó la agregación inline duplicada del dashboard.
+**Contexto:** Los intentos previos extrajeron un helper que devolvía solo `number`, insuficiente para el dashboard que expone el desglose, por lo que la copia inline quedó viva y la duplicación persistió — justo lo que el step buscaba evitar en un camino de corrección de plata.
+**Alternativas descartadas:** Mantener el helper en `number` y dejar el dashboard con su propia agregación (descartada: perpetúa la duplicación y el riesgo de divergencia). Duplicar el helper en dos variantes número/desglose (descartada: dos fuentes de verdad).
+**Consecuencias / riesgo residual:** Cualquier consumidor futuro del saldo debe usar este helper. El endpoint `saldoNegocio` sigue exponiendo exactamente el mismo shape que antes, así que la UI de `/mi-plata` no requiere cambios.
+
+> Generado por el loop · feature F-0034 · step 1
+
+---
 ## ADR-0098 · 2026-07-24 · Umbrales de valores atípicos hardcodeados por dominio
 
 **Estado:** aceptada

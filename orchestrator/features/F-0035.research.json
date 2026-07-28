@@ -1,0 +1,398 @@
+[
+  {
+    "objetivo": "Mapa del repo para: tres-saltenas — Agregar insumo nuevo desde /insumos",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/app/insumos/page.tsx",
+      "src/lib/insumos.ts",
+      "src/trpc/react.tsx",
+      "src/app/api/trpc/[trpc]/route.ts",
+      "src/lib/db.ts",
+      "prisma/seed.ts",
+      "src/middleware.ts",
+      "src/lib/costeo.ts",
+      "src/lib/lotes.ts",
+      "src/lib/produccion.ts",
+      "src/__tests__/insumos.test.ts"
+    ],
+    "patrones": [
+      "tRPC router: createTRPCRouter({ procedureName: protectedProcedure.<query|mutation>({ input: z.object({...}), async handler({ctx, input}) }) })",
+      "UI pages: 'use client' + trpc.<router>.<procedure>.useQuery() / useMutation() con invalidate en onSuccess",
+      "Formularios mobile-first: max-w-lg mx-auto, bg-white border border-gray-200 rounded-xl p-4, inputs con errores inline",
+      "Acceso a DB via ctx.db (PrismaClient inyectado en tRPC context)",
+      "Todas las mutaciones protegidas con protectedProcedure (Clerk auth middleware global)",
+      "Seed usa IDs fijos (insumo-paleta, insumo-queso, insumo-tapa) con prisma.insumo.upsert",
+      "parseLocalDate() patrón para evitar bug UTC-3 en inputs type=\"date\""
+    ],
+    "dependencias": [
+      "@trpc/server, @trpc/client, @trpc/react-query (v11)",
+      "@prisma/client + prisma (v5.x, pineado)",
+      "zod (v4) — validación de inputs en tRPC",
+      "@clerk/nextjs (v7) — auth",
+      "@tanstack/react-query (v5) — cache de queries",
+      "superjson — transformer tRPC",
+      "tailwindcss (v4) — estilos",
+      "next (v16.2.10) — App Router"
+    ],
+    "riesgos": [
+      "NO existe insumo.create ni insumo.delete en el router — solo list y updateStockMinimo; hay que agregar la mutation desde cero",
+      "El modelo Insumo requiere nombre (String), unidad (\"kg\"|\"unidad\"), costoUnitarioActual (Float), stockActual (Float), stockMinimo (Float) — seed usa IDs fijos (choque potencial si se crean con mismos nombres)",
+      "middleware.ts tiene auth global con clerkMiddleware + protect(); no modificarlo sin que el step lo pida explícitamente (gotcha #8 de SESSION-HANDOFF)",
+      "Prisma 5.x pineado — NO actualizar a v7 (rompe datasource schema, gotcha #1)",
+      "UI mobile-first: max-w-lg mx-auto, formularios compactos, mantener consistencia visual"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "insumoRouter",
+        "lineas": "6-30",
+        "explicacion": "Router tRPC actual con list (query) y updateStockMinimo (mutation). No tiene create — es el archivo donde agregar la nueva mutation para crear insumo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "protectedProcedure",
+        "lineas": "3,9,17",
+        "explicacion": "Todas las procedures del router usan protectedProcedure (requiere auth de Clerk). La nueva mutation debe usar el mismo patrón.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model Insumo",
+        "lineas": "16-26",
+        "explicacion": "Modelo completo de Insumo: id, nombre, unidad (String), costoUnitarioActual (Float), stockActual (Float), stockMinimo (Float), timestamps. El new insumo debe crear un registro con estos campos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/insumos/page.tsx",
+        "simbolo": "InsumosPage",
+        "lineas": "71-150",
+        "explicacion": "Página principal de insumos. Muestra lista con stock, precio, editor de stock mínimo. Aquí debe agregarse el formulario/botón 'Nuevo insumo'.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/insumos/page.tsx",
+        "simbolo": "trpc.insumo.list.useQuery",
+        "lineas": "73",
+        "explicacion": "Query que lista insumos. Después de crear un insumo, hay que invalidar esta query con utils.insumo.list.invalidate() para refrescar la lista.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "insumoRouter",
+        "lineas": "13",
+        "explicacion": "insumoRouter está registrado como propiedad 'insumo' del appRouter. Las nuevas mutations se agregan automáticamente sin tocar este archivo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "createTRPCContext",
+        "lineas": "7-10",
+        "explicacion": "Context que inyecta db (PrismaClient) en todas las procedures. ctx.db está disponible sin configuración adicional.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/insumos.ts",
+        "simbolo": "tieneStockBajo",
+        "lineas": "2-4",
+        "explicacion": "Función utilitaria existente que verifica stock bajo. Puede reusarse en la UI post-creación del insumo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/middleware.ts",
+        "simbolo": "clerkMiddleware",
+        "lineas": "4-9",
+        "explicacion": "Auth global: todas las rutas protegidas excepto sign-in/sign-up. No modificar sin que el step lo requiera (ver SESSION-HANDOFF.md gotcha #8).",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "insumo-paleta",
+        "lineas": "18-20",
+        "explicacion": "Seed usa IDs fijos como 'insumo-paleta', 'insumo-queso', 'insumo-tapa'. Los nuevos insumos creados desde UI no deben colisionar con estos IDs (usar cuid() del schema).",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/insumos.test.ts",
+        "simbolo": "describe(\"insumoRouter.updateStockMinimo\")",
+        "lineas": "28-63",
+        "explicacion": "[NO VERIFICADO] Test existente que muestra el patrón de testeo para routes de insumo: buildMockDb + createCaller. Referencia para escribir tests del nuevo insumo.create.",
+        "confianza": 0
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "9-40",
+        "explicacion": "[NO VERIFICADO] Ejemplo canónico de mutation create con transaction, validación zod (z.object), y actualización de insumo. Patrón a seguir para insumo.create.",
+        "confianza": 0
+      },
+      {
+        "path": "src/lib/compras.ts",
+        "simbolo": "calcularCostoUnitario",
+        "lineas": "6-8",
+        "explicacion": "Función pura de cálculo de costo unitario usada por compras. No es necesaria para crear insumo pero muestra el patrón de funciones utilitarias desacopladas.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tres-saltenas es una app Next.js 16 + tRPC v11 + Prisma 5.x (Postgres/Neon) + Clerk para gestionar un microemprendimiento de empanadas. El módulo /insumos existe pero solo tiene list (query) y updateStockMinimo (mutation); falta insumo.create para agregar nuevos insumos. El patrón es agregar una mutation protegida con validación Zod en src/server/api/routers/insumo.ts usando ctx.db.insumo.create(), y un formulario 'Nuevo insumo' en src/app/insumos/page.tsx siguiendo el estilo mobile-first de las páginas existentes (max-w-lg, tailwind, invalidación de queries post-mutation). Los tests unitarios siguen el patrón createCaller + buildMockDb visible en src/__tests__/insumos.test.ts."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: tres-saltenas — Agregar insumo nuevo desde /insumos",
+    "archivos": [
+      "src/app/insumos/page.tsx",
+      "src/server/api/routers/insumo.ts",
+      "prisma/schema.prisma",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/trpc/react.tsx",
+      "src/lib/insumos.ts",
+      "src/lib/db.ts",
+      "prisma/seed.ts",
+      "src/app/compras/page.tsx",
+      "src/app/gastos/page.tsx",
+      "src/server/api/routers/compra.ts",
+      "SPEC-MVP.md",
+      "SESSION-HANDOFF.md",
+      "src/components/NavBar.tsx",
+      "src/app/layout.tsx"
+    ],
+    "patrones": [
+      "createTRPCRouter + protectedProcedure + z.object(input) + mutation(async ({ ctx, input }) => { ... })",
+      "trpc.insumo.NOMBRE.useMutation({ onSuccess: () => utils.insumo.list.invalidate() })",
+      "Formulario con useState + validación local (setErrors) + handleSubmit con e.preventDefault()",
+      "Layout max-w-lg mx-auto + bg-white rounded-xl border p-4 spacing-y-4 para form cards",
+      "use client + import { trpc } from '@/trpc/react'",
+      "Patrón key={...} para forzar remount en vez de useEffect+setState (ver gotcha #10 en SESSION-HANDOFF.md)"
+    ],
+    "dependencias": [
+      "@prisma/client (Prisma 5.x)",
+      "@trpc/server + @trpc/client + @trpc/react-query (v11)",
+      "zod (validación de inputs)",
+      "superjson (transformer tRPC)",
+      "@clerk/nextjs (auth)",
+      "@tanstack/react-query",
+      "next (App Router, v16)",
+      "tailwindcss"
+    ],
+    "riesgos": [
+      "No existe procedure `create` en insumoRouter — hay que crearlo desde cero",
+      "El formulario de creación no existe en /insumos/page.tsx — hay que agregarlo siguiendo el patrón de compras/gastos",
+      "El lint react-hooks/set-state-in-effect (Next 16) prohíbe useEffect + setState para sincronizar props — usar key para remount (gotcha #10)",
+      "El seed tiene 3 insumos hardcodeados con IDs fijos (insumo-paleta, insumo-queso, insumo-tapa) — la creación genérica debe usar auto-generación de IDs (cuid)",
+      "Insumo.unidad es String libre en Prisma — la spec dice 'kg' | 'unidad' pero no hay validación DB; el form debe restringir las opciones",
+      "El middleware.ts es mínimo (sin auth.protect()) — si se necesita auth real para crear insumos, no agregarla sin decisión explícita (ver gotcha #8 en SESSION-HANDOFF.md)",
+      "costoUnitarioActual y stockActual tienen default 0 en DB — un insumo nuevo se crea con esos valores en cero, comportamiento esperado"
+    ],
+    "evidencia": [
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model Insumo",
+        "lineas": "22-31",
+        "explicacion": "Modelo de datos de Insumo: id, nombre, unidad, costoUnitarioActual, stockActual, stockMinimo, createdAt, updatedAt. Los defaults son 0 para campos numéricos. Relación con Compra y RecetaItem.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "insumoRouter",
+        "lineas": "5-27",
+        "explicacion": "Router tRPC actual: solo tiene `list` (query) y `updateStockMinimo` (mutation). NO existe `create` — es el procedure que hay que implementar para agregar insumo nuevo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "7-36",
+        "explicacion": "[NO VERIFICADO] Patrón de mutation create: z.object(input) con validación, protectedProcedure, acceso a ctx.db, transacción opcional con $transaction. Referencia directa para implementar insumo.create.",
+        "confianza": 0
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "ComprasPage",
+        "lineas": "8-123",
+        "explicacion": "Ejemplo completo de formulario create: useState para form, setErrors para validación local, createMutation con invalidate, handleSubmit. Patrón a copiar para el formulario de nuevo insumo en /insumos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/insumos/page.tsx",
+        "simbolo": "InsumosPage",
+        "lineas": "55-120",
+        "explicacion": "Página actual de /insumos: solo lista insumos existentes con trpc.insumo.list.useQuery. NO tiene formulario de creación. Hay que agregarlo, idealmente arriba de la lista, siguiendo el patrón de ComprasPage/GastosPage.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/insumos.ts",
+        "simbolo": "tieneStockBajo",
+        "lineas": "2-4",
+        "explicacion": "Helper utilitario ya existente: compara stockActual vs stockMinimo. Se puede reusar al mostrar el nuevo insumo creado en la lista.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "1-22",
+        "explicacion": "Router raíz que registra insumo: insumoRouter. Cualquier procedure nuevo que se agregue a insumoRouter queda automáticamente expuesto vía trpc.insumo.X.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "protectedProcedure",
+        "lineas": "24-28",
+        "explicacion": "Procedimiento protegido por auth (Clerk). Se debe usar `protectedProcedure` para insumo.create, consistente con compraRouter y gastoRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "src/trpc/react.tsx",
+        "simbolo": "trpc",
+        "lineas": "7-7",
+        "explicacion": "El hook trpc tipado. Se usa como `trpc.insumo.create.useMutation()` desde el frontend.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/seed.ts",
+        "simbolo": "insumos",
+        "lineas": "12-16",
+        "explicacion": "Los 3 insumos semilla: Paleta (kg), Queso (kg), Tapa (unidad). IDs fijos usados en recetas. Al crear un insumo nuevo genérico, se generará ID con cuid (autogenerado por Prisma).",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "handleSubmit",
+        "lineas": "62-100",
+        "explicacion": "Patrón de validación local y envío de formulario: setErrors, validación de campos requeridos, mutate con input tipado, reset de form en onSuccess.",
+        "confianza": 1
+      },
+      {
+        "path": "SESSION-HANDOFF.md",
+        "simbolo": "gotcha #10",
+        "lineas": "112-117",
+        "explicacion": "Regla de eslint en Next 16: react-hooks/set-state-in-effect prohíbe useEffect+setState. Para el formulario de nuevo insumo usar patrones sin useEffect (ej: estado local limpio con useState simple, reset con setForm(initial)).",
+        "confianza": 1
+      },
+      {
+        "path": "src/components/NavBar.tsx",
+        "simbolo": "NAV_LINKS",
+        "lineas": "3-14",
+        "explicacion": "NavBar ya incluye /insumos como ruta. No requiere cambios. La página de insumos ya es accesible desde la navegación.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "Actualmente no existe ni el procedure tRPC `insumo.create` ni un formulario en la página /insumos para crear un nuevo insumo. El modelo Prisma (`Insumo`) ya está definido con nombre, unidad ('kg'|'unidad'), costoUnitarioActual (default 0), stockActual (default 0) y stockMinimo (default 0). Para implementar 'Agregar insumo nuevo desde /insumos' hay que: (1) agregar un procedure `create: protectedProcedure.input(z.object({...})).mutation(...)` en `src/server/api/routers/insumo.ts` usando Zod para validar nombre (string) y unidad (enum 'kg'|'unidad'), y (2) agregar un formulario tipo card (siguiendo el patrón de `/compras` y `/gastos`) en `src/app/insumos/page.tsx` con useState para el form, validación local y trpc.insumo.create.useMutation con invalidate de la lista. El resto de la infraestructura (router raíz, auth, layout, navegación, helpers) ya está lista y no requiere cambios."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: tres-saltenas — Agregar insumo nuevo desde /insumos",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/insumo.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/gasto.ts",
+      "src/server/api/root.ts",
+      "src/app/insumos/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/__tests__/insumos.test.ts",
+      "src/__tests__/auth.test.ts",
+      "src/trpc/react.tsx",
+      "src/lib/insumos.ts"
+    ],
+    "patrones": [
+      "Las mutaciones se definen como protectedProcedure con validación zod de entrada",
+      "Las páginas usan trpc.useUtils() para invalidar queries después de mutaciones",
+      "createCallerFactory se usa en tests unitarios para simular el contexto tRPC con mocks de DB",
+      "El formulario de creación/edición NO usa una biblioteca de formularios; se maneja con estado local y validación manual",
+      "Los nombres de los procedimientos tRPC siguen el pattern 'recurso.accion' (ej: compra.create, gasto.create)"
+    ],
+    "dependencias": [
+      "@trpc/server (initTRPC, TRPCError)",
+      "@trpc/react-query (createTRPCReact)",
+      "zod (validación de inputs)",
+      "@prisma/client (modelo Insumo)",
+      "superjson (transformer tRPC)",
+      "@tanstack/react-query (invalidateQueries)",
+      "vitest (tests)"
+    ],
+    "riesgos": [
+      "El modelo Insumo en Prisma no tiene constraint de unicidad en `nombre` — se podría crear el mismo insumo dos veces si no se agrega validación",
+      "El campo `unidad` se define como String libre en Prisma (solo comentado como 'kg' | 'unidad') — no hay restricción a nivel BD. Si se crea un insumo con otra unidad, rompería supuestos en compras y recetas",
+      "No existe página ni formulario de alta en /insumos — la UI debe crearse desde cero siguiendo el patrón de compras/gastos",
+      "Al crear un insumo, hay que invalidar la query 'insumo.list' para que el dropdown de compras se actualice. Olvidar esto rompe la UX de compras",
+      "Los tests de auth (src/__tests__/auth.test.ts) listan procedimientos protegidos explícitamente. Si se agrega 'insumo.create' como protectedProcedure, habría que agregarlo también a esa lista de tests para mantener cobertura",
+      "La query 'insumo.list' actualmente selecciona solo ciertos campos (id, nombre, unidad, stockActual, stockMinimo, costoUnitarioActual). Si el nuevo create modifica la proyección, podría impactar las páginas que consumen este endpoint",
+      "Posible deuda técnica: no hay un tipo enum compartido para 'unidad' — está comentado en el schema pero no tipado fuertemente. Se sugiere crear un tipo zod enum para validación server-side"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/insumo.ts",
+        "simbolo": "insumoRouter",
+        "lineas": "5-27",
+        "explicacion": "Router actual de insumos. Solo expone 'list' y 'updateStockMinimo'. No existe procedimiento 'create'. Toda la nueva funcionalidad debe agregarse aquí siguiendo el patrón de los otros routers.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter.create",
+        "lineas": "7-31",
+        "explicacion": "[NO VERIFICADO] Patrón de referencia para crear una mutación 'create': protectedProcedure con validación zod, uso de ctx.db, y transacción. El nuevo 'insumo.create' debería seguir esta misma estructura.",
+        "confianza": 0
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Insumo",
+        "lineas": "16-26",
+        "explicacion": "Modelo Prisma del insumo. Campos: nombre (String), unidad (String, comentado 'kg' | 'unidad'), costoUnitarioActual (Float default 0), stockActual (Float default 0), stockMinimo (Float default 0). No hay @unique en nombre ni restricción en unidad.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/insumos/page.tsx",
+        "simbolo": "InsumosPage",
+        "lineas": "65-137",
+        "explicacion": "Página actual de /insumos. Solo muestra el listado con editores de stock mínimo. No tiene formulario ni botón para crear un nuevo insumo. La UI de alta debe construirse desde cero.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/compras/page.tsx",
+        "simbolo": "ComprasPage",
+        "lineas": "7-25",
+        "explicacion": "La página de compras depende de 'trpc.insumo.list.useQuery()' para poblar el selector de insumos. Si se crea un insumo y no se invalida esta query, el insumo nuevo no aparecerá en el dropdown hasta recargar la página.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/insumos.test.ts",
+        "simbolo": "insumoRouter.updateStockMinimo",
+        "lineas": "27-57",
+        "explicacion": "Tests existentes para insumoRouter. Solo cubren 'updateStockMinimo' y 'tieneStockBajo'. No hay tests para 'create'. Habrá que agregar tests del nuevo procedimiento siguiendo el patrón de gastoRouter.create.test (usando createCallerFactory y mocks).",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/auth.test.ts",
+        "simbolo": "procedimientos",
+        "lineas": "22-31",
+        "explicacion": "Lista explícita de procedimientos protegidos verificados en tests de auth. Si 'insumo.create' se define como protectedProcedure, debería agregarse a esta lista para mantener la cobertura de que rechaza llamadas sin autenticación.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/gasto.test.ts",
+        "simbolo": "gastoRouter.create",
+        "lineas": "30-62",
+        "explicacion": "Patrón de tests unitarios para una mutación 'create' usando buildMockDb, createCallerFactory, y verificando que se llame a db.create con los datos correctos. Es el modelo a seguir para los tests de insumo.create.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "1-21",
+        "explicacion": "Archivo donde se registran todos los routers. Si se modifica insumoRouter (agregando create), no requiere cambios aquí porque ya está importado. Pero hay que verificar que el tipo AppRouter se actualice automáticamente.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/insumos.ts",
+        "simbolo": "tieneStockBajo",
+        "lineas": "1-3",
+        "explicacion": "Única función utilitaria para insumos. No afecta la creación de nuevos insumos, pero es el lugar natural para agregar funciones de validación si hiciera falta (ej: validar unidad).",
+        "confianza": 1
+      }
+    ],
+    "resumen": "Para agregar 'Crear insumo nuevo' desde /insumos hay que: (1) agregar un procedimiento 'create' en insumoRouter siguiendo el patrón de compraRouter.create con validación zod, (2) crear un formulario de alta en src/app/insumos/page.tsx, (3) invalidar insumo.list tras la creación para que compras refleje el cambio. Los principales riesgos son la falta de constraint de unicidad en nombre del insumo (riesgo de duplicados), la ausencia de restricción enum en unidad (validación solo a nivel de aplicación), y la necesidad de agregar tests tanto unitarios (create) como de auth (procedimiento protegido) para mantener la cobertura actual."
+  }
+]

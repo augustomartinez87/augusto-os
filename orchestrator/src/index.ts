@@ -6,7 +6,8 @@ import {
   loadState, saveState, initState, markStepStatus, appendFailureHistory,
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
 } from './state.js'
-import { planFeature, loadFeatureSpec } from './planner.js'
+import { planFeature, loadFeatureSpec, parseResolvesField } from './planner.js'
+import { updateBacklogStatus } from './backlog.js'
 import { executeStepWithRetry } from './executor.js'
 import { escalateStep } from './escalation.js'
 import { runScout } from './scout/index.js'
@@ -351,6 +352,21 @@ async function runLoop(state: OrchestratorState) {
         }
       }
       log(`[main] ${state.featureId} RELEASED (push hecho). STATE.json archivado como STATE.${state.featureId}.archived.json`)
+
+      // S-047: reconciliación automática de system/BACKLOG.md contra `resolves` del spec.
+      // No bloquea el release — el gate de push ya pasó — solo loguea qué se actualizó/faltó.
+      try {
+        const resolves = parseResolvesField(loadFeatureSpec(state.featureId))
+        if (resolves.length) {
+          const today = new Date().toISOString().split('T')[0]
+          const { updated, missing } = updateBacklogStatus(state.featureId, resolves, today)
+          if (updated.length) log(`[backlog] Filas marcadas done: ${updated.join(', ')}`)
+          if (missing.length) log(`[backlog] ⚠ IDs de 'resolves' no encontrados en BACKLOG.md: ${missing.join(', ')}`)
+        }
+      } catch (e) {
+        log(`[backlog] ⚠ No se pudo reconciliar BACKLOG.md para ${state.featureId}: ${(e as Error).message}`)
+      }
+
       break
     }
 

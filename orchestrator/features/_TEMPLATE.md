@@ -3,6 +3,9 @@ id: F-XXXX                # siguiente número libre
 title: <título corto y accionable>
 target: kredy             # kredy | spensiv | argos
 ui: false                 # true si toca pantallas que requieren QA visual
+resolves: []              # OPCIONAL — IDs de system/BACKLOG.md que este feature resuelve,
+                           # ej. [TS-017, TS-018]. Al liberar a prod, el loop marca esas filas
+                           # como done automáticamente (ver backlog.ts). Omitir si no aplica.
 acceptance:               # criterios OBSERVABLES (se pueden verificar sí/no)
   - <criterio 1, concreto y testeable>
   - <criterio 2>

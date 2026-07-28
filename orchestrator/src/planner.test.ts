@@ -11,7 +11,7 @@ vi.mock('./db-guard.js', () => ({
   getDbEnvOverride: () => ({}),
 }))
 
-const { planFeature } = await import('./planner.js')
+const { planFeature, parseResolvesField } = await import('./planner.js')
 
 const VALID_JSON_RESPONSE = JSON.stringify({
   steps: [
@@ -82,5 +82,29 @@ describe('planFeature', () => {
     const steps = await planFeature('spec', { callClaude })
 
     expect(steps.map(s => s.id)).toEqual([1, 2, 3])
+  })
+})
+
+// ── parseResolvesField (S-047) ──────────────────────────────────────────────────
+
+describe('parseResolvesField', () => {
+  it('parses a flow-style array with multiple IDs', () => {
+    const spec = '---\nid: F-0099\nresolves: [TS-017, TS-018]\n---\n'
+    expect(parseResolvesField(spec)).toEqual(['TS-017', 'TS-018'])
+  })
+
+  it('parses a single-ID array', () => {
+    const spec = '---\nid: F-0099\nresolves: [TS-017]\n---\n'
+    expect(parseResolvesField(spec)).toEqual(['TS-017'])
+  })
+
+  it('returns [] when the field is absent', () => {
+    const spec = '---\nid: F-0099\ntitle: Algo\n---\n'
+    expect(parseResolvesField(spec)).toEqual([])
+  })
+
+  it('returns [] for an empty array', () => {
+    const spec = '---\nid: F-0099\nresolves: []\n---\n'
+    expect(parseResolvesField(spec)).toEqual([])
   })
 })

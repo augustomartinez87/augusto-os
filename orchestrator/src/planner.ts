@@ -115,3 +115,11 @@ export function loadFeatureSpec(featureId: string): string {
   const filePath = path.join(featureDir, `${featureId}.md`)
   return readFileSync(filePath, 'utf-8')
 }
+
+// Campo opcional del frontmatter: IDs de system/BACKLOG.md que este feature resuelve,
+// ej. `resolves: [TS-017, TS-018]`. Ausente o vacío → [] (no-op para quien lo consuma).
+export function parseResolvesField(spec: string): string[] {
+  const m = spec.match(/^resolves:\s*\[(.*)\]\s*$/m)
+  if (!m) return []
+  return m[1].split(',').map(s => s.trim()).filter(Boolean)
+}

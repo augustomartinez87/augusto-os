@@ -887,3 +887,64 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0033/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-27 — F-0034 completado
+
+## Feature F-0034
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/server/api/routers/retiro.ts` `create`: antes de crear, calcular el saldo actual del negocio con la misma fórmula que usa `/mi-plata`/`dashboard.saldoNegocio` (ingresos - compras - gastos - retiros), reusando/extrayendo la lógica a un helper compartido en `src/lib/` (p.ej. junto a `calcularSaldoNegocio` en `costeo.ts`) para no duplicarla. Si `saldoActual - monto < 0`, rechazar con `TRPCError({code: 'BAD_REQUEST', message: 'Saldo insuficiente — disponible $X, se pidió retirar $Y'})` usando `toFixed(2)`. No tocar UI en este paso. (76a8f8f5)
+- [x] Step 2: En `src/app/retiros/page.tsx`: agregar detección del error de saldo por prefijo del mensaje (mismo patrón que `isStockError` en `produccion/page.tsx:43-44`) y mostrarlo en una card ámbar igual de visible que en Producción cuando la mutation falla con 'Saldo insuficiente'. (93e6a609)
+- [x] Step 3: Agregar mutation `delete` (input `{ id: z.string() }`, `protectedProcedure`) que hace `ctx.db.<modelo>.delete({ where: { id } })` en `venta.ts`, `retiro.ts` y el router de gastos (`gasto.ts`). Son deletes simples sin efecto en stock. No tocar UI en este paso. (044194e4)
+- [x] Step 4: En las páginas `ventas`, `retiros` y `gastos`: agregar en cada item del historial un botón de borrar (tap target ~44x44px mínimo) que dispara `window.confirm('¿Borrar este registro?')` antes de llamar al mutation `delete`, e invalida en `onSuccess` el query de `list` correspondiente más `dashboard`/`mi-plata`. (97c6cd67)
+- [x] Step 5: Agregar mutation `delete` en `src/server/api/routers/compra.ts` dentro de un `ctx.db.$transaction`: (a) leer la compra, (b) `insumo.update` con `stockActual: { decrement: compra.cantidad }`, (c) buscar la compra más reciente restante de ese insumo (excluyendo la borrada) y setear `costoUnitarioActual` con `calcularCostoUnitario` de `src/lib/compras.ts`, o `0` si no queda ninguna, (d) `compra.delete`. No tocar UI en este paso. (e9b4278a)
+- [x] Step 6: En `src/app/compras/page.tsx`: agregar el botón de borrar por item (tap target ~44x44px) con `window.confirm` previo, llamando al nuevo `compra.delete` e invalidando en `onSuccess` los queries de compras, insumos, `dashboard` y `mi-plata`. (5e2cdaa0)
+- [x] Step 7: Agregar mutation `delete` en `src/server/api/routers/lote.ts` dentro de un `ctx.db.$transaction`: (a) leer el lote con `producto.recetaItems` (mismo query que `create`), (b) por cada `recetaItem` hacer `insumo.update` con `stockActual: { increment: <cantidad consumida> }` reusando `toUnidadNativa` de `src/lib/lotes.ts` con la misma fórmula que `create`, (c) `lote.delete`. No tocar UI en este paso. (ad18658b)
+- [x] Step 8: En `src/app/produccion/page.tsx`: agregar el botón de borrar por lote en el historial (tap target ~44x44px) con `window.confirm` previo, llamando a `lote.delete` e invalidando en `onSuccess` los queries de lotes, insumos, `dashboard` y `mi-plata`. (da7d5f04)
+- [x] Step 9: Agregar tests (siguiendo el estilo de `compras.test.ts` y los tests de lote existentes, extendiendo los mocks de DB para incluir `delete`): un test que verifica que borrar una Compra deja el `stockActual` y `costoUnitarioActual` del insumo exactamente como antes de crearla, y un test que verifica que borrar un Lote devuelve exactamente el stock consumido a cada insumo de la receta. Correr también los tests existentes para no romper cálculos de costeo. (fa713d0e)
+
+### Decisiones (ADR)
+- ADR-0099 — Helper de saldo devuelve el desglose completo, no solo el número [Instrucción de Augusto]
+- ADR-0100 — Stock y costo se actualizan en un único `insumo.update` dentro de la transacción [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0034/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-27 — F-0035 completado
+
+## Feature F-0035
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/server/api/routers/insumo.ts`: agregar la mutation `create` como `protectedProcedure` con input Zod `{ nombre: z.string().min(1), unidad: z.enum(["kg","unidad"]), stockActual: z.number().min(0).default(0) }`. En el handler, verificar duplicado con `ctx.db.insumo.findFirst({ where: { nombre: input.nombre } })` y lanzar `TRPCError({ code: "BAD_REQUEST", message: "Ya existe un insumo con ese nombre." })` si existe; si no, `ctx.db.insumo.create({ data: input })`. Importar `TRPCError` de `@trpc/server` si no está importado. Mantener el estilo del resto del router. (54877098)
+- [x] Step 2: En `src/app/insumos/page.tsx`: agregar una sección/card "Nuevo insumo" (mismo patrón visual `bg-white rounded-xl border border-gray-200 p-4`, mobile-first max-w-lg) con campos nombre (text), unidad (select "kg"/"unidad") y stock inicial (number, opcional, default 0). Manejar el estado con useState + validación local (nombre no vacío) sin useEffect (usar reset con setForm inicial). Usar `trpc.insumo.create.useMutation` invalidando `utils.insumo.list.invalidate()` en onSuccess y limpiando el form; mostrar el error del server (nombre duplicado) inline. Usar color de texto explícito en los inputs para evitar el bug de contraste. (8c9c0bc1)
+- [x] Step 3: En `src/__tests__/insumos.test.ts`: agregar tests unitarios para `insumoRouter.create` siguiendo el patrón `buildMockDb` + `createCallerFactory`/`createCaller` usado en el archivo (y en `gasto.test.ts`): (a) crea el insumo llamando a `db.insumo.create` con los datos correctos cuando el nombre no existe (`findFirst` devuelve null), (b) lanza error `BAD_REQUEST` cuando `findFirst` devuelve un insumo existente con el mismo nombre. (b79d7511)
+- [x] Step 4: En `src/__tests__/auth.test.ts`: agregar `insumo.create` a la lista explícita de procedimientos protegidos verificados, para confirmar que la nueva mutation rechaza llamadas sin autenticación y mantener la cobertura de auth. (554687c2)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0035/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-28 — F-0036 completado
+
+## Feature F-0036
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/app/recetas/page.tsx`: reemplazar el texto placeholder actual (que menciona "F-0013..F-0018" y "augusto-os") por un copy neutral orientado a la usuaria final, ej. "Esta sección todavía no está lista. Por ahora, las recetas se manejan aparte — ¡ya la vas a poder usar acá pronto!". No construir el módulo de Recetas ni tocar routers/Prisma, es solo copy. (94045191)
+- [x] Step 2: En `src/components/NavBar.tsx`: envolver el contenedor con `overflow-x-auto` en un wrapper `relative` y agregar un elemento decorativo `pointer-events-none absolute` posicionado sobre el borde derecho con un gradiente `bg-gradient-to-l from-white` que señale visualmente que hay más pestañas fuera de pantalla en viewport angosto. Versión simple (mostrarlo siempre) es aceptable; no agregar dependencias nuevas ni rediseñar el nav. (a019eb87)
+
+### Decisiones (ADR)
+- ADR-0101 — Gradiente siempre visible en lugar de gradiente condicional por scroll position [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0036/`
+
+> Revisar con Claude in Chrome para validación de UX.

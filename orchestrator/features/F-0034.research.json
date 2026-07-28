@@ -1,0 +1,402 @@
+[
+  {
+    "objetivo": "Mapa del repo para: tres-saltenas — Retiros sin tope de saldo + no se puede borrar una carga hecha por error",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/dashboard.ts",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/app/retiros/page.tsx",
+      "src/app/compras/page.tsx",
+      "src/app/mi-plata/page.tsx",
+      "src/lib/costeo.ts",
+      "src/lib/compras.ts",
+      "src/lib/db.ts",
+      "src/__tests__/retiro.test.ts",
+      "src/__tests__/compras.test.ts",
+      "src/__tests__/saldo.test.ts",
+      "package.json"
+    ],
+    "patrones": [
+      "createTRPCRouter con protectedProcedure y validación Zod en input",
+      "calcularSaldoNegocio = ingresos - compras - gastos - retiros (derivado, nunca persistido)",
+      "db.$transaction para operaciones atómicas (compra crea registro + actualiza stock con increment)",
+      "increment de Prisma para actualizar stockActual sin race conditions",
+      "calcularCostoUnitario = precioTotal / cantidad (último precio pisa al anterior, sin promedio ponderado)",
+      "patrón useMutation + useUtils().invalidate() en frontend para refrescar queries tras crear",
+      "alert window.confirm para montos atípicos >= $50,000",
+      "parseLocalDate: new Date(y, m-1, d) para evitar bug de offset UTC en inputs type=date",
+      "modelo Retiro sin constraints de balance — no hay validación contra saldo disponible"
+    ],
+    "dependencias": [
+      "next@16.2.10",
+      "react@19.2.4",
+      "@prisma/client@^5.22.0",
+      "prisma@^5.22.0",
+      "@trpc/server@^11.18.0",
+      "@trpc/client@^11.18.0",
+      "@trpc/react-query@^11.18.0",
+      "@tanstack/react-query@^5.101.2",
+      "zod@^4.4.3",
+      "superjson@^2.2.6",
+      "@clerk/nextjs@^7.5.14",
+      "vitest@^4.1.10",
+      "tailwindcss@^4"
+    ],
+    "riesgos": [
+      "NO hay validación de saldo al crear retiros — se puede retirar cualquier monto sin importar el saldo del negocio",
+      "NO existe ninguna operación delete/remove en ningún router — no se puede borrar compras, retiros, ventas, gastos ni lotes creados por error",
+      "compra.create usa db.$transaction que actualiza stockActual con increment y fija costoUnitarioActual — borrar una compra requeriría revertir ambos cambios atómicamente",
+      "No hay soft-delete ni mecanismo de arrepentimiento/deshacer en todo el repo",
+      "El saldo del negocio es calculado (derivado), nunca persistido — no hay un campo 'saldo' contra el cual validar",
+      "calcularCostoUnitario pisa el costo anterior sin promedio ponderado — si se borra una compra, el costoUnitarioActual queda inconsistente"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "create",
+        "lineas": "6-13",
+        "explicacion": "Mutation de retiro: solo valida monto>0 y nota/fecha opcional. NO hay verificación de saldo disponible ni límite alguno.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "createTRPCRouter",
+        "lineas": "5-42",
+        "explicacion": "El router de retiro solo expone create, list y byPeriod. NO tiene procedimiento delete ni ningún mecanismo para borrar retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "create",
+        "lineas": "10-39",
+        "explicacion": "Mutation de compra: usa $transaction para crear el registro y actualizar stock y costo. NO hay delete ni undo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "11-21",
+        "explicacion": "Todos los routers registrados: compra, insumo, producto, lote, venta, gasto, retiro, config, dashboard. Ninguno expone delete.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/costeo.ts",
+        "simbolo": "calcularSaldoNegocio",
+        "lineas": "32-39",
+        "explicacion": "Fórmula: ingresos - compras - gastos - retiros. El saldo es calculado, nunca persistido — no hay campo contra el cual validar retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/dashboard.ts",
+        "simbolo": "saldoNegocio",
+        "lineas": "103-125",
+        "explicacion": "Query que agrega ventas, compras, gastos y retiros para calcular saldo. Confirma que no hay campo de saldo persistente.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Retiro",
+        "lineas": "82-88",
+        "explicacion": "Modelo Retiro: solo id, fecha, monto, nota, createdAt. Sin relación a saldo, sin constraints de balance.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Compra",
+        "lineas": "19-28",
+        "explicacion": "Modelo Compra: id, fecha, insumoId, cantidad, precioTotal, proveedor, createdAt. Sin campo deletedAt ni soft-delete.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/retiro.test.ts",
+        "simbolo": "buildMockDb",
+        "lineas": "9-24",
+        "explicacion": "Mock del router de retiro solo contempla create, findMany, aggregate. Sin delete — confirma que no existe lógica de borrado.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "$transaction",
+        "lineas": "16-37",
+        "explicacion": "La creación de compra es atómica: crea registro Y actualiza insumo.stockActual con increment y costoUnitarioActual. Borrar requeriría revertir ambos.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/retiros/page.tsx",
+        "simbolo": "MONTO_ALERTA",
+        "lineas": "8",
+        "explicacion": "Única protección al crear retiros: alerta visual si monto >= $50,000. No hay tope de saldo ni bloqueo por balance insuficiente.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo tres-saltenas es una app Next.js con tRPC, Prisma/PostgreSQL y Clerk para gestionar una producción de empanadas. El modelo Retiro no tiene ninguna validación contra el saldo disponible — se puede retirar cualquier monto sin restricción. No existe ningún procedimiento delete (ni soft-delete, ni undo) en ningún router del sistema: compras, retiros, ventas, gastos y lotes son irreversibles una vez creados. Implementar estas funcionalidades requerirá agregar procedimientos delete en los routers tRPC correspondientes (con wrappers de transacción para revertir efectos secundarios como stockActual) y posiblemente persistir el saldo o agregar validación previa en retiro.create."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: tres-saltenas — Retiros sin tope de saldo + no se puede borrar una carga hecha por error",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/dashboard.ts",
+      "src/server/api/routers/compra.ts",
+      "src/server/api/routers/venta.ts",
+      "src/server/api/routers/gasto.ts",
+      "src/server/api/routers/lote.ts",
+      "src/server/api/root.ts",
+      "src/server/api/trpc.ts",
+      "src/lib/costeo.ts",
+      "src/lib/compras.ts",
+      "src/app/retiros/page.tsx",
+      "src/app/mi-plata/page.tsx",
+      "src/__tests__/retiro.test.ts",
+      "src/__tests__/saldo.test.ts",
+      "SPEC-MVP.md"
+    ],
+    "patrones": [
+      "protectedProcedure.input(z.object({...})).mutation() — patrón de creación de mutaciones protegidas",
+      "ctx.db.retiro.create({ data: input }) — creación directa sin validación de saldo",
+      "ctx.db.$transaction — transacciones atómicas (ej. compra, lote) que el implementador podría reusar",
+      "createTRPCRouter — patrón de definición de routers tRPC",
+      "calcularSaldoNegocio — función que calcula saldo = ingresos − compras − gastos − retiros pero NO se usa en retiro.create",
+      "MONTO_ALERTA / PRECIO_TOTAL_ALERTA — patrón de umbral de confirmación en UI"
+    ],
+    "dependencias": [
+      "@trpc/server",
+      "@trpc/client",
+      "zod",
+      "@prisma/client",
+      "superjson",
+      "@clerk/nextjs"
+    ],
+    "riesgos": [
+      "No existe ningún procedimiento delete/remove en ningún router — actualmente NO se puede borrar ningún registro (compra, venta, gasto, retiro, lote), lo cual satisface el requerimiento \"no se puede borrar una carga hecha por error\" por ausencia de implementación, pero podría ser un problema si el usuario necesita corregir errores",
+      "El retiro.create no valida saldo: el cálculo de saldo (calcularSaldoNegocio) existe pero nunca se invoca antes de crear un retiro. Esto ya implementa \"retiros sin tope de saldo\" pero podría causar saldos negativos sin control",
+      "Ninguna transacción de retiro usa $transaction — a diferencia de compra y lote que sí lo hacen",
+      "El modelo Retiro en Prisma no tiene userId ni relación con usuario — no hay trazabilidad de quién hizo cada retiro",
+      "No hay soft-delete ni campo 'cancelado' en ningún modelo: si en el futuro se necesita \"deshacer\" una carga habría que agregar una mutación delete o un flag de anulación"
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "retiroRouter",
+        "lineas": "1-35",
+        "explicacion": "Router tRPC completo de retiros. Contiene create (sin validación de saldo), list y byPeriod. No tiene delete/remove. Es el punto de entrada principal para modificar el comportamiento.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "create",
+        "lineas": "4-13",
+        "explicacion": "Mutation que crea un retiro. Usa z.object({ monto: z.number().positive(), nota: z.string().optional(), fecha: z.date() }). No consulta saldo ni lo valida. Implementa 'retiros sin tope de saldo' por ausencia de control.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/costeo.ts",
+        "simbolo": "calcularSaldoNegocio",
+        "lineas": "46-53",
+        "explicacion": "Función que calcula saldo = ingresos − compras − gastos − retiros. Existe pero NO es llamada desde retiro.create. El implementador podría usarla si quisiera agregar un tope de saldo, pero eso contradiría 'sin tope'.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/dashboard.ts",
+        "simbolo": "saldoNegocio",
+        "lineas": "175-189",
+        "explicacion": "Query protegida que agrega todos los retiros (retirosAgg) y calcula saldo. Usa calcularSaldoNegocio. Muestra retiros totales en el dashboard 'Mi plata' pero no restringe la creación de nuevos retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Retiro",
+        "lineas": "77-82",
+        "explicacion": "Modelo Prisma: id, fecha, monto, nota, createdAt. No tiene userId, ni campo deleted/activo, ni relación con otras tablas. Simple y directo.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/retiros/page.tsx",
+        "simbolo": "RetirosPage",
+        "lineas": "1-164",
+        "explicacion": "Página de retiros con formulario de creación y listado. Usa createMutation de tRPC. Solo permite crear, no tiene botón de eliminar/borrar. La UI ya implementa 'no se puede borrar' por ausencia de opción.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "compraRouter",
+        "lineas": "1-55",
+        "explicacion": "Router de compras. Solo tiene create y list. No tiene delete/remove. Usa $transaction para actualizar insumo. Patrón de referencia para implementar transacciones si se necesitaran en retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/venta.ts",
+        "simbolo": "ventaRouter",
+        "lineas": "1-38",
+        "explicacion": "Router de ventas. Solo create y list. Sin delete/remove. Confirma que NINGÚN router del MVP tiene operaciones de borrado.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/gasto.ts",
+        "simbolo": "gastoRouter",
+        "lineas": "1-41",
+        "explicacion": "Router de gastos. create, list, byPeriod. Sin delete/remove. Mismo patrón que retiroRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/lote.ts",
+        "simbolo": "loteRouter",
+        "lineas": "1-109",
+        "explicacion": "Router de lotes. create con $transaction que descuenta stock de insumos. Sin delete/remove. Ejemplo de transacción compleja.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/root.ts",
+        "simbolo": "appRouter",
+        "lineas": "1-17",
+        "explicacion": "Router raíz que monta retiroRouter como 'retiro'. El implementador no necesita modificar esto si solo cambia la lógica interna de retiroRouter.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/trpc.ts",
+        "simbolo": "protectedProcedure",
+        "lineas": "17-22",
+        "explicacion": "Middleware que exige autenticación. Todos los procedimientos de retiros (y demás routers) lo usan. Patrón a seguir para cualquier nuevo endpoint.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/retiro.test.ts",
+        "simbolo": "retiroRouter.create",
+        "lineas": "38-59",
+        "explicacion": "Tests que verifican creación de retiros. No hay tests de delete/remove ni de validación de saldo. El implementador debería actualizar estos tests si cambia la lógica.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/saldo.test.ts",
+        "simbolo": "calcularSaldoNegocio",
+        "lineas": "6-29",
+        "explicacion": "Tests unitarios de calcularSaldoNegocio. Verifican que saldo = ingresos - compras - gastos - retiros. Útil si se decide agregar validación de saldo en retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "SPEC-MVP.md",
+        "simbolo": "Retiro",
+        "lineas": "62-63",
+        "explicacion": "Spec: 'Retiro — fecha, monto, nota — plata que Dani saca para sí, separada de la caja del negocio'. Confirma que no hay restricción de tope ni mención de borrado.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo ya implementa ambos requerimientos por omisión: (1) retiros sin tope de saldo — retiro.create no valida saldo contra calcularSaldoNegocio, simplemente persiste el registro; (2) no se puede borrar una carga — ningún router del MVP (retiro, compra, venta, gasto, lote) tiene procedimientos delete/remove, y la UI no ofrece botones de borrado. El archivo clave es src/server/api/routers/retiro.ts con la mutation create que no tiene validación de saldo, y ningún archivo del proyecto contiene operaciones de eliminación. Si se quisiera cambiar este comportamiento (agregar tope o permitir borrado), habría que modificar retiro.ts, agregar procedimientos y actualizar los tests."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: tres-saltenas — Retiros sin tope de saldo + no se puede borrar una carga hecha por error",
+    "archivos": [
+      "prisma/schema.prisma",
+      "src/server/api/routers/retiro.ts",
+      "src/server/api/routers/dashboard.ts",
+      "src/lib/costeo.ts",
+      "src/app/retiros/page.tsx",
+      "src/__tests__/retiro.test.ts",
+      "src/__tests__/saldo.test.ts",
+      "package.json"
+    ],
+    "patrones": [
+      "Crear nuevos procedimientos tRPC siguiendo el patrón createTRPCRouter({ create, list, byPeriod })",
+      "Validar inputs con zod (z.object, z.number().positive(), z.date())",
+      "Usar ctx.db.$transaction para operaciones que afectan múltiples tablas",
+      "No existe patrón de delete/update en ningún router del proyecto — hay que crearlo desde cero"
+    ],
+    "dependencias": [
+      "@prisma/client (^5.22.0)",
+      "@trpc/server (^11.18.0)",
+      "zod (^4.4.3)",
+      "next (16.2.10)"
+    ],
+    "riesgos": [
+      "RETIROS SIN TOPE DE SALDO: El procedimiento create en retiro.ts solo valida monto > 0 con zod. No existe ninguna verificación del lado servidor de que el saldo del negocio (ingresos - compras - gastos - retiros acumulados) sea suficiente para cubrir el retiro. La única alerta es un window.confirm cliente-side (MONTO_ALERTA = 50000) que no es vinculante.",
+      "NO HAY DELETE NI UPDATE EN RETIROS: El router retiro.ts solo expone create, list y byPeriod. No existe ningún procedimiento delete o update. Si se carga un retiro erróneo, no hay forma de corregirlo vía API. Tampoco hay UI de borrado en retiros/page.tsx.",
+      "EFECTO COLATERAL EN saldoNegocio: dashboard.ts calcula el saldo como ingresos - compras - gastos - retiros, sumando TODOS los retiros con aggregate({ _sum: { monto: true } }) sin filtro temporal. Si se implementara borrado de retiros, el saldo se recalcula automáticamente (comportamiento correcto), pero si se implementara borrado de compras o lotes (que usan $transaction con descuento de stock y actualización de costoUnitarioActual), habría que hacer una migración compleja para revertir esos efectos.",
+      "INCONSISTENCIA saldoNegocio vs byPeriod: saldoNegocio suma retiros de TODOS los períodos (sin filtro), mientras que byPeriod acepta desde/hasta. No hay un saldo por período disponible, lo que podría confundir si se muestran ambos.",
+      "TESTS EXISTENTES NO CUBREN DELETE: retiro.test.ts solo testea create, list y byPeriod. saldo.test.ts testea calcularSaldoNegocio y dashboardRouter.saldoNegocio. Si se agrega delete, hay que crear tests nuevos. No hay tests de integración que verifiquen la consistencia del saldo tras operaciones de borrado.",
+      "DEUDA TÉCNICA: costoUnitarioActual de Insumo se actualiza con cada compra (precioTotal / cantidad, no promedio ponderado). Al borrar una compra, el costo unitario quedaría desactualizado porque no hay recálculo. Similar para stockActual que se incrementa en cada compra y se descuenta en cada lote."
+    ],
+    "evidencia": [
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "retiroRouter",
+        "lineas": "5-37",
+        "explicacion": "Router de retiros. Solo expone create (sin verificación de saldo), list y byPeriod. No hay delete ni update. La validación de monto es solo z.number().positive() — no hay tope server-side.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/retiro.ts",
+        "simbolo": "create",
+        "lineas": "7-13",
+        "explicacion": "Procedimiento de creación de retiro. No verifica saldo disponible ni aplica tope alguno. Input: monto (positive), nota (optional), fecha (date).",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/retiros/page.tsx",
+        "simbolo": "MONTO_ALERTA",
+        "lineas": "9",
+        "explicacion": "Única barrera contra retiros grandes: constante MONTO_ALERTA = 50000 usada en window.confirm del lado cliente. No es vinculante — puede omitirse con herramientas de desarrollo o scripts.",
+        "confianza": 1
+      },
+      {
+        "path": "src/app/retiros/page.tsx",
+        "simbolo": "handleSubmit",
+        "lineas": "36-68",
+        "explicacion": "Manejador de submit del formulario de retiros. Solo valida monto > 0 y muestra confirm si monto >= 50000. No hay llamada a verificación de saldo contra el servidor.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/dashboard.ts",
+        "simbolo": "saldoNegocio",
+        "lineas": "113-131",
+        "explicacion": "Calcula saldo = ingresos - compras - gastos - retiros. Usa aggregate({ _sum: { monto: true } }) sobre retiros SIN filtro de fecha (suma todos los retiros históricos). Al borrar un retiro, el saldo se recalcularía automáticamente.",
+        "confianza": 1
+      },
+      {
+        "path": "src/lib/costeo.ts",
+        "simbolo": "calcularSaldoNegocio",
+        "lineas": "35-40",
+        "explicacion": "Fórmula del saldo: ingresos - compras - gastos - retiros. Función pura, sin efectos secundarios. Si se implementa delete de retiro, esta función no necesita cambios.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/retiro.test.ts",
+        "simbolo": "buildMockDb",
+        "lineas": "9-24",
+        "explicacion": "Mock de DB para tests de retiro. Solo mockea create, findMany y aggregate. No hay mock para delete porque no existe el método. Si se agrega delete, hay que extender este mock.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/saldo.test.ts",
+        "simbolo": "buildMockDb",
+        "lineas": "38-57",
+        "explicacion": "Mock de DB para tests de saldo. Mockea aggregate de venta, compra, gastoOperativo y retiro. No cubre escenarios de borrado de retiros.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Retiro",
+        "lineas": "71-76",
+        "explicacion": "Modelo Retiro: id, fecha, monto, nota, createdAt. No tiene relaciones con otras entidades ni campos de auditoría de borrado (como deletedAt). Es independiente — borrar un retiro no afecta otras tablas.",
+        "confianza": 1
+      },
+      {
+        "path": "src/server/api/routers/compra.ts",
+        "simbolo": "create",
+        "lineas": "11-39",
+        "explicacion": "Ejemplo de router con $transaction: al crear compra, actualiza costoUnitarioActual y stockActual del insumo. Si se implementara delete de compra, habría que revertir estos efectos en una transacción, lo cual es más complejo que borrar un retiro.",
+        "confianza": 1
+      },
+      {
+        "path": "src/__tests__/saldo.test.ts",
+        "simbolo": "dashboardRouter.saldoNegocio",
+        "lineas": "60-110",
+        "explicacion": "Tests que verifican que saldoNegocio suma correctamente retiros. No hay test que verifique comportamiento tras borrar un retiro (no existe la funcionalidad). Tests rompen si se cambia la firma de saldoNegocio.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El sistema no tiene ningún mecanismo server-side que limite los retiros según el saldo disponible del negocio — solo hay una alerta cliente-side débil (window.confirm por montos > $50.000). Además, no existe ningún procedimiento delete ni update en el router de retiros, por lo que una carga errónea es irreversible vía API. Si se implementara borrado de retiros, el impacto es acotado (solo afecta el aggregate de saldoNegocio, que se recalcula automáticamente), pero habría que crear tests nuevos y extender los mocks existentes. El mayor riesgo de deuda técnica sería replicar un patrón de delete sin considerar que otras entidades (compra, lote) tienen efectos colaterales en transacciones (stock, costo unitario) que sí requerirían migraciones complejas."
+  }
+]
