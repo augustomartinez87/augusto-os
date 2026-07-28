@@ -948,3 +948,24 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0036/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-28 — F-0037 completado
+
+## Feature F-0037
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `app/ap/page.tsx`, dentro del render de préstamos ACTIVOS de `CarteraTab` (~línea 1104-1157), agregar un bloque nuevo —renderizado solo si `loan.commissionExpected > 0`— que muestre 'Comisión total' (`formatCurrency(loan.commissionExpected, curr)`) y 'Por cuota' (`formatCurrency(loan.commissionExpected / loan.termMonths, curr)` con guarda contra `termMonths` null/0 para no dividir por cero, ocultando la fila 'Por cuota' si no hay término válido). Reusar el mismo estilo del bloque 'Comisión cobrada' existente (`text-emerald-500`/`text-emerald-300`, `tabular-nums`, `border-t border-white/5 pt-2`), sin introducir un patrón visual nuevo ni mostrar tasa/TNA/ratio. No tocar el bloque `commissionRealized > 0` existente. (7f31a6e4)
+- [x] Step 2: Verificar en el tipo inferido de `trpc.ap.apMyPortfolio.useQuery` que `commissionExpected` y `termMonths` ya viajan tipados en cada item de la cartera (sin tocar `server/routers/ap.ts`), y ajustar el consumo en `CarteraTab` si el tipo requiere manejo de nullable para no romper el typecheck. (7f31a6e4)
+- [x] Step 3: Agregar/actualizar tests de render de `CarteraTab` (o del loan card) cubriendo: (a) `commissionExpected > 0` muestra 'Comisión total' y 'Por cuota' con los montos formateados por `formatCurrency`; (b) `commissionExpected = 0/null` no renderiza el bloque nuevo (sin '$0' ni 'NaN'); (c) el bloque `commissionRealized > 0` sigue mostrándose como hoy. (acdad3ae)
+- [x] Step 4: Correr typecheck, lint y la suite de tests, y corregir cualquier error resultante de los cambios. (acdad3ae)
+
+### Decisiones (ADR)
+- ADR-0102 — Estructura del bloque commissionExpected como contenedor con space-y-1 en lugar de dos divs independientes [Supuesto del agente] **⚠ REVISAR**
+- ADR-0103 — Tests de render sin jsdom — helper espejo en lugar de render real [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0037/`
+
+> Revisar con Claude in Chrome para validación de UX.

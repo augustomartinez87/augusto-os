@@ -1,0 +1,191 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Kredy — mostrar comisión del AP (total y por cuota) en cada préstamo de 'Mi cartera'",
+    "archivos": [
+      "app/ap/page.tsx",
+      "server/routers/ap.ts",
+      "server/services/commission.service.ts"
+    ],
+    "patrones": [
+      "comisión cobrada (commissionRealized) se muestra condicionalmente con `{loan.commissionRealized > 0 && (...)}` en la card del préstamo",
+      "apMyPortfolio ya retorna `commissionRealized` (cobrada) y `commissionExpected` (total esperada) por préstamo",
+      "la comisión se calcula en realizeCommissionsForPayment con `cfAmount.mul(ratio)` donde ratio = apCommissionRatio del loan",
+      "los componentes que califican para comisión están definidos en QUALIFYING_COMPONENTS = ['principal', 'interest_current']",
+      "la UI usa formatCurrency, cn(), y los mismos tokens visuales (emerald-500 para comisión) que deberían reutilizarse"
+    ],
+    "dependencias": [
+      "decimal.js (para cálculos de comisión con precisión)",
+      "tRPC (endpoints ap.apMyPortfolio, ap.apMyAccount, ap.apMyCommissionLedger)",
+      "Prisma (modelos apCommission, apLedgerEvent, loan, loanInstallment, loanRealCashflow)",
+      "date-fns (formateo de fechas en UI)"
+    ],
+    "riesgos": [
+      "commissionExpected se retorna desde el endpoint pero NO se muestra actualmente en la UI — hay que agregarlo",
+      "no existe un campo de 'comisión por cuota' individual; la comisión se calcula a nivel de cashflow (pago) con el ratio global del préstamo",
+      "para mostrar comisión por cuota habría que calcularla derivativamente (cuota * ratio) o consultar apLedgerEvent por cashflowId de cada installment",
+      "la relación entre loanInstallments y loanRealCashflow (a través de paymentId) no está explícita en el mapeo actual de apMyPortfolio",
+      "el esquema legacy (commission_realized) convive con el nuevo (commission_accrued) — hay lógica de idempotencia que respetar",
+      "la implementación actual solo muestra commissionRealized acumulado, no hay desglose por cuota ni total esperado del préstamo"
+    ],
+    "evidencia": [
+      {
+        "path": "app/ap/page.tsx",
+        "simbolo": "CarteraTab",
+        "lineas": "986-1177",
+        "explicacion": "Componente del tab 'Mi cartera' que renderiza la lista de préstamos del AP. Ya contiene un bloque condicional que muestra commissionRealized por préstamo. Es donde hay que agregar la comisión total esperada y la comisión por cuota.",
+        "confianza": 1
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "apMyPortfolio",
+        "lineas": "2145-2205",
+        "explicacion": "Query tRPC que retorna la cartera del AP. Ya devuelve `commissionRealized` (Number(comm.realizedCommission)) y `commissionExpected` (Number(comm.expectedCommission ?? 0)). Estos campos están listos para consumir desde la UI.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "realizeCommissionsForPayment",
+        "lineas": "73-127",
+        "explicacion": "Función que asienta la comisión al cobrar una cuota. Calcula comisión como cfAmount * ratio usando Decimal.js. Solo actúa si loan.apCommissionRatio != null y direction === 'lender'. Es la fuente de verdad del cálculo de comisión por cashflow.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "QUALIFYING_COMPONENTS",
+        "lineas": "5",
+        "explicacion": "Constante que define qué componentes del cashflow califican para comisión: ['principal', 'interest_current']. Es clave para saber sobre qué montos se calcula la comisión por cuota.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "ApCurrentAccountResult",
+        "lineas": "10-28",
+        "explicacion": "Interface que tipifica los campos de cuenta corriente del AP. Incluye commissionAccrued, commissionPaid, commissionWithdrawable. Usado en el tab 'Mi Comisión' pero relevante para entender el modelo de datos de comisiones.",
+        "confianza": 1
+      },
+      {
+        "path": "app/ap/page.tsx",
+        "simbolo": "ComisionTab",
+        "lineas": "1179-1400",
+        "explicacion": "Tab 'Mi Comisión' que muestra el resumen financiero del AP (comisión devengada, retirable, etc.). Es referencia de cómo se muestran valores de comisión en la misma página y del ecosistema de queries relacionadas (apMyAccount, apMyCommissionLedger).",
+        "confianza": 0.95
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "CommissionLedgerRow",
+        "lineas": "30-36",
+        "explicacion": "Interface que tipifica cada fila del libro de comisiones. Incluye loanId, cashflowId, type, amountSigned. Esto permitiría consultar la comisión por cashflow individual para desglosar por cuota.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "apMyCommissionLedger",
+        "lineas": "[NO VERIFICADO - fuera del rango leído]",
+        "explicacion": "Query tRPC que retorna el libro de comisiones del AP. Podría usarse para obtener el detalle por cashflow/instalment y mostrar comisión por cuota individual. [NO VERIFICADO: no se confirmó su implementación exacta]",
+        "confianza": 0.5
+      }
+    ],
+    "resumen": "El feature ya tiene la base implementada: el endpoint `apMyPortfolio` retorna `commissionRealized` y `commissionExpected` por préstamo, y la UI en `CarteraTab` ya muestra `commissionRealized` condicionalmente. Falta agregar en la card del préstamo el total de comisión esperada (`commissionExpected`) y —para el desglose por cuota— calcularlo derivativamente usando el ratio (`apCommissionRatio`) sobre el monto de cada cuota, o consultar el ledger de comisiones (`apLedgerEvent`) vinculado al cashflow de cada instalment. No existe un campo 'comisión por cuota' precalculado, por lo que el implementador deberá agregarlo en el backend (en el mapper de `apMyPortfolio` o una query separada) y en la UI dentro de `CarteraTab`."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Kredy — mostrar comisión del AP (total y por cuota) en cada préstamo de 'Mi cartera'",
+    "archivos": [
+      "prisma/schema.prisma",
+      "server/services/commission.service.ts",
+      "components/loans/types.ts",
+      "components/loans/loans-table-view.tsx",
+      "prisma/migrations/20260610150000_ap_commission_ledger/migration.sql",
+      "components/loans/helpers.ts",
+      "app/dashboard/loans/page.tsx"
+    ],
+    "patrones": [
+      "LoanListItem :: RouterOutput['loans']['list'][number] — cualquier campo nuevo de comisión debe añadirse al output del router TRPC 'loans.list' y propagarse al tipo inferido",
+      "apCommissionRatio :: Decimal | null — campo existente en modelo Loan, usado para calcular comisión en tiempo de pago (commission.service.ts). No hay un campo 'totalCommission' ni 'commissionPerInstallment' en Loan; deben derivarse o agregarse",
+      "ApLedgerEvent con type 'commission_accrued' — contiene amountSigned por cashflow, fuente real de comisión devengada. Consultar por loanId + type para obtener total y por-cuota"
+    ],
+    "dependencias": [
+      "@prisma/client",
+      "decimal.js",
+      "@trpc/server",
+      "@trpc/react-query",
+      "date-fns",
+      "date-fns/locale"
+    ],
+    "riesgos": [
+      "El campo `apCommissionRatio` está en `Loan` (nullable), pero la comisión *realizada* solo existe en `ApLedgerEvent` tras cada pago/cashflow. Para préstamos sin pagos aún no hay eventos de comisión, por lo que mostrar 'comisión por cuota' requeriría calcularla proyectada (ratio × cuota estimada) en vez de leerla de eventos realizados",
+      "El tipo `LoanListItem` se infiere automáticamente de `RouterOutput['loans']['list'][number]`. Agregar comisiones al listado obliga a modificar el procedimiento TRPC `loans.list` (server/router) para incluir `ApLedgerEvent` o `ApCommission` en el `include`/`select` de Prisma, lo que puede romper el tipado en todos los consumidores del hook `trpc.loans.list.useQuery()`",
+      "No existe un campo `totalCommission` ni `commissionPerInstallment` en el modelo `Loan`. El modelo `PreApproval` sí los tiene (`commissionPerInstallment`, `totalCommission`), pero no todos los préstamos pasan por una preaprobación — los préstamos creados directamente no tienen registro en `PreApproval` ni en `ApCommission`",
+      "La migración de junio 2026 (20260610150000) agregó `apCommissionRatio` a `loans` y los nuevos campos a `ap_commissions`. Los préstamos anteriores a esa migración pueden tener `apCommissionRatio = null`. El listado debe contemplar el caso nulo sin romper la UI",
+      "Posible alta cardinalidad: si se agrega un JOIN a `ap_ledger_events` dentro del listado de préstamos, cada préstamo puede tener múltiples eventos (uno por cashflow), lo que podría generar un `N+1` o una respuesta excesivamente pesada si no se limita con agregación en Prisma",
+      "El componente `loans-table-view.tsx` usa `useMemo` para filtrar préstamos preaprobados. Cualquier campo de comisión que requiera procesamiento adicional (suma de ledger events, cálculo proyectado) deberá mantenerse performante dentro de ese memo o moverse a un cómputo server-side",
+      "El servicio `commission.service.ts` usa `decimal.js` para cálculos precisos con `toDecimalPlaces(2)`. Si se replica la lógica de cálculo de comisión proyectada en el frontend, deberá usarse la misma precisión para evitar desajustes de redondeo",
+      "[NO VERIFICADO] El router `loans.list` está definido en un archivo dentro de `server/routers/` que no se alcanzó a inspeccionar — la inclusión de datos de comisión puede implicar cambios en zod schemas de validación y en la query de Prisma existente"
+    ],
+    "evidencia": [
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "apCommissionRatio",
+        "lineas": "650-650",
+        "explicacion": "Campo Decimal? en modelo Loan. Es la ratio de comisión del AP. Nullable: préstamos pre-migración o sin AP no tienen ratio. Es la fuente primaria para calcular comisión proyectada por cuota.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "ApLedgerEvent",
+        "lineas": "930-965",
+        "explicacion": "Modelo que registra eventos de comisión realizados. `type: 'commission_accrued'` + `amountSigned` por cashflow/loanId es la fuente real de comisión devengada. Consultar sumando por loanId y type permite obtener total y desglose por cuota.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "ApCommission",
+        "lineas": "880-910",
+        "explicacion": "Modelo cabecera de comisión por préstamo (linkeado por loanId único). Tiene realizedCommission (acumulado) y expectedCommission (de la preaprobación). No todos los préstamos tienen un ApCommission.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "realizeCommissionsForPayment",
+        "lineas": "60-110",
+        "explicacion": "Lógica servidor que calcula comisión = |cfAmount| * ratio al momento del pago. Usa decimal.js con toDecimalPlaces(2). Única fuente de verdad para comisión realizada. Idempotente, pero la lógica de proyección no está replicada en el frontend.",
+        "confianza": 1
+      },
+      {
+        "path": "components/loans/types.ts",
+        "simbolo": "LoanListItem",
+        "lineas": "16-16",
+        "explicacion": "Tipo inferido de RouterOutput['loans']['list'][number]. Cualquier campo nuevo de comisión debe agregarse en el router server-side para que aparezca aquí automáticamente.",
+        "confianza": 1
+      },
+      {
+        "path": "components/loans/loans-table-view.tsx",
+        "simbolo": "trpc.loans.list.useQuery",
+        "lineas": "117-117",
+        "explicacion": "Punto de entrada del listado de préstamos en el frontend. Consume el endpoint que habría que modificar para incluir datos de comisión. Cualquier cambio en el tipo de respuesta impacta aquí.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/migrations/20260610150000_ap_commission_ledger/migration.sql",
+        "simbolo": "apCommissionRatio",
+        "lineas": "15-15",
+        "explicacion": "Migración que agregó apCommissionRatio a loans. Confirma que préstamos anteriores a esta migración tienen ratio null. Esquema legacy convive con el nuevo.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "PreApproval",
+        "lineas": "710-790",
+        "explicacion": "Modelo PreApproval tiene campos commissionPerInstallment y totalCommission ya existentes. Solo aplica a préstamos originados por preaprobación. Los préstamos directos no tienen estos datos.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "ApLedgerEventType",
+        "lineas": "805-825",
+        "explicacion": "Enum con 'commission_accrued' y 'gross_due_realized' como tipos nuevos (jun-2026). Filtro obligatorio para consultar correctamente comisiones realizadas vs. otros eventos.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "Mostrar comisión del AP en cada préstamo de 'Mi cartera' requiere modificar el endpoint TRPC `loans.list` para incluir datos de `ApLedgerEvent` (comisión realizada) y/o `ApCommission` (comisión esperada). El principal riesgo técnico es que la comisión realizada solo existe post-pago, no hay un campo directo en `Loan` para comisión total o por cuota (solo la ratio). Para préstamos sin pagos ni preaprobación, deberá calcularse comisión proyectada (ratio × cuota estimada). La cardinalidad de `ApLedgerEvent` (1 loan → N eventos) puede impactar performance en el listado si no se agrega correctamente. Además, el tipado automático de `LoanListItem` implica que cualquier cambio de schema en el router se propaga a todos los consumidores del hook, pudiendo romper compilación en múltivos componentes si no se maneja correctamente el caso nullable."
+  }
+]

@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0103 · 2026-07-28 · Tests de render sin jsdom — helper espejo en lugar de render real
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los tests replican la lógica condicional del card con una función local `cardCommission` en el archivo de test, importando `formatCurrency` real, en lugar de renderizar el componente React con jsdom/testing-library.
+**Contexto:** El entorno de vitest es `node` (sin DOM), y ni `@testing-library/react` ni `jsdom` están instalados. Instalarlos hubiera requerido configuración adicional (mocking de tRPC, Clerk, Next.js) que excede el "cambio mínimo necesario". El patrón establecido en el proyecto son tests de funciones puras.
+**Alternativas descartadas:** Instalar `@testing-library/react` + `happy-dom` y renderizar el componente completo con mocks de tRPC; extraer el card a un componente autónomo y testearlo con jsdom.
+**Consecuencias / riesgo residual:** Si la lógica condicional en el card diverge del helper del test (e.g., alguien cambia el operador de `> 0` a `>= 0` solo en el JSX), el test no lo detecta. Para cobertura completa de render se necesitaría agregar un entorno DOM en el futuro.
+
+> Generado por el loop · feature F-0037 · step 3
+
+---
+## ADR-0102 · 2026-07-28 · Estructura del bloque commissionExpected como contenedor con space-y-1 en lugar de dos divs independientes
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se envolvió "Comisión total" y "Por cuota" en un único `div` con `border-t border-white/5 pt-2 space-y-1`, en lugar de renderizar dos divs independientes cada uno con su propia `border-t`.
+**Contexto:** El spec pide reusar el estilo del bloque `commissionRealized` (que tiene un solo `flex` row con `border-t`). Para dos filas bajo una sola condición `commissionExpected > 0`, si se duplicara la `border-t` en cada fila aparecerían dos separadores. El wrapper único produce un solo separador visual arriba del bloque completo.
+**Alternativas descartadas:** Dos divs independientes con `border-t` propio (redundante visualmente); o un único div con `flex-col` sin `space-y-1` (menos legible). Se descartaron ambas.
+**Consecuencias / riesgo residual:** El bloque "Comisión total + Por cuota" aparece como una unidad visual separada del resto del card con un solo borde superior. Si en el futuro se quiere separar visualmente "total" de "por cuota", habrá que refactorizar el wrapper.
+
+> Generado por el loop · feature F-0037 · step 1
+
+---
 ## ADR-0101 · 2026-07-28 · Gradiente siempre visible en lugar de gradiente condicional por scroll position
 
 **Estado:** aceptada
