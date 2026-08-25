@@ -107,3 +107,20 @@ create table if not exists orch_scout_status (
 );
 alter table orch_scout_status enable row level security;
 create policy "anon read scout_status" on orch_scout_status for select to anon using (true);
+
+-- S-048: fila única de uso de Claude Code (rate limits de sesión/semana). Fuente: hook
+-- statusLine de Claude Code (>=1.2.80, stdin.rate_limits) — no hay API pública equivalente
+-- para cuentas Free/Pro/Max (ver system/CLAUDE-USAGE-HANDOFF.md). El hook escribe un JSON
+-- local en cada turno de Claude Code (cualquier repo); orch-sync lo lee y lo espeja acá
+-- cada tick, mismo patrón que orch_scout_status (S-034).
+create table if not exists orch_claude_usage (
+  id                 int primary key default 1,
+  session_pct        numeric,          -- rate_limits.five_hour.used_percentage (0-100)
+  session_resets_at  timestamptz,
+  week_pct           numeric,          -- rate_limits.seven_day.used_percentage (0-100)
+  week_resets_at     timestamptz,
+  checked_at         timestamptz default now(),
+  constraint single_row_claude_usage check (id = 1)
+);
+alter table orch_claude_usage enable row level security;
+create policy "anon read claude_usage" on orch_claude_usage for select to anon using (true);

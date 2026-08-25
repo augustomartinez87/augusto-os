@@ -5,6 +5,7 @@ orchestrator/.env.bak-rename
 *.bak-rename
 
 # System state
+system/claude-usage-status.local.json
 orchestrator/node_modules/
 orchestrator/dist/
 orchestrator/STATE.json

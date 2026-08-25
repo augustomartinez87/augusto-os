@@ -20,6 +20,10 @@ const LOG_FILE = path.join(ORCH_DIR, 'orchestrator.log')
 const INTAKE = path.join(SYSTEM_DIR, 'FEATURE-INTAKE.md')
 const BACKLOG = path.join(SYSTEM_DIR, 'BACKLOG.md')
 const OPERATOR_STATE_YAML = path.join(SYSTEM_DIR, 'OPERATOR_STATE.yaml')
+// S-048: snapshot local que escribe el hook statusLine de Claude Code (system/claude-usage-
+// statusline.mjs) en cada turno de CUALQUIER sesión de Claude Code de esta máquina — no solo
+// augusto-os. Ver system/CLAUDE-USAGE-HANDOFF.md.
+const CLAUDE_USAGE_STATUS_FILE = path.join(SYSTEM_DIR, 'claude-usage-status.local.json')
 
 const URL = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_KEY
@@ -153,6 +157,28 @@ async function pushDeepSeekBalance(): Promise<void> {
     total_balance: balance.totalBalance,
     currency: balance.currency,
     checked_at: new Date().toISOString(),
+  }])
+}
+
+// S-048: uso de Claude Code (% de sesión 5h / semana). A diferencia del saldo DeepSeek,
+// no cachea por intervalo acá — el archivo local ya se actualiza a la cadencia natural
+// del hook (por turno de Claude Code), este tick solo espeja lo último a Supabase.
+async function pushClaudeUsageStatus(): Promise<void> {
+  if (!existsSync(CLAUDE_USAGE_STATUS_FILE)) return
+  let raw: { sessionPct?: number | null; sessionResetsAt?: string | null; weekPct?: number | null; weekResetsAt?: string | null; updatedAt?: string }
+  try {
+    raw = JSON.parse(readFileSync(CLAUDE_USAGE_STATUS_FILE, 'utf-8'))
+  } catch {
+    return // archivo a medio escribir por el hook — se reintenta en el próximo tick (5s)
+  }
+  if (raw.sessionPct == null && raw.weekPct == null) return
+  await upsert('orch_claude_usage', [{
+    id: 1,
+    session_pct: raw.sessionPct ?? null,
+    session_resets_at: raw.sessionResetsAt ?? null,
+    week_pct: raw.weekPct ?? null,
+    week_resets_at: raw.weekResetsAt ?? null,
+    checked_at: raw.updatedAt ?? new Date().toISOString(),
   }])
 }
 
@@ -304,6 +330,7 @@ async function tick(): Promise<void> {
   await pullWebIdeas()
   await pullOperatorState()
   try { await pushDeepSeekBalance() } catch (e) { log(`[sync] balance DeepSeek: ${(e as Error).message}`) }
+  try { await pushClaudeUsageStatus() } catch (e) { log(`[sync] uso Claude: ${(e as Error).message}`) }
   try { await tryAutopilotPick() } catch (e) { log(`[autopilot] error en tick: ${(e as Error).message}`) }
 
   if (shouldRunCleanup(lastCleanupAt)) {

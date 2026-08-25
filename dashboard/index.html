@@ -61,6 +61,11 @@
   .scout-balance{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--txt)}
   .scout-time{font-size:11px;color:var(--mut2)}
 
+  /* ── claude usage (S-048): % de límite del plan (sesión 5h / semana) ── */
+  .usage-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 5px}
+  .usage-label{font-size:11px;color:var(--mut2)}
+  .usage-pct{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--txt)}
+
   /* ── loop hero ── */
   .hero{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 24px;margin-bottom:30px}
   .hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
@@ -334,6 +339,9 @@
   <!-- ░░ SCOUT · saldo DeepSeek (S-034) ░░ -->
   <div class="scout-status" id="scoutStatus"><div class="skel w-full"></div></div>
 
+  <!-- ░░ CLAUDE · uso del plan, sesión/semana (S-048) ░░ -->
+  <div class="scout-status" id="claudeUsageStatus"><div class="skel w-full"></div></div>
+
   <!-- ░░ LOOP HERO · quién tiene la posta ░░ -->
   <div class="hero" id="hero">
     <div class="skel w-40"></div>
@@ -515,6 +523,48 @@
       </div>`;
   }
 
+  // ── renderClaudeUsageStatus (S-048): % de uso del plan de Claude (sesión de 5h / semana),
+  //    vía el hook statusLine de Claude Code — no hay API pública para esto en cuentas
+  //    Free/Pro/Max (ver system/CLAUDE-USAGE-HANDOFF.md). El hook corre en CUALQUIER sesión
+  //    de Claude Code de la máquina, no solo dentro de augusto-os.
+  function usageColor(pct){
+    if(pct == null) return "var(--mut2)";
+    if(pct >= 90) return "var(--coral)";
+    if(pct >= 70) return "var(--amber)";
+    return "var(--teal)";
+  }
+  function fmtResetTime(iso){
+    if(!iso) return "";
+    try{ return new Date(iso).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) }catch{ return "" }
+  }
+  function renderClaudeUsageStatus(row){
+    const el = $("claudeUsageStatus");
+    if(!row || (row.session_pct == null && row.week_pct == null)){
+      el.innerHTML = `<div class="scout-row"><span class="scout-label">Claude · uso</span><span class="empty">sin datos</span></div>`;
+      return;
+    }
+    const sPct = row.session_pct != null ? Math.max(0, Math.min(100, Number(row.session_pct))) : null;
+    const wPct = row.week_pct != null ? Math.max(0, Math.min(100, Number(row.week_pct))) : null;
+    const worst = Math.max(sPct ?? 0, wPct ?? 0);
+    const statusTxt = worst >= 90 ? "cerca del límite" : worst >= 70 ? "atención" : "ok";
+    el.innerHTML = `
+      <div class="scout-row">
+        <span class="scout-label">Claude · uso</span>
+        <span class="scout-status-pill" style="color:${usageColor(worst)}">${statusTxt}</span>
+      </div>
+      <div class="usage-row">
+        <span class="usage-label">Sesión (5h)${row.session_resets_at ? ` · resetea ${fmtResetTime(row.session_resets_at)}` : ""}</span>
+        <span class="usage-pct">${sPct != null ? sPct.toFixed(0) + "%" : "—"}</span>
+      </div>
+      <div class="scout-bar"><div class="scout-bar-fill" style="width:${sPct ?? 0}%;background:${usageColor(sPct)}"></div></div>
+      <div class="usage-row">
+        <span class="usage-label">Semana${row.week_resets_at ? ` · resetea ${fmtResetTime(row.week_resets_at)}` : ""}</span>
+        <span class="usage-pct">${wPct != null ? wPct.toFixed(0) + "%" : "—"}</span>
+      </div>
+      <div class="scout-bar"><div class="scout-bar-fill" style="width:${wPct ?? 0}%;background:${usageColor(wPct)}"></div></div>
+      <div class="scout-row"><span class="scout-time">${timeAgo(row.checked_at)}</span></div>`;
+  }
+
   function renderHero(run, posta){
     if(!run || !posta){
       $("hero").className = "hero rest";
@@ -618,7 +668,7 @@
 
   async function refresh(){
     try{
-      const [runs, steps, logs, ideas, bl, opState, presR, scoutR] = await Promise.all([
+      const [runs, steps, logs, ideas, bl, opState, presR, scoutR, claudeR] = await Promise.all([
         db.from("orch_runs").select("*").order("updated_at",{ascending:false}),
         db.from("orch_steps").select("*"),
         db.from("orch_logs").select("line,ts").order("ts",{ascending:false}).limit(60),
@@ -627,6 +677,7 @@
         db.from("orch_operator_state").select("mode").eq("id", 1).maybeSingle(),
         db.from("orch_presence").select("*"),
         db.from("orch_scout_status").select("*").eq("id", 1).maybeSingle(),
+        db.from("orch_claude_usage").select("*").eq("id", 1).maybeSingle(),
       ]);
       const allRuns = runs.data || [];
       const allSteps = steps.data || [];
@@ -639,6 +690,7 @@
 
       renderRoster(posta, presenceMap);
       renderScoutStatus(scoutR.data || null);
+      renderClaudeUsageStatus(claudeR.data || null);
       renderHero(live, posta);
       renderFeed(allRuns, allSteps);
       renderBacklog(bl.data || []);
