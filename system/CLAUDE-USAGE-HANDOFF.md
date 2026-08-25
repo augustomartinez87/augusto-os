@@ -65,23 +65,28 @@ Archivos tocados / nuevos:
 ## Lo único que falta — configurar el hook a mano
 
 No se pudo tocar `~/.claude/settings.json` desde acá (carpeta protegida, fuera de
-`Proyectos/`). Augusto tiene que agregar esto a mano en
-`C:\Users\Augusto\.claude\settings.json` (si el archivo no existe, crearlo con este
-contenido; si ya existe con otras keys —permissions, hooks, etc.— agregar solo la key
-`statusLine` sin tocar el resto):
+`Proyectos/`). Augusto ya tenía un `statusLine` propio configurado ahí (spacecake, apunta a
+`C:\Users\Augusto\.spacecake\.app\hooks\statusline.cmd` — dibuja la línea de estado que se ve
+en la terminal). Para no perder eso, `claude-usage-statusline.mjs` actúa de wrapper: lee el
+JSON una vez para guardar el snapshot de uso, y después re-ejecuta el comando de spacecake
+pasándole el mismo stdin — lo que se ve en la terminal no cambia. El path del comando original
+está hardcodeado en la constante `ORIGINAL_STATUSLINE_CMD` al principio del script; si
+Augusto cambia o desinstala spacecake en el futuro, ahí es donde hay que tocar.
 
-```json
-{
+Lo único que Augusto tiene que hacer a mano es cambiar el VALOR del campo `command` dentro de
+la key `statusLine` que ya existe en `C:\Users\Augusto\.claude\settings.json` — no tocar nada
+más del archivo (tiene otras keys: hooks, enabledPlugins, tui, theme, etc.):
+
+```jsonc
   "statusLine": {
     "type": "command",
     "command": "node \"C:\\Users\\Augusto\\Downloads\\Proyectos\\augusto-os\\system\\claude-usage-statusline.mjs\""
   }
-}
 ```
 
 Después de guardar, abrir cualquier sesión de Claude Code (en cualquier repo) y esperar un
-turno — la barra de abajo debería mostrar algo como `Sonnet 4.5 · augusto-os · sesión 49% ·
-semana 17%`, y `system/claude-usage-status.local.json` debería aparecer con esos datos.
+turno — la barra de abajo debería verse exactamente igual que antes (la dibuja spacecake), y
+`system/claude-usage-status.local.json` debería aparecer con los datos de uso.
 
 ## Deploy pendiente
 
