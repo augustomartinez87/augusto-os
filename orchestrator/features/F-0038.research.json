@@ -1,0 +1,244 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Kredy — completar comisión total/por cuota para préstamos con AP asignado retroactivamente",
+    "archivos": [
+      "CONTEXTO-SESION-2026-07-13-ap-comision.md",
+      "spensiv-prompt-sonnet-ap-retro-comision-tna-points.md",
+      "server/routers/ap.ts",
+      "server/services/commission.service.ts",
+      "lib/loan-calculator.ts",
+      "lib/financial-engine.ts",
+      "app/dashboard/ap/page.tsx",
+      "prisma/schema.prisma",
+      "tests/loan-calculator.test.ts"
+    ],
+    "patrones": [
+      "computeRetroApCommissionRatio() en lib/loan-calculator.ts recibe commissionSpreadPct (puntos TNA) y devuelve apCommissionRatio + commissionPerInstallment",
+      "adminAssignLoanToAp usa computeRetroApCommissionRatio y persiste apCommissionRatio en Loan, sin guardar el spread original ni comisión total esperada",
+      "adminRetroAssignPreview (query) usa computeRetroApCommissionRatio para preview pero solo devuelve commissionPerInstallment (no totalCommission)",
+      "realizeCommissionsForPayment en commission.service.ts aplica apCommissionRatio sobre cada cashflow (principal+interest_current) sin límite de sumatoria total",
+      "El flow de originación usa AgentConfig.commissionSpread (pp TNA) y deriva netTna= grossTna - spread; retro-asignación ahora replica ese patrón",
+      "RetroAssignSection en page.tsx muestra comisión por cuota y cuotas restantes pero NO multiplica commissionPerInstallment * remainingTermMonths para mostrar comisión total"
+    ],
+    "dependencias": [
+      "decimal.js (cálculos financieros precisos)",
+      "@trpc/server + @trpc/client + @trpc/react-query (API)",
+      "@prisma/client (ORM, schema con Loan.apCommissionRatio)",
+      "zod (validación de inputs)",
+      "lib/financial-engine.ts (frenchInstallmentExact, tnaNominalToMonthlyRate)",
+      "lib/loan-calculator.ts (computeRetroApCommissionRatio, RetroApCommissionInput, RetroApCommissionResult)",
+      "superjson (serialización tRPC)"
+    ],
+    "riesgos": [
+      "El env local apunta a Supabase viejo — no sirve; DB real es Neon proyecto kredy branch production (CONTEXTO-SESION lo documenta)",
+      "La comisión total esperada no se persiste en schema (ni en Loan ni ApCommission) — solo apCommissionRatio, que es un ratio derivado; no hay campo para expectedCommission total",
+      "Si se muestra comisión total en UI como commissionPerInstallment * remainingTermMonths y luego hay prepago/cancelación anticipada, el número puede ser incorrecto (las cuotas restantes cambian)",
+      "No tocar el flujo de originación (simulate, simulateTerms, approvePreApproval) — guardrail explícito",
+      "Sin migración de schema permitida — Loan.apCommissionRatio no cambia de tipo"
+    ],
+    "evidencia": [
+      {
+        "path": "lib/loan-calculator.ts",
+        "simbolo": "computeRetroApCommissionRatio",
+        "lineas": "195-222",
+        "explicacion": "Función central que deriva apCommissionRatio desde puntos de TNA cedidos. Retorna commissionPerInstallment (por cuota) pero NO totalCommission. Si se necesita comisión total, debe calcularse fuera (commissionPerInstallment * remainingTermMonths) o agregarse al return type RetroApCommissionResult.",
+        "confianza": 1
+      },
+      {
+        "path": "lib/loan-calculator.ts",
+        "simbolo": "RetroApCommissionResult",
+        "lineas": "186-190",
+        "explicacion": "Interfaz de resultado: tnaNominal, netTna, netInstallment, commissionPerInstallment, apCommissionRatio. No incluye totalCommission. Para 'comisión total/por cuota' habría que agregar un campo totalCommission = commissionPerInstallment * remainingTermMonths.",
+        "confianza": 1
+      },
+      {
+        "path": "lib/loan-calculator.ts",
+        "simbolo": "RetroApCommissionInput",
+        "lineas": "179-190",
+        "explicacion": "Interfaz de input: loanTna, loanRateIsNominal, installmentAmount, principalOutstanding, remainingTermMonths, commissionSpreadPct. Ya incluye remainingTermMonths necesario para calcular total.",
+        "confianza": 1
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "adminAssignLoanToAp",
+        "lineas": "1946-2060",
+        "explicacion": "Mutation que asigna préstamo a AP. Usa computeRetroApCommissionRatio, persiste apCommissionRatio. El schema ApCommission se crea con expectedCommission: null — no se guarda la comisión total esperada.",
+        "confianza": 1
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "adminRetroAssignPreview",
+        "lineas": "2084-2123",
+        "explicacion": "Query de preview que retorna installmentAmount, remainingTermMonths, grossTnaPct, netTnaPct, netInstallment, commissionPerInstallment, apCommissionRatio. NO retorna un campo totalCommission. La UI actual podría calcularlo cliente-side.",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/ap/page.tsx",
+        "simbolo": "RetroAssignSection",
+        "lineas": "311-368",
+        "explicacion": "Componente React que muestra el formulario de retro-asignación. Ya migró a commissionSpreadPct (puntos TNA). El preview muestra comisión AP/cuota y cuotas restantes pero no multiplica ambos para mostrar comisión total.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "realizeCommissionsForPayment",
+        "lineas": "61-123",
+        "explicacion": "Aplica apCommissionRatio sobre cada cashflow de tipo principal e interest_current. Calcula commission = cashflowAmount * ratio. No hay concepto de 'comisión total esperada' ni tope — paga sobre cada cobro hasta que el préstamo termine.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "apCommissionRatio",
+        "lineas": "144-145",
+        "explicacion": "Campo Decimal? @db.Decimal(8,6) en modelo Loan. Es el único campo que persiste la comisión. No hay campo para expectedCommission total ni totalCommission en Loan o ApCommission.",
+        "confianza": 1
+      },
+      {
+        "path": "tests/loan-calculator.test.ts",
+        "simbolo": "computeRetroApCommissionRatio — casos reales de prod",
+        "lineas": "472-560",
+        "explicacion": "Tests existentes que verifican los cálculos con los casos reales de prod (Romero: ratio 0.029104; Notebook 2: ratio 0.054002). Cubren spread 0, TEA legado, spread>tna, y remainingTermMonths=0.",
+        "confianza": 1
+      },
+      {
+        "path": "lib/financial-engine.ts",
+        "simbolo": "frenchInstallmentExact",
+        "lineas": "68-82",
+        "explicacion": "Fórmula de cuota francesa exacta usando decimal.js. Usada por computeRetroApCommissionRatio para calcular netInstallment a partir de principalOutstanding, netMonthlyRate y remainingTermMonths.",
+        "confianza": 1
+      },
+      {
+        "path": "lib/financial-engine.ts",
+        "simbolo": "tnaNominalToMonthlyRate",
+        "lineas": "43-48",
+        "explicacion": "Función simple: tnaNominal / 12. Usada para convertir netTna a tasa mensual antes de frenchInstallmentExact.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo Kredy (Next.js 14 + tRPC + Prisma + Clerk) ya tiene implementado el fix de fondo para la retro-asignación de préstamos a AP: la función `computeRetroApCommissionRatio` en `lib/loan-calculator.ts` deriva correctamente `apCommissionRatio` a partir de puntos de TNA cedidos (no % de cashflow), el mutation `adminAssignLoanToAp` ya usa `commissionSpreadPct`, y la UI ya está migrada. Para completar la comisión total/por cuota, falta agregar un campo `totalCommission` (commissionPerInstallment * remainingTermMonths) al resultado de `computeRetroApCommissionRatio` y/o a la response de `adminRetroAssignPreview`, y mostrarlo en el preview de `RetroAssignSection` junto a la comisión por cuota. No se requiere migración de schema; solo cambios en `lib/loan-calculator.ts` (opcional), `server/routers/ap.ts` y `app/dashboard/ap/page.tsx`."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Kredy — completar comisión total/por cuota para préstamos con AP asignado retroactivamente",
+    "archivos": [
+      "server/routers/ap.ts",
+      "server/services/commission.service.ts",
+      "lib/loan-calculator.ts",
+      "lib/financial-engine.ts",
+      "app/dashboard/ap/page.tsx",
+      "prisma/schema.prisma",
+      "tests/cartera-tab-commission.test.ts",
+      "docs/migration-ap-commission-v2.sql",
+      "CONTEXTO-SESION-2026-07-13-ap-comision.md",
+      "spensiv-prompt-sonnet-ap-retro-comision-tna-points.md"
+    ],
+    "patrones": [
+      "QUALIFYING_COMPONENTS = ['principal', 'interest_current'] — sobre estos components se aplica apCommissionRatio en realizeCommissionsForPayment",
+      "computeRetroApCommissionRatio({ loanTna, loanRateIsNominal, installmentAmount, principalOutstanding, remainingTermMonths, commissionSpreadPct }) — función clave para derivar el ratio desde puntos de TNA",
+      "tnaNominalToMonthlyRate + frenchInstallmentExact — helpers de lib/financial-engine.ts que deben reusarse, no reimplementar",
+      "rateIsNominal ? tna : ((1+tna)**(1/12)-1)*12 — patrón de conversión TEA→nominal usado en loan-calculator.ts para legacy",
+      "commissionPerInstallment = Math.max(0, installmentAmount - netInstallment); apCommissionRatio = commissionPerInstallment / installmentAmount",
+      "metadata->>'retroAssigned' = 'true' — forma de identificar préstamos retro-asignados en opportunity_events",
+      "loanInstallments con isPaid: false para determinar remainingTermMonths"
+    ],
+    "dependencias": [
+      "@prisma/client",
+      "decimal.js",
+      "zod (input validation en tRPC procedure)",
+      "@trpc/server",
+      "lib/financial-engine.ts (tnaNominalToMonthlyRate, frenchInstallmentExact)",
+      "lib/loan-calculator.ts (computeRetroApCommissionRatio, simulateLoan)",
+      "prisma (schema: Loan.apCommissionRatio, Loan.principalOutstanding, Loan.rateIsNominal, ApCommission table)"
+    ],
+    "riesgos": [
+      "[NO VERIFICADO] La función computeRetroApCommissionRatio no aparece en los resultados de grep en ningún .ts del repo — podría no estar implementada aún, estar en un archivo no escaneado, o definirse dinámicamente. Es el core del fix y si no existe, hay que crearla desde cero siguiendo el prompt.",
+      "Coupling directo entre adminAssignLoanToAp y realizeCommissionsForPayment: cualquier cambio en cómo se calcula apCommissionRatio impacta sobre los asientos contables que genera realizeCommissionsForPayment (gross_due_realized + commission_accrued sobre QUALIFYING_COMPONENTS). Si el ratio se deriva mal, el AP cobra de más o de menos sobre cada cobro futuro.",
+      "El flujo de originación (simulate / approvePreApproval) usa AgentConfig.commissionSpread (pp de TNA) y no debe tocarse. El fix de retro-asignación debe replicar exactamente esa lógica pero con inputs distintos (loan.tna + input.commissionSpreadPct), no reusar AgentConfig.commissionSpread.",
+      "Tests existentes en tests/cartera-tab-commission.test.ts validan la UI de display de comisión (commissionExpected > 0 → muestra total + por cuota). Si cambia el cálculo de commissionExpected en el backend, los tests de display pueden romperse si los valores de prueba ya no coinciden con la nueva lógica.",
+      "La UI en app/dashboard/ap/page.tsx ya usa commissionSpreadPct como nombre de estado y lo manda al mutation, pero el label del campo y la preview (adminRetroAssignPreview) deben validarse visualmente para que muestren TNA neta = TNA bruta − pp, no % de cashflow.",
+      "La migración V2 (docs/migration-ap-commission-v2.sql) introdujo nuevos tipos de eventos (gross_due_realized, commission_accrued). Asegurarse de que el nuevo cálculo de ratio no produzca asientos inconsistentes con estos tipos.",
+      "Riesgo de préstamos afectados por el bug no identificados: el prompt indica correr un query SQL en Neon para detectar otros loans con apCommissionRatio seteado vía retro-asignación buggy. Si hay más, backfill manual.",
+      "La validación Zod de commissionSpreadPct tiene max(100) pero si la TNA bruta es < 100%, se podría pedir más de lo que la TNA permite. El prompt sugiere clamp a netTna >= 0 (Math.max), pero no hay validación previa que rechace el input si es demasiado alto.",
+      "El campo commissionPct legado en ApCommission.basis/basisAmount: el prompt dice dejar en null si no se usan, pero hay que verificar que ningún otro componente (dashboard, reportes) los consuma."
+    ],
+    "evidencia": [
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "adminAssignLoanToAp",
+        "lineas": "1969-2035",
+        "explicacion": "Procedure tRPC que implementa la retro-asignación. Ya actualizado con input commissionSpreadPct y llamada a computeRetroApCommissionRatio. Es el punto de entrada del fix: valida el loan, calcula el ratio, crea Contact+Opportunity+ApCommission en transacción.",
+        "confianza": 1
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "adminRetroAssignPreview",
+        "lineas": "2037-2077",
+        "explicacion": "Procedure de preview que calcula y devuelve TNA neta, netInstallment, commissionPerInstallment y apCommissionRatio sin persistir. Se usa desde la UI para mostrar al admin el resultado antes de confirmar. Reusa la misma lógica que adminAssignLoanToAp.",
+        "confianza": 1
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "computeRetroApCommissionRatio",
+        "lineas": "2005",
+        "explicacion": "[NO VERIFICADO] Función importada de '@/lib/loan-calculator' y usada tanto en adminAssignLoanToAp como en adminRetroAssignPreview. No se encontró su definición en los archivos escaneados con grep — posiblemente no implementada aún o en un archivo no indexado.",
+        "confianza": 0.5
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "QUALIFYING_COMPONENTS",
+        "lineas": "7",
+        "explicacion": "Define los componentes de cashflow sobre los que se aplica el ratio de comisión: ['principal', 'interest_current']. Cualquier cambio en cómo se calcula apCommissionRatio impacta directamente en los montos que genera realizeCommissionsForPayment.",
+        "confianza": 1
+      },
+      {
+        "path": "server/services/commission.service.ts",
+        "simbolo": "realizeCommissionsForPayment",
+        "lineas": "44-96",
+        "explicacion": "Crea asientos de gross_due_realized y commission_accrued por cada cashflow del préstamo. Usa loan.apCommissionRatio multiplicado por el monto absoluto del cashflow. Es el consumidor directo del ratio que se calcula en adminAssignLoanToAp.",
+        "confianza": 1
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Loan.apCommissionRatio",
+        "lineas": "~84-94",
+        "explicacion": "[NO VERIFICADO] Columna Decimal en el modelo Loan donde se persiste el ratio de comisión. No cambia de tipo ni formato con este fix — solo cambia cómo se calcula su valor (de input directo a derivado vía netTna).",
+        "confianza": 0
+      },
+      {
+        "path": "app/dashboard/ap/page.tsx",
+        "simbolo": "commissionSpreadPct",
+        "lineas": "~335-345",
+        "explicacion": "Estado del input UI para los puntos de TNA. Ya renombrado de commissionPct a commissionSpreadPct. Se envía tanto a adminAssignLoanToAp como a adminRetroAssignPreview. El label del campo y la preview deben validarse visualmente.",
+        "confianza": 1
+      },
+      {
+        "path": "tests/cartera-tab-commission.test.ts",
+        "simbolo": "cardCommission",
+        "lineas": "15-49",
+        "explicacion": "Función auxiliar de test que replica la lógica de display de comisiones en la UI. Verifica que commissionExpected > 0 muestre 'Comisión total' y 'Por cuota'. Si el cálculo backend de commissionExpected cambia, estos tests pueden necesitar actualización de valores esperados.",
+        "confianza": 1
+      },
+      {
+        "path": "docs/migration-ap-commission-v2.sql",
+        "simbolo": "gross_due_realized",
+        "lineas": "35",
+        "explicacion": "Nuevo valor del enum ApLedgerEventType introducido en la migración V2. Los asientos generados por realizeCommissionsForPayment usan este tipo. El fix no requiere migración nueva, pero debe asegurar consistencia con este esquema.",
+        "confianza": 1
+      },
+      {
+        "path": "spensiv-prompt-sonnet-ap-retro-comision-tna-points.md",
+        "simbolo": "commissionSpreadPct",
+        "lineas": "56",
+        "explicacion": "Prompt de implementación con la especificación completa del fix: renombrar input, calcular ratio vía netTna usando helpers existentes, y verificar con los casos reales de Romero y Notebook 2.",
+        "confianza": 1
+      },
+      {
+        "path": "CONTEXTO-SESION-2026-07-13-ap-comision.md",
+        "simbolo": "apCommissionRatio",
+        "lineas": "19-22",
+        "explicacion": "Documenta los valores corregidos manualmente en prod: Romero (0.20→0.029104) y Notebook 2 (0.20→0.054002). Sirven como casos de test para verificar que el nuevo cálculo produce los mismos valores.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El fix de retro-asignación ya está parcialmente implementado: adminAssignLoanToAp usa commissionSpreadPct (puntos de TNA) como input, llama a computeRetroApCommissionRatio y la UI ya refleja el cambio de nombre. El riesgo principal es que la función computeRetroApCommissionRatio no se encontró en el código escaneado — podría no estar implementada o residir en un archivo no indexado, lo que bloquearía el build. Además hay coupling fuerte con realizeCommissionsForPayment que consume el ratio, tests de display que podrían fallar si cambian valores, y la necesidad de correr el query de verificación en Neon para detectar otros préstamos afectados por el bug original antes de considerar cerrado el fix."
+  }
+]

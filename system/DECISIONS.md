@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0105 · 2026-07-28 · Tests del router como nuevo archivo, no extendiendo cartera-tab-commission
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se creó `tests/ap-my-portfolio.test.ts` como archivo independiente en lugar de agregar casos al archivo de tests existente `cartera-tab-commission.test.ts`.
+**Contexto:** El spec dice "extender los tests del router para apMyPortfolio" pero no indica si debe ser un archivo nuevo o ampliar uno existente. `cartera-tab-commission.test.ts` cubre la lógica de display en la UI (CarteraTab); los nuevos tests cubren el mapping del router, que es una capa distinta.
+**Alternativas descartadas:** Agregar los nuevos `describe` dentro de `cartera-tab-commission.test.ts`.
+**Consecuencias / riesgo residual:** El archivo nuevo es más fácil de localizar y no mezcla capas (router vs UI). Si en el futuro se quiere fusionar ambos archivos, es un rename trivial.
+
+> Generado por el loop · feature F-0038 · step 3
+
+---
+## ADR-0104 · 2026-07-28 · Aritmética nativa en lugar de decimal.js para el fallback de commissionExpected
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usa `Number(ratio) * installments.reduce(...)` con aritmética JS nativa en vez de importar `decimal.js`, dado que el spec dice "reusando decimal.js si el router ya lo importa" y el router no lo importa.
+**Contexto:** `decimal.js` no está en los imports de `server/routers/ap.ts`. El fallback es un estimado de display (no un asiento contable), por lo que la pérdida de precisión de IEEE-754 sobre la sumatoria de cuotas es aceptable.
+**Alternativas descartadas:** Importar `decimal.js` igual para mayor consistencia con `lib/loan-calculator.ts`; descartado porque sería un import nuevo sin precedente en este archivo y el spec lo condicionaba a que ya existiera.
+**Consecuencias / riesgo residual:** Si en el futuro se detecta drift de centavos en el estimado, se puede reemplazar el `reduce` por uno basado en `Decimal` sin cambiar la interfaz pública.
+
+> Generado por el loop · feature F-0038 · step 2
+
+---
 ## ADR-0103 · 2026-07-28 · Tests de render sin jsdom — helper espejo en lugar de render real
 
 **Estado:** aceptada

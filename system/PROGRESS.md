@@ -969,3 +969,24 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0037/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-07-28 — F-0038 completado
+
+## Feature F-0038
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `server/routers/ap.ts`, dentro de `apMyPortfolio` (~línea 2153-2167), extender el `select` de `ctx.prisma.loan.findMany` para incluir `apCommissionRatio: true` y asegurar que se traigan las cuotas del préstamo (`loanInstallments` con su `amount`) necesarias para la suma. Solo cambios en la query, sin alterar el mapeo aún. (5cfd2044)
+- [x] Step 2: En el mapeo final de `apMyPortfolio` (~línea 2171-2196), calcular el fallback de `commissionExpected`: cuando `comm.expectedCommission` sea null/undefined Y `loan.apCommissionRatio` sea > 0, computar `Number(loan.apCommissionRatio) × Σ(installments.amount)` sobre todas las cuotas (pagadas o no), reusando `decimal.js` si el router ya lo importa. Si `expectedCommission` existe, usarlo tal cual (prioritario). Si `apCommissionRatio` es null/0, dejar `commissionExpected` en 0 como hoy. No exponer el ratio, solo montos absolutos. (e9f83c65)
+- [x] Step 3: Extender los tests del router para `apMyPortfolio` cubriendo: (a) préstamo con `expectedCommission` guardado → se usa ese valor, no el fallback; (b) préstamo con `expectedCommission` null y `apCommissionRatio > 0` → se calcula el fallback correcto contra una suma de cuotas conocida; (c) préstamo con `apCommissionRatio` null/0 → `commissionExpected` queda en 0 sin NaN ni excepción. (ddfa555f)
+- [x] Step 4: Correr typecheck, lint y la suite de tests; corregir cualquier error residual introducido por los cambios anteriores. (ddfa555f)
+
+### Decisiones (ADR)
+- ADR-0104 — Aritmética nativa en lugar de decimal.js para el fallback de commissionExpected [Supuesto del agente] **⚠ REVISAR**
+- ADR-0105 — Tests del router como nuevo archivo, no extendiendo cartera-tab-commission [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0038/`
+
+> Revisar con Claude in Chrome para validación de UX.

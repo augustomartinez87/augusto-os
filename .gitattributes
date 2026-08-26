@@ -1,0 +1,15 @@
+# Normalizar todos los archivos de texto a LF en el repo.
+# En checkout, usa la configuración de core.eol (LF en CI/Linux, CRLF en Windows si se configura).
+* text=auto eol=lf
+
+# Binarios — sin conversión
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
