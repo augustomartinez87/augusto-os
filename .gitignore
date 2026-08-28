@@ -18,3 +18,7 @@ orchestrator/blocked.log
 orchestrator/orchestrator.log
 orchestrator/qa-artifacts/
 orchestrator/logs/
+
+# claude code — config local, no va al repo
+.claude/
+**/.claude/
