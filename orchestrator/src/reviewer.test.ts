@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { parseReviewOutput, runReviewer } from './reviewer.js'
+import { setActiveTarget } from './targets.js'
 import type { OrchestratorState, Step } from './state.js'
 
 // ── parseReviewOutput ─────────────────────────────────────────────────────────
@@ -77,6 +78,12 @@ let tmpDir: string
 let gitRoot: string
 
 describe('runReviewer', () => {
+  // runReviewer ahora lee el target activo (getTargetConfig().dbModel) para armar las
+  // restricciones absolutas — 'sistema' tiene dbModel:'none' y no requiere env de DB.
+  beforeAll(() => {
+    setActiveTarget('sistema')
+  })
+
   beforeEach(async () => {
     tmpDir = mkdtempSync(path.join(tmpdir(), 'reviewer-test-'))
     gitRoot = path.join(tmpDir, 'repo')

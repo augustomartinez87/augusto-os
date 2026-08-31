@@ -6,7 +6,7 @@ import { log } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
-import { loadSpecSections, RESTRICCIONES_ABSOLUTAS } from './executor.js'
+import { loadSpecSections, buildRestriccionesAbsolutas } from './executor.js'
 import { parseAdrBlocks, type AdrDraft } from './adr.js'
 import { MODEL_FIXER } from './models.js'
 import { parseClaudeJson, recordInvocation } from './metrics.js'
@@ -38,7 +38,7 @@ function buildFixerPrompt(
   failureHistory: string[],
 ): string {
   const targetName = getActiveTargetName()
-  const stack = getTargetConfig().stack
+  const { stack, dbModel } = getTargetConfig()
 
   const alcanceBlock = specSections.fueraDeAlcance
     ? `\nFUERA DE ALCANCE (no hacer):\n${specSections.fueraDeAlcance}\n`
@@ -54,7 +54,7 @@ ${alcanceBlock}${restriccionesBlock}
 HISTORIAL COMPLETO DE FALLOS (builder/verifier/QA/reviewer, en orden cronológico):
 ${summarizeFailureHistory(failureHistory)}
 
-${RESTRICCIONES_ABSOLUTAS}
+${buildRestriccionesAbsolutas(dbModel)}
 
 IMPORTANTE: los intentos anteriores ya fallaron repitiendo variantes del mismo enfoque. Antes de tocar código, diagnosticá la CAUSA RAÍZ del fallo repetido — si el enfoque anterior era conceptualmente incorrecto, cambialo; no repitas lo mismo esperando un resultado distinto.
 

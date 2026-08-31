@@ -990,3 +990,22 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0038/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-08-28 — F-0039 completado
+
+## Feature F-0039
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/portfolio/components/MobilePositionsList.jsx, bloque de featuredPositions (~línea 208-213): agregar el cálculo `const dailyPct = currency === 'ARS' ? pos.dailyResultPct : pos.dailyResultPctUSD;` siguiendo exactamente el patrón de la línea 50. No borrar `result` ni `resultPct` (siguen en uso en otros lugares del botón). (32c6a69d)
+- [x] Step 2: En el render de featuredPositions (~línea 241-247), cambiar el <span> pegado al MiniSpark para que use `dailyPct` como número Y como signo del color (TEAL/CORAL). Cuando `dailyPct == null` (null/undefined), mostrar '—' con la clase de texto atenuado ya usada en el archivo (ej. text-ink-faint), sin +0,0% ni colores nuevos. (655ae89c)
+- [x] Step 3: En el bloque de la lista agrupada `group.visibleItems` (~línea 336-341), agregar el mismo cálculo de `dailyPct` con idéntico patrón que en featuredPositions. (655ae89c)
+- [x] Step 4: En el render de group.visibleItems (~línea 371-377), aplicar exactamente el mismo cambio de <span> que en featuredPositions (dailyPct como número y signo del color; '—' + texto atenuado cuando es null/undefined). Verificar que ambos bloques queden visualmente idénticos entre sí. (655ae89c)
+- [x] Step 5: Revisar en ambos bloques si `result` o `resultPct` quedaron sin uso tras el cambio; eliminar cualquier variable muerta para dejar el lint limpio, sin tocar PositionDetailSheet ni el resto de vistas fuera de alcance. (adccc233)
+- [x] Step 6: Correr typecheck, lint y tests; corregir cualquier error que rompa el cambio. (adccc233)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0039/`
+
+> Revisar con Claude in Chrome para validación de UX.

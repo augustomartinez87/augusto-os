@@ -36,13 +36,17 @@ export const MAX_RETRIES = 3
 
 // Restricciones absolutas del builder — compartidas con el fixer de escalación (S-039):
 // nunca se relajan, ni siquiera cuando escala a un modelo más capaz.
-export const RESTRICCIONES_ABSOLUTAS = `RESTRICCIONES ABSOLUTAS:
+export function buildRestriccionesAbsolutas(dbModel: 'prisma' | 'none' | undefined): string {
+  const dbBlock = (dbModel ?? 'prisma') === 'none'
+    ? `- NUNCA apliques a mano SQL de supabase/migrations/ a la base en vivo.\n- Para conocer el schema, leé los archivos .sql de supabase/migrations/. NUNCA consultes la DB en vivo.`
+    : `- Columnas en camelCase sin @map en Prisma.\n- Para conocer modelos y campos del schema, leé prisma/schema.prisma del repo. NUNCA consultes la DB en vivo (DATABASE_URL apunta a producción directamente).`
+  return `RESTRICCIONES ABSOLUTAS:
 - NO corras "prisma migrate", "prisma db push", ni SQL destructivo.
 - NO deployés a Vercel.
 - NO toques main branch ni archivos de mutuo/pagaré.
 - La TNA/tasa NUNCA debe mostrarse en vistas de prestatario.
-- Columnas en camelCase sin @map en Prisma.
-- Para conocer modelos y campos del schema, leé prisma/schema.prisma del repo. NUNCA consultes la DB en vivo (DATABASE_URL apunta a producción directamente).`
+${dbBlock}`
+}
 
 export interface ExecutorResult {
   ok: boolean
@@ -61,7 +65,7 @@ function buildPrompt(
   research?: string,
 ): string {
   const targetName = getActiveTargetName()
-  const stack = getTargetConfig().stack
+  const { stack, dbModel } = getTargetConfig()
 
   const alcanceBlock = specSections.fueraDeAlcance
     ? `\nFUERA DE ALCANCE (no hacer):\n${specSections.fueraDeAlcance}\n`
@@ -77,7 +81,7 @@ function buildPrompt(
 
 TAREA: ${step.desc}
 ${alcanceBlock}${restriccionesBlock}${researchBlock}
-${RESTRICCIONES_ABSOLUTAS}
+${buildRestriccionesAbsolutas(dbModel)}
 
 Implementá el cambio mínimo necesario. Al terminar verificá que typecheque con npx tsc --noEmit.
 

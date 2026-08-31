@@ -1,0 +1,88 @@
+{
+  "featureId": "F-0042",
+  "branch": "feat/F-0042-sistema-las-restricciones-del-builder-ha",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "En orchestrator/src/executor.ts, reemplazar la constante RESTRICCIONES_ABSOLUTAS por una función pura exportada `buildRestriccionesAbsolutas(dbModel: 'prisma' | 'none' | undefined): string`. Las cuatro líneas comunes (no correr SQL destructivo, no deployar a Vercel, no tocar main/mutuo/pagaré, TNA nunca visible al prestatario) van fijas y en el mismo orden actual; el bloque de DB se elige según el modelo: caso 'prisma' (y undefined vía default 'prisma') byte a byte idéntico al texto de hoy (camelCase sin @map, leer prisma/schema.prisma, no consultar DB en vivo), caso 'none' con el equivalente Supabase (nunca aplicar SQL de supabase/migrations/ a mano, leer esos .sql para conocer el schema en vez de consultar la base en vivo).",
+      "ui": false,
+      "status": "blocked",
+      "commit": null,
+      "sessionId": "157b2b30-0c07-448c-bcc8-fcf26d0450e9",
+      "retries": 1,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": [
+        "verifier: \n> orchestrator@0.1.0 test\n> vitest run --reporter=verbose\n\n\n\u001b[7m\u001b[1m\u001b[36m RUN \u001b[39m\u001b[22m\u001b[27m \u001b[36mv1.6.0\u001b[39m \u001b[90mC:/Users/Augusto/Downloads/Proyectos/augusto-os/orchestrator\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/metrics.test.ts\u001b[2m > \u001b[22m\u001b[2mparseClaudeJson\u001b[2m > \u001b[22m\u001b[2mfalls back to raw string when JSON is invalid\u001b[22m\u001b[39m\n[metrics] No se pudo parsear el output JSON de Claude, métricas de uso omitidas\n\n\u001b[90mstderr\u001b[2m | src/metrics.test.ts\u001b[2m > \u001b[22m\u001b[2mparseClaudeJson\u001b[2m > \u001b[22m\u001b[2mhandles empty string gracefully\u001b[22m\u001b[39m\n[metrics] No se pudo parsear el output JSON de Claude, métricas de uso omitidas\n\n \u001b[32m✓\u001b[39m src/metrics.test.ts\u001b[2m > \u001b[22mparseClaudeJson\u001b[2m > \u001b[22mextracts result text from valid JSON\n \u001b[32m✓\u001b[39m src/metrics.test.ts\u001b[2m > \u001b[22mparseClaudeJson\u001b[2m > \u001b[22…",
+        "verifier (post-fix): \n> orchestrator@0.1.0 test\n> vitest run --reporter=verbose\n\n\n\u001b[7m\u001b[1m\u001b[36m RUN \u001b[39m\u001b[22m\u001b[27m \u001b[36mv1.6.0\u001b[39m \u001b[90mC:/Users/Augusto/Downloads/Proyectos/augusto-os/orchestrator\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/metrics.test.ts\u001b[2m > \u001b[22m\u001b[2mparseClaudeJson\u001b[2m > \u001b[22m\u001b[2mfalls back to raw string when JSON is invalid\u001b[22m\u001b[39m\n[metrics] No se pudo parsear el output JSON de Claude, métricas de uso omitidas\n\n\u001b[90mstderr\u001b[2m | src/metrics.test.ts\u001b[2m > \u001b[22m\u001b[2mparseClaudeJson\u001b[2m > \u001b[22m\u001b[2mhandles empty string gracefully\u001b[22m\u001b[39m\n[metrics] No se pudo parsear el output JSON de Claude, métricas de uso omitidas\n\n \u001b[32m✓\u001b[39m src/metrics.test.ts\u001b[2m > \u001b[22mparseClaudeJson\u001b[2m > \u001b[22mextracts result text from valid JSON\n \u001b[32m✓\u001b[39m src/metrics.test.ts\u001b[2m > \u001b[22mparseClaudeJson…"
+      ],
+      "error": "Step 1: verifier falla tras corrección\n\n[fixer también falló] Fixer (Opus) agotó 2 intento(s) sin pasar verifier.\nÚltimo detalle:\nens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"subtype\":\"success\",\"api_error_status\":429,\"result\":\"You've hit your session limit · resets 4:40pm (America/Argentina/Buenos_Aires)\",\"type\":\"result\",\"duration_ms\":615,\"uuid\":\"f8505782-79f2-49d5-bcd2-449046ba1a78\",\"queued_turn_count\":0}"
+    },
+    {
+      "id": 2,
+      "desc": "Migrar el call site del builder en buildPrompt (executor.ts): reemplazar la interpolación de RESTRICCIONES_ABSOLUTAS por una llamada a buildRestriccionesAbsolutas(getTargetConfig().dbModel), reusando el getTargetConfig() que la función ya invoca, sin threadear parámetros nuevos.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 3,
+      "desc": "Migrar el fixer de escalación en orchestrator/src/escalation.ts: reemplazar el import y la interpolación de RESTRICCIONES_ABSOLUTAS en buildFixerPrompt por buildRestriccionesAbsolutas resolviendo el dbModel del target activo con getTargetConfig(), de modo que la escalación reciba exactamente las mismas restricciones que el builder para el mismo target.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 4,
+      "desc": "Migrar el bloque inline 'RESTRICCIONES ABSOLUTAS DEL DOMINIO' de orchestrator/src/reviewer.ts (~líneas 62-64) para que reuse buildRestriccionesAbsolutas con el dbModel del target activo (getTargetConfig()), eliminando el texto duplicado y sus menciones a Prisma hardcodeadas.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 5,
+      "desc": "Crear tests unitarios vitest para buildRestriccionesAbsolutas: caso 'prisma' comparado contra el string esperado fijado como fixture (idéntico al actual), caso 'none' verificando que no aparecen menciones a Prisma y sí las de Supabase, caso undefined igual al de 'prisma', y una aserción de que las cuatro líneas comunes están presentes en los tres casos.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 6,
+      "desc": "Correr typecheck, lint y la suite completa de vitest de orchestrator/ (incluyendo escalation.test.ts y reviewer.test.ts que capturan el prompt), y corregir cualquier fixture o aserción que rompa por el cambio de constante a función.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-08-28T16:45:48.417Z",
+  "updatedAt": "2026-08-28T16:50:31.351Z",
+  "merged": false,
+  "pushed": false
+}
