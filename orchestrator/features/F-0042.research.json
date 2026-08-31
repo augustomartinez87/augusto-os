@@ -1,0 +1,226 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Sistema — las restricciones del builder hablan de Prisma incluso en targets que no lo usan (foco: mapa)",
+    "archivos": [
+      "targets/targets.json",
+      "orchestrator/src/targets.ts",
+      "orchestrator/src/executor.ts",
+      "orchestrator/src/reviewer.ts",
+      "orchestrator/src/escalation.ts",
+      "orchestrator/src/db-guard.ts",
+      "orchestrator/features/F-0042.md",
+      "orchestrator/package.json",
+      "system/BACKLOG.md"
+    ],
+    "patrones": [
+      "Constante compartida de prompt exportada desde executor.ts e importada por otros módulos (RESTRICCIONES_ABSOLUTAS), usada tanto por el builder como por el fixer de escalación",
+      "Funciones puras exportadas con firma tipada explícita, estilo de buildPrompt/buildFixerPrompt que componen bloques de texto (alcance, restricciones clave, research) e interpolan variables",
+      "getTargetConfig() como única vía para obtener config del target activo (stack, dbModel, devDatabaseUrl), llamado dentro de los builders de prompt sin threadear parámetros nuevos",
+      "Fixtures/string esperados fijados en tests unitarios de vitest comparando texto generado; módulos en orchestrator/src con imports relativos .js (type: module, tsx)",
+      "Comentarios en código (y targets.json) en español, con convención de notas _devSetupNote/_dbNote en mayúsculas para invariantes (S-000, S-039)"
+    ],
+    "dependencias": [
+      "execa@^9.3.0",
+      "lowdb@^7.0.1",
+      "yaml@^2.4.5",
+      "zod@^3.23.8",
+      "typescript@^5.4.5",
+      "tsx@^4.15.0",
+      "vitest@^1.6.0",
+      "@playwright/test@^1.44.0"
+    ],
+    "riesgos": [
+      "El caso dbModel:'prisma' debe quedar byte a byte idéntico al texto actual (aceptance criteria de F-0042): cualquier reordenamiento o cambio de línea rompe el invariante de no-relajación de restricciones",
+      "RESTRICCIONES_ABSOLUTAS tiene al menos 2 import sites (executor.ts y escalation.ts) y reviewer.ts duplica el bloque a mano; migrar TODOS o quedará texto Prisma inconsistente entre builder/fixer/reviewer",
+      "dbModel es opcional en el tipo (dbModel?: 'prisma' | 'none'); undefined debe tratarse como 'prisma' (default histórico) — riesgo de romper targets sin dbModel declarado",
+      "El fixer de escalación (S-039) debe recibir exactamente las mismas restricciones que el builder para el mismo target; la función compartida debe preservar esa propiedad",
+      "Fuera de alcance explícito: db-guard.ts, gates.ts y qa.ts también mencionan Prisma pero son guardas de ejecución real, no texto de prompt — no tocarlos en esta feature",
+      "Este feature toca el propio orquestador: una regresión afecta a TODAS las features futuras del sistema"
+    ],
+    "evidencia": [
+      {
+        "path": "targets/targets.json",
+        "simbolo": "dbModel",
+        "lineas": "5-40",
+        "explicacion": "Cada target declara dbModel: 'prisma' (kredy, spensiv, tres-saltenas) o 'none' (argos, sistema). En argos la nota _dbNote explica que dbModel=none → el loop no exige dev DB ni inyecta DATABASE_URL y su schema vive en supabase/migrations/*.sql; es el caso que hoy recibe ruido Prisma en el prompt.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "dbModel?: 'prisma' | 'none'",
+        "lineas": "16",
+        "explicacion": "Declaración del tipo Target: dbModel es opcional — de ahí que el default cuando falta deba ser 'prisma' (default histórico, mencionado en F-0042).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/executor.ts",
+        "simbolo": "RESTRICCIONES_ABSOLUTAS",
+        "lineas": "39-45",
+        "explicacion": "Constante fija con 6 líneas, 3 de ellas hablan de Prisma ('prisma migrate'/'db push', camelCase sin @map, leer prisma/schema.prisma). Es el objetivo central del feature: reemplazarla por buildRestriccionesAbsolutas(dbModel).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/executor.ts",
+        "simbolo": "buildPrompt",
+        "lineas": "54-101",
+        "explicacion": "Builder de prompt que ya llama a getTargetConfig() (línea ~64) para sacar el stack, así que dbModel está a mano sin threading nuevo; interpola ${RESTRICCIONES_ABSOLUTAS} en la línea 80.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/escalation.ts",
+        "simbolo": "RESTRICCIONES_ABSOLUTAS",
+        "lineas": "9, 57",
+        "explicacion": "Import site del fixer de escalación (S-039): importa la constante desde ./executor.js y la interpola en buildFixerPrompt — debe migrarse a la misma función para que escalación y builder reciban restricciones idénticas.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.ts",
+        "simbolo": "RESTRICCIONES ABSOLUTAS DEL DOMINIO",
+        "lineas": "62-64",
+        "explicacion": "Bloque hardcodeado del reviewer que repite las menciones Prisma ('Columnas en camelCase sin @map en Prisma', 'No correr prisma migrate/db push') — F-0042 pide reusar la misma función y no duplicar texto.",
+        "confianza": 0.9
+      },
+      {
+        "path": "orchestrator/features/F-0042.md",
+        "simbolo": "buildRestriccionesAbsolutas",
+        "lineas": "49-53",
+        "explicacion": "Spec de la feature: reemplazar la constante por función pura buildRestriccionesAbsolutas(dbModel: 'prisma' | 'none' | undefined): string, con 4 líneas comunes fijas (Vercel, main, mutuo/pagaré, TNA) y bloque DB según modelo; mantener orden exacto para diff vacío en caso prisma.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/db-guard.ts",
+        "simbolo": "TargetWithDb",
+        "lineas": "10-14",
+        "explicacion": "Guarda de ejecución real (inyecta DATABASE_URL/DIRECT_URL según dbModel y patrones prod) — menciona Prisma pero está fuera de alcance de F-0042, que solo toca texto de prompt.",
+        "confianza": 0.9
+      },
+      {
+        "path": "orchestrator/package.json",
+        "simbolo": "test",
+        "lineas": "9-21",
+        "explicacion": "Stack del orquestador: node+tsx+vitest, scripts via tsx --env-file=.env; la suite es vitest run --reporter=verbose — los tests nuevos de buildRestriccionesAbsolutas deben correr con este setup.",
+        "confianza": 1
+      },
+      {
+        "path": "system/BACKLOG.md",
+        "simbolo": "S-039",
+        "lineas": "41",
+        "explicacion": "Registro del fixer de escalación automática (Opus-fixer) que comparte la constante con el builder; confirma que las restricciones no se relajan nunca, motivo original de compartir la constante.",
+        "confianza": 0.9
+      }
+    ],
+    "resumen": "El repo es un monorepo 'augusto-os' cuyo corazón es orchestrator/ (node+tsx+vitest): un pipeline que ejecuta features contra 5 targets externos declarados en targets/targets.json, donde cada target declara dbModel 'prisma' o 'none'. El bug del feature F-0042 es que la constante RESTRICCIONES_ABSOLUTAS (executor.ts:39-45) y el bloque del reviewer.ts están hardcodeados con menciones a Prisma (migrate/db push, @map, schema.prisma) que no aplican a argos/sistema (dbModel 'none', schema en supabase/migrations/*.sql). La solución planeada: función pura buildRestriccionesAbsolutas(dbModel) compartida entre builder (executor.ts), reviewer.ts y fixer (escalation.ts), con el caso 'prisma' byte-idéntico al texto actual y default 'prisma' cuando dbModel es undefined. [NO VERIFICADO: no encontré tests existentes de executor.ts que fijen el string actual como fixture — el grep de *.test.ts con RESTRICCIONES no devolvió archivos; el número exacto de línea del bloque del reviewer (~62-64) está tomado del spec F-0042 y de la lectura del archivo, no de una medición fina.]"
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: Sistema — las restricciones del builder hablan de Prisma incluso en targets que no lo usan (F-0042)",
+    "archivos": [
+      "orchestrator/features/F-0042.md",
+      "orchestrator/src/executor.ts",
+      "orchestrator/src/reviewer.ts",
+      "orchestrator/src/escalation.ts",
+      "orchestrator/src/targets.ts",
+      "targets/targets.json",
+      "orchestrator/src/db-guard.ts",
+      "orchestrator/src/escalation.test.ts",
+      "orchestrator/src/reviewer.test.ts",
+      "orchestrator/src/targets.test.ts"
+    ],
+    "patrones": [
+      "getTargetConfig() para resolver el target activo sin threadear parámetros nuevos (executor.ts buildPrompt ya lo usa para el stack)",
+      "dbModel ?? 'prisma' como default histórico (mismo patrón ya usado en db-guard.ts línea ~62)",
+      "Función pura que genera el texto de restricciones y es compartida entre builder y fixer, en vez de duplicar el string",
+      "Tests con setActiveTarget() antes de correr (patrón ya usado en escalation.test.ts con 'sistema' por tener dbModel:none)",
+      "loadSpecSections()/extractSection() para parsear spec MD y armar bloques de restricciones clave"
+    ],
+    "dependencias": [
+      "execa",
+      "vitest",
+      "fs (readFileSync/existsSync)",
+      "models.js (MODEL_BUILDER, MODEL_FIXER, MODEL_REVIEWER)",
+      "db-guard.ts (getDbEnvOverride)"
+    ],
+    "riesgos": [
+      "El caso 'prisma' debe quedar byte a byte idéntico al texto actual (F-0042 acceptance) — el orden de las 4 líneas comunes no puede alterarse",
+      "reviewer.ts tiene su propio bloque inline 'RESTRICCIONES ABSOLUTAS DEL DOMINIO' (líneas 60-64) que NO usa la constante exportada de executor.ts; hay que migrarlo a la misma función para no duplicar texto",
+      "RESTRICCIONES_ABSOLUTAS es compartida con el fixer de escalación (S-039): el cambio a función debe preservar 'mismo target, mismas restricciones' en ambos caminos; si algún call site no tiene el target a mano, resolver con getTargetConfig() ahí mismo",
+      "Fuera de alcance explícito: NO tocar db-guard.ts, gates.ts ni qa.ts (mencionan Prisma pero son guardas de ejecución, no texto de prompt)",
+      "El caso dbModel undefined debe tratarse como 'prisma' (tipo opcional en targets.ts:16)",
+      "getTargetConfig() hace expandEnvVars de devDatabaseUrl/devDirectUrl — en targets sin dbModel:none exige env vars definidas; los tests deben usar un target con dbModel:'none' (como 'sistema') para evitar eso",
+      "Los tests que capturen el prompt (escalation.test.ts con capturedPrompt) deberán ajustarse si la constante cambia de forma",
+      "El spec F-0042 vive en orchestrator/features/ y describe AR-003; el target 'sistema' tiene scoutRoot = raíz del monorepo (path=orchestrator/) — verificar cwd al correr tests"
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/src/executor.ts",
+        "simbolo": "RESTRICCIONES_ABSOLUTAS",
+        "lineas": "38-45",
+        "explicacion": "Constante fija exportada con las 6 líneas de restricciones; 3 de ellas hablan de Prisma ('prisma migrate'/'db push', camelCase sin @map, leer prisma/schema.prisma). Es el objeto central a reemplazar por una función buildRestriccionesAbsolutas(dbModel).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/executor.ts",
+        "simbolo": "buildPrompt",
+        "lineas": "56-101",
+        "explicacion": "Arma el prompt del builder; ya llama a getActiveTargetName() y getTargetConfig().stack, así que el dbModel está a mano sin threadear nada nuevo (línea 64). Inserta RESTRICCIONES_ABSOLUTAS en el prompt; es el call site principal a migrar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.ts",
+        "simbolo": "RESTRICCIONES ABSOLUTAS DEL DOMINIO",
+        "lineas": "60-64",
+        "explicacion": "Bloque inline separado (NO usa la constante de executor.ts) que repite las restricciones con menciones a Prisma ('Columnas en camelCase sin @map en Prisma', 'No correr prisma migrate/db push'). Debe reusar la misma función nueva.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/escalation.ts",
+        "simbolo": "RESTRICCIONES_ABSOLUTAS",
+        "lineas": "10, 77-78",
+        "explicacion": "Importa RESTRICCIONES_ABSOLUTAS desde executor.js y lo inyecta en buildFixerPrompt (fixer de escalación S-039). Es el segundo import site que F-0042 exige migrar a la función pasándole el dbModel del target activo.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "dbModel?: 'prisma' | 'none'",
+        "lineas": "16",
+        "explicacion": "Tipo del campo dbModel en la interfaz Target: opcional, por lo que undefined debe tratarse como 'prisma' (default histórico). Es el tipo que la nueva función debe aceptar.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/targets.ts",
+        "simbolo": "getTargetConfig",
+        "lineas": "93-106",
+        "explicacion": "Resuelve la config del target activo (incluye dbModel, stack, path) con expandEnvVars de URLs. El patrón que F-0042 pide usar en call sites sin target a mano.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/db-guard.ts",
+        "simbolo": "const dbModel = target.dbModel ?? 'prisma'",
+        "lineas": "62-67",
+        "explicacion": "Patrón ya establecido de default dbModel->'prisma' y rama dbModel==='none' que saltea exigencias de DB. Referencia de cómo el sistema distingue modelos hoy (aunque db-guard queda fuera de alcance del feature).",
+        "confianza": 1
+      },
+      {
+        "path": "targets/targets.json",
+        "simbolo": "dbModel",
+        "lineas": "44, 76-77",
+        "explicacion": "argos y sistema tienen dbModel:'none' (sin Prisma, schema en supabase/migrations/*.sql); kredy/spensiv/tres-saltenas son next+trpc+prisma. Fuente de datos que alimenta getTargetConfig().dbModel.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/escalation.test.ts",
+        "simbolo": "setActiveTarget('sistema')",
+        "lineas": "9-12",
+        "explicacion": "Patrón de test: usa 'sistema' (dbModel:'none') para no requerir env vars de DB al correr buildFixerPrompt. Plantilla para los tests nuevos de la función buildRestriccionesAbsolutas.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/features/F-0042.md",
+        "simbolo": "buildRestriccionesAbsolutas",
+        "lineas": "30-34",
+        "explicacion": "El spec del feature prescribe la firma: buildRestriccionesAbsolutas(dbModel: 'prisma' | 'none' | undefined): string, 4 líneas comunes fijas + bloque DB según modelo, y migrar TODOS los import sites.",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El feature F-0042 consiste en reemplazar la constante fija `RESTRICCIONES_ABSOLUTAS` de executor.ts (líneas 38-45), que hoy menciona Prisma incluso para targets dbModel:'none', por una función pura `buildRestriccionesAbsolutas(dbModel)` que arme el bloque según el modelo. Hay dos lugares de texto a unificar: el prompt del builder (buildPrompt en executor.ts, que ya tiene getTargetConfig() a mano) y el bloque inline propio del reviewer (reviewer.ts líneas 60-64), además del import en el fixer de escalación (escalation.ts). El tipo `dbModel?: 'prisma' | 'none'` ya existe en targets.ts y el default 'prisma' ya está establecido en db-guard.ts, y los tests existentes (escalation.test.ts) muestran el patrón de usar un target dbModel:'none' para evitar exigencias de env. El riesgo principal es mantener el caso 'prisma' byte a byte idéntico y no tocar db-guard/gates/qa, que quedan fuera de alcance."
+  }
+]

@@ -1,8 +1,8 @@
 import { execa } from 'execa'
 import { log } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
-import { getRepoRoot } from './targets.js'
-import { loadSpecSections } from './executor.js'
+import { getRepoRoot, getTargetConfig } from './targets.js'
+import { loadSpecSections, buildRestriccionesAbsolutas } from './executor.js'
 import { MODEL_REVIEWER, MAX_TURNS } from './models.js'
 import { parseClaudeJson, recordInvocation } from './metrics.js'
 
@@ -57,11 +57,7 @@ export async function runReviewer(
 STEP A REVISAR (${state.featureId} / step ${step.id}):
 ${step.desc}
 ${fueraDeAlcanceBlock}${restriccionesBlock}
-RESTRICCIONES ABSOLUTAS DEL DOMINIO (nunca deben violarse):
-- La TNA/tasa NUNCA debe mostrarse en vistas de prestatario
-- Columnas en camelCase sin @map en Prisma
-- No tocar archivos de mutuo/pagaré
-- No correr prisma migrate/db push
+${buildRestriccionesAbsolutas(getTargetConfig().dbModel)}
 
 DIFF:
 \`\`\`diff
