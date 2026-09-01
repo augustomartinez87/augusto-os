@@ -1009,3 +1009,22 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0039/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-08-31 — F-0042 completado
+
+## Feature F-0042
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En orchestrator/src/executor.ts, reemplazar la constante RESTRICCIONES_ABSOLUTAS por una función pura exportada `buildRestriccionesAbsolutas(dbModel: 'prisma' | 'none' | undefined): string`. Las cuatro líneas comunes (no correr SQL destructivo, no deployar a Vercel, no tocar main/mutuo/pagaré, TNA nunca visible al prestatario) van fijas y en el mismo orden actual; el bloque de DB se elige según el modelo: caso 'prisma' (y undefined vía default 'prisma') byte a byte idéntico al texto de hoy (camelCase sin @map, leer prisma/schema.prisma, no consultar DB en vivo), caso 'none' con el equivalente Supabase (nunca aplicar SQL de supabase/migrations/ a mano, leer esos .sql para conocer el schema en vez de consultar la base en vivo). (f8f4b9c5)
+- [x] Step 2: Migrar el call site del builder en buildPrompt (executor.ts): reemplazar la interpolación de RESTRICCIONES_ABSOLUTAS por una llamada a buildRestriccionesAbsolutas(getTargetConfig().dbModel), reusando el getTargetConfig() que la función ya invoca, sin threadear parámetros nuevos. (f8f4b9c5)
+- [x] Step 3: Migrar el fixer de escalación en orchestrator/src/escalation.ts: reemplazar el import y la interpolación de RESTRICCIONES_ABSOLUTAS en buildFixerPrompt por buildRestriccionesAbsolutas resolviendo el dbModel del target activo con getTargetConfig(), de modo que la escalación reciba exactamente las mismas restricciones que el builder para el mismo target. (f8f4b9c5)
+- [x] Step 4: Migrar el bloque inline 'RESTRICCIONES ABSOLUTAS DEL DOMINIO' de orchestrator/src/reviewer.ts (~líneas 62-64) para que reuse buildRestriccionesAbsolutas con el dbModel del target activo (getTargetConfig()), eliminando el texto duplicado y sus menciones a Prisma hardcodeadas. (bc9143da)
+- [x] Step 5: Crear tests unitarios vitest para buildRestriccionesAbsolutas: caso 'prisma' comparado contra el string esperado fijado como fixture (idéntico al actual), caso 'none' verificando que no aparecen menciones a Prisma y sí las de Supabase, caso undefined igual al de 'prisma', y una aserción de que las cuatro líneas comunes están presentes en los tres casos. (bc9143da)
+- [x] Step 6: Correr typecheck, lint y la suite completa de vitest de orchestrator/ (incluyendo escalation.test.ts y reviewer.test.ts que capturan el prompt), y corregir cualquier fixture o aserción que rompa por el cambio de constante a función. (bc9143da)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0042/`
+
+> Revisar con Claude in Chrome para validación de UX.
