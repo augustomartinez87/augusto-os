@@ -1028,3 +1028,123 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0042/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-03 — F-0041 completado
+
+## Feature F-0041
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En app/dashboard/simulator/page.tsx importar useToast (o toast) desde @/hooks/use-toast y useRouter desde next/navigation, revisando primero para no duplicar imports existentes. Instanciar el hook de toast y const router = useRouter() en el componente. Sin cambios de comportamiento todavía, solo dejar las utilidades disponibles. (179e4bc4)
+- [x] Step 2: Modificar createLoanMutation.onSuccess: capturar el nombre del prestatario ANTES de limpiarlo (usando el argumento variables del callback o una const previa a setBorrowerName('')), disparar un toast de creación que mencione qué se creó y para quién (sin TNA ni tasa), cerrar el modal, limpiar el nombre y navegar a /dashboard/loans con router.push. Mantener el disabled del submit que incluye isSuccess. (8278175d)
+- [x] Step 3: Modificar preApproveMutation.onSuccess: mismo patrón que creación pero con un texto de toast explícito y distinto que indique que el préstamo quedó PREAPROBADO (incluyendo el nombre del prestatario, sin tasa), cerrar el modal, limpiar el nombre, mantener setIsPreApprove(false) y navegar a /dashboard/loans con router.push. (41cf5117)
+- [x] Step 4: Eliminar el bloque de mensaje de éxito inline (createLoanMutation.isSuccess || preApproveMutation.isSuccess) que quedó inalcanzable dentro del form, dejando intacto el bloque de error inline que sí se ve cuando la mutation falla. Verificar que en caso de error no haya redirect ni toast de éxito y que el modal quede abierto con los datos. (0b7aaa03)
+- [x] Step 5: Agregar/extender los tests del simulador siguiendo el patrón del proyecto para mockear next/navigation y el hook de toast: (a) éxito de creación dispara toast y navegación a /dashboard/loans; (b) éxito de preaprobación dispara el toast con texto distinto de preaprobado y navega; (c) error no navega ni muestra toast de éxito y el modal permanece abierto. Correr typecheck, lint y tests y corregir lo que rompa. (69f844c8)
+
+### Decisiones (ADR)
+- ADR-0106 — Orden de operaciones en onSuccess: cerrar → limpiar → toast → push [Supuesto del agente] **⚠ REVISAR**
+- ADR-0107 — Texto del toast de preaprobación menciona instrucción de confirmación futura [Supuesto del agente] **⚠ REVISAR**
+- ADR-0108 — Testear el contrato de error sobre las opciones de mutation, no renderizando el componente [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0041/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-03 — F-0040 completado
+
+## Feature F-0040
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En app/ap/page.tsx agregar estado local para el modo de plazo custom: un booleano `useCustomTerm` y el valor crudo del input `customTermMonths` (string, para distinguir vacío de 0), siguiendo exactamente el patrón/nomenclatura ya usado para la tasa custom (`useCustomRate` / `customGrossTna` ~línea 426). Sin cambios de render todavía. (e61bd505)
+- [x] Step 2: En app/ap/page.tsx derivar el plazo efectivo: cuando `useCustomTerm` está activo, parsear `customTermMonths` y validar entero entre 1 y 360; si es válido usarlo como `selectedTermMonths`, si es inválido o vacío no actualizar el plazo efectivo. Asegurar que `grossTnaForTerm(selectedTermMonths)` y `simulateMut.mutateAsync({ termMonths: selectedTermMonths, ... })` sigan recibiendo el plazo efectivo por el camino normal, sin ninguna rama especial para el custom. (bda4f45c)
+- [x] Step 3: En app/ap/page.tsx agregar el botón "Otro" al final de la grilla de plazos (después del map de config.terms), respetando las clases visuales existentes (bg-blue-600/20, border-blue-500/50 para activo; bg-white/3, border-white/8 para inactivo). El botón se ve seleccionado cuando `useCustomTerm` está activo. Al tocarlo activa el modo custom y revela debajo de la grilla un input numérico con el mismo sistema visual de la pantalla. (bda4f45c)
+- [x] Step 4: En app/ap/page.tsx cablear las transiciones de estado: tocar cualquier preset sale del modo custom y limpia `customTermMonths`; tocar "Otro" entra al modo custom. Deshabilitar el botón de simular mientras el plazo custom sea inválido/vacío y mostrar un mensaje corto del motivo, con el mismo tono y estilo de los mensajes de error ya presentes; garantizar que no se dispare ninguna mutation con un valor fuera de rango. (e933be23)
+- [x] Step 5: Agregar tests de la lógica de validación del plazo custom (entero, rango 1-360, string vacío, valores fuera de rango que deshabilitan simular) siguiendo el estilo de los tests existentes del router/UI de AP, y correr typecheck, lint y tests corrigiendo lo que rompa. (ac29ce6f)
+
+### Decisiones (ADR)
+- ADR-0109 — Incluir UI del input de plazo custom en step 2 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0110 — Visibilidad derivada del resultado en modo plazo custom en lugar de nulear simulation [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0040/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-04 — F-0044 completado
+
+## Feature F-0044
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En components/loans/loans-table-view.tsx, dentro del map de la tabla principal (donde ya se calculan status, isOverdue, etc.), derivar `const canDelete = loan.status !== 'defaulted' && loan.status !== 'completed' && loan.paidCount === 0`. Sin cambios visuales todavía, solo la variable derivada por fila. (aa2b4048)
+- [x] Step 2: En components/loans/loans-table-view.tsx, agregar un estado local de confirmación de borrado por fila (patrón `showDeleteConfirm` con useState, copiado de pre-approved-loan-card.tsx) que permita alternar entre el ícono Trash2 y el par de botones confirmar/cancelar, sin cablear todavía la mutation. (38e8f315)
+- [x] Step 3: En la celda 'Acciones' de components/loans/loans-table-view.tsx, cuando `canDelete` sea true, renderizar la acción de borrar (ícono Trash2 → confirmar/cancelar inline) junto al botón 'Registrar cobro' existente, usando el mismo estilo/tokens que pre-approved-loan-card.tsx y aplicando e.stopPropagation() en los clicks para no disparar el onSelect del TableRow. (a9984817)
+- [x] Step 4: En components/loans/loans-table-view.tsx, al confirmar el borrado cablear la acción a la `deleteMutation` ya existente (línea ~130, reusar la misma instancia) pasando el `id` del préstamo; que la lista se refresque/invalide sin recargar la página siguiendo el patrón ya usado por PreApprovedLoanCard. (a9984817)
+- [x] Step 5: En components/loans/loans-table-view.tsx, mostrar el error de deleteMutation cuando falle, reusando el mismo estilo de texto de error ya presente en el archivo o en pre-approved-loan-card.tsx, asegurando que la fila NO desaparezca ante un error. No introducir texto que muestre TNA/tasa en los mensajes. (54235257)
+- [x] Step 6: Agregar/extender tests del componente loans-table-view: la acción de borrar aparece solo cuando paidCount === 0 y status no es 'defaulted' ni 'completed'; al confirmar dispara loans.delete con el id correcto; y un error de la mutation no elimina la fila. Seguir el patrón de tests existentes para este componente. (02abc9d0)
+- [x] Step 7: Correr typecheck, lint y la suite de tests, y corregir cualquier error que surja de los cambios. (02abc9d0)
+
+### Decisiones (ADR)
+- ADR-0111 — Un solo `deleteConfirmId` compartido vs. Set<string> por fila [Supuesto del agente] **⚠ REVISAR**
+- ADR-0112 — Extracción de lógica de borrado para testabilidad en entorno node [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0044/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-04 — F-0043 completado
+
+## Feature F-0043
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear un servicio o helper de acceso a datos para la tabla `user_strategy_targets` (p.ej. `src/features/portfolio/services/strategyTargetsService.js`) con dos funciones usando el cliente `supabase` de `@/lib/supabase`: `getStrategyTargets(userId)` que hace `supabase.from('user_strategy_targets').select('targets').eq('user_id', userId).maybeSingle()` y devuelve `DEFAULT_TARGETS` ({core1:50, core2:30}) si no hay fila o falla; y `saveStrategyTargets(userId, targets)` que hace `upsert` de `{ user_id, targets }`. Exportar tambien la constante DEFAULT_TARGETS desde aca. No tocar la forma del objeto ({core1, core2}). (75fc8a38)
+- [x] Step 2: Agregar soporte de `user_strategy_targets` al `mockClient` de desarrollo en `src/lib/supabase.ts` (o `.js`) para que en modo bypass_auth/dev las llamadas a `select`/`upsert`/`maybeSingle` sobre esa tabla no caigan al fallback vacio y no rompan la pantalla; devolver DEFAULT_TARGETS como fila mockeada. (f53a29f9)
+- [x] Step 3: Crear el hook `src/features/portfolio/hooks/useStrategyTargets.js` que use `useAuth()` de `@/features/auth/contexts/AuthContext` para obtener `user.id`. Al montar (si hay user.id) hace fetch via `getStrategyTargets`; expone `{ targets, setTargets, loading, saveError }`. `setTargets` actualiza el estado local de inmediato (UI optimista) y dispara `saveStrategyTargets`; si falla, setea `saveError` sin revertir el valor local. Manejar el caso sin sesion (user null): no disparar fetch/upsert, usar DEFAULT_TARGETS y no loguear errores no controlados. (a2d5915a)
+- [x] Step 4: Reemplazar en `src/features/portfolio/components/strategy/StrategyTab.jsx` el `useState`/`useEffect` basados en localStorage (lineas 7-21, incluyendo `TARGETS_KEY` y `localStorage.getItem/setItem`) por el hook `useStrategyTargets`. Pasar `targets` y `setTargets` (como `onChangeTargets`) a `<TargetAllocation>` sin cambiar su interfaz. No dejar los dos mecanismos conviviendo. (0d161c96)
+- [x] Step 5: En `StrategyTab.jsx`, mostrar el estado `loading` inicial mientras se resuelve el fetch desde DB, reutilizando un `Skeleton`/spinner ya existente en `src/components/ui` (buscar antes de crear uno nuevo), para evitar el parpadeo default→valor real. (fc603b4f)
+- [x] Step 6: En `StrategyTab.jsx`, cuando `saveError` este seteado, mostrar un aviso corto y no bloqueante siguiendo el tono/estilo de los mensajes de error ya usados en la UI de Argos (nada de `alert()`/`confirm()`). (4eeece30)
+- [x] Step 7: Agregar tests para `useStrategyTargets` (o el servicio + hook) mockeando `supabase.from` con el patron ya usado en tests existentes del proyecto: (a) fetch inicial devuelve la fila guardada; (b) sin fila usa DEFAULT_TARGETS; (c) editar dispara upsert con el `user_id` correcto; (d) upsert fallido no revierte el valor local y expone `saveError`. (43070158)
+- [x] Step 8: Correr typecheck, lint y tests, y corregir lo que rompa sin cambiar la forma del objeto `targets` ni tocar la RLS/tablas. (43070158)
+
+### Decisiones (ADR)
+- ADR-0113 — upsert con supabase directo en vez de supabaseFetch [Supuesto del agente] **⚠ REVISAR**
+- ADR-0114 — Tests sobre el servicio en lugar del hook [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0043/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-04 — F-0045 completado
+
+## Feature F-0045
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En lib/identity/resolvePerson.ts, extender el tipo de opts de resolvePersonByIdentity con relationship?: 'amigo' | 'amigo_de_amigo' | 'conocido' | null y referrer?: string | null; en la rama if (create) (líneas ~97-104) pasar relationship: opts.relationship ?? undefined y referrer: opts.referrer ?? undefined a db.person.create, dejando que el default de schema 'conocido' se aplique cuando no se pasa nada. No cambiar el comportamiento de ningún otro caller. (7bad92d4)
+- [x] Step 2: En server/routers/ap.ts, agregar al input de la mutation preApprove (líneas 348-360) relationship: z.enum(['amigo', 'amigo_de_amigo', 'conocido']).optional() y referrer: z.string().max(200).optional(), sin .default(), para poder distinguir 'no eligió nada' de un valor. (fba9438a)
+- [x] Step 3: En server/routers/ap.ts, dentro de la transacción de preApprove (llamada a resolvePersonByIdentity, línea ~544), pasar relationship: input.relationship y referrer: input.referrer || undefined. No tocar la rama de resolvePerson (identity.service.ts), que nunca crea la Person. (41f4dcd3)
+- [x] Step 4: En app/ap/page.tsx, agregar relationship y referrer (ambos opcionales) a la interfaz ClientData (línea 97) y al estado inicial de clientData (línea 375). Pasar ambos valores en la llamada a preApproveMut.mutateAsync (línea ~475-481). (68d404c3)
+- [x] Step 5: En app/ap/page.tsx, en el paso confirm (después del input de cbu, antes del botón 'Pre-aprobar', ~línea 830), agregar los dos campos nuevos como sección claramente opcional: un Select de relación (Amigo / Amigo de amigo / Conocido) y un input de texto libre para 'Quién lo refiere', con un subtítulo tipo '¿Conocés a este cliente? (opcional)', usando el estilo oscuro custom del paso (bg-white/5 border border-white/10 rounded-2xl). Actualizar el copy 'Solo necesito 3 datos' si hace falta para que siga siendo honesto con 3 obligatorios + 2 opcionales. (1a7ee2be)
+- [x] Step 6: Agregar/extender tests en resolvePersonByIdentity: (a) Person nueva sin relationship/referrer en el input se sigue creando con los defaults (conocido/null, sin regresión); (b) Person nueva CON relationship/referrer en el input los persiste tal cual. Reutilizar los mocks de Prisma/tx existentes. (4d5f2fbb)
+- [x] Step 7: Agregar/extender tests en ap.preApprove: una Person que ya existía (matcheada por CUIL) mantiene su relationship/referrer original sin importar qué mande el AP en el input nuevo (nunca se sobreescribe). Reutilizar el patrón de mock de Prisma/tx de los tests existentes (tests/ap-*.test.ts, tests/debtor-exposure-cross-ap.test.ts) antes de inventar un mock nuevo. (aea605d8)
+- [x] Step 8: Correr typecheck, lint y tests, y corregir lo que rompa. (aea605d8)
+
+### Decisiones (ADR)
+- ADR-0115 — Tipo de `relationship` en `ClientData` como union literal en lugar de `string` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0116 — Sección opcional como tarjeta separada, no inline con los campos obligatorios [Supuesto del agente] **⚠ REVISAR**
+- ADR-0117 — Testear las dos funciones helper en lugar del router preApprove directamente [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0045/`
+
+> Revisar con Claude in Chrome para validación de UX.

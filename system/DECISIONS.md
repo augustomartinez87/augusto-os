@@ -27,6 +27,174 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0117 · 2026-09-04 · Testear las dos funciones helper en lugar del router preApprove directamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los tests de step 7 testean `resolvePerson` (identity.service.ts) y `resolvePersonByIdentity` directamente, siguiendo el patrón de todos los tests existentes del repo, en lugar de intentar testear el handler del router tRPC end-to-end.
+**Contexto:** Testear `preApprove` directamente requeriría mockear ~15 operaciones de DB dentro de un `$transaction`, más la resolución del tRPC context. El patrón establecido en el repo es siempre testear los helpers usados por el router, no el router mismo.
+**Alternativas descartadas:** Crear un test de integración del handler tRPC con un mock completo del contexto — descartado por excesiva complejidad de setup sin beneficio de cobertura adicional, ya que la invariante está completamente determinada por las dos funciones helper que sí se testean.
+**Consecuencias / riesgo residual:** Si en el futuro alguien agrega `person.update({ data: { relationship, referrer } })` directamente dentro de la tx de `preApprove` (sin pasar por los helpers), el test no lo capturaría. Queda documentado como riesgo.
+
+> Generado por el loop · feature F-0045 · step 7
+
+---
+## ADR-0116 · 2026-09-04 · Sección opcional como tarjeta separada, no inline con los campos obligatorios
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los dos campos opcionales se agrupan en un contenedor `bg-white/5 border border-white/10 rounded-2xl` propio, visualmente separado del bloque de inputs obligatorios.
+**Contexto:** El spec pedía "sección claramente opcional" pero no especificó si debía ser un bloque separado o estar inline con los tres inputs requeridos. Agruparlos en un card propio marca la diferencia visual entre obligatorio y opcional sin texto extra.
+**Alternativas descartadas:** Agregar los dos campos directamente al `div.space-y-3` existente con algún separador de texto.
+**Consecuencias / riesgo residual:** Si en el futuro se agregan más campos opcionales, el card ya actúa como contenedor natural. Si se prefiere el estilo inline, es un cambio de una línea.
+
+> Generado por el loop · feature F-0045 · step 5
+
+---
+## ADR-0115 · 2026-09-04 · Tipo de `relationship` en `ClientData` como union literal en lugar de `string`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se tipó `relationship` como `'amigo' | 'amigo_de_amigo' | 'conocido' | undefined` directamente en la interfaz frontend, sin importar `RelationshipTier` del servicio.
+**Contexto:** El input zod de `preApprove` espera esa union literal; tipar como `string` generaba TS2322. La opción 'desconocido' se excluye por spec (no es elegible en UI).
+**Alternativas descartadas:** Importar `RelationshipTier` de `server/services/relationshipLimit.ts` — descartado porque mezclaría código de servidor en el bundle cliente sin necesidad.
+**Consecuencias / riesgo residual:** Si el enum de tier cambia en el router, la interfaz frontend debe actualizarse manualmente; no hay single source of truth compartida en el cliente.
+
+> Generado por el loop · feature F-0045 · step 4
+
+---
+## ADR-0114 · 2026-09-04 · Tests sobre el servicio en lugar del hook
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se testea `strategyTargetsService` directamente en lugar de `useStrategyTargets`, cubriéndose las 4 condiciones pedidas a través de los mocks del servicio.
+**Contexto:** El proyecto usa `environment: 'node'` en Vitest y carece de jsdom y `@testing-library/react` (explicitado en el comentario de `useDefiLoanEngine.test.ts`). El hook usa `useState`/`useEffect`, que requieren DOM para funcionar con `renderHook`; `renderToStaticMarkup` solo sirve para hooks sin efectos.
+**Alternativas descartadas:** Cambiar el `environment` a `jsdom` e instalar `@testing-library/react` para testear el hook directamente; descartado porque introduce dependencias nuevas y cambia la configuración global del proyecto.
+**Consecuencias / riesgo residual:** El comportamiento "no revierte el valor local" queda verificado por lectura de código (no hay rollback en `useStrategyTargets.setTargets`) y por el comentario inline del test (d), no por un assert de estado React.
+
+> Generado por el loop · feature F-0043 · step 7
+
+---
+## ADR-0113 · 2026-09-04 · upsert con supabase directo en vez de supabaseFetch
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usa el cliente `supabase` (no `supabaseFetch`) para el upsert de `saveStrategyTargets`, siguiendo el patrón de `createProfileIfNotExists` en `userService.js`.
+**Contexto:** `supabaseFetch` solo implementa GET (construye una URL con query params para lectura). Para escrituras (upsert/insert) no existe un helper equivalente en el código actual; el patrón establecido en `userService` usa el cliente Supabase directamente para mutaciones.
+**Alternativas descartadas:** Implementar un helper `supabaseUpsert` similar a `supabaseFetch` que haga POST/PATCH REST directo — descartado porque no existe en la base de código y sumaría abstracción fuera del alcance del step.
+**Consecuencias / riesgo residual:** En modo `bypass_auth` (dev), el upsert intentará llamar al cliente real y fallará silenciosamente si no hay sesión activa — aceptable porque dev no usa DB real.
+
+> Generado por el loop · feature F-0043 · step 1
+
+---
+## ADR-0112 · 2026-09-04 · Extracción de lógica de borrado para testabilidad en entorno node
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se extrajeron `canDeleteLoan` y `buildDeleteLoanMutationOptions`/`buildDeleteConfirmHandler` a módulos puros, y se reordenó el estado `deleteConfirmId` para que quede antes de `useMutation`. Los tests cubren las tres condiciones sin montar DOM.
+**Contexto:** El repo usa vitest en `environment: 'node'` sin jsdom ni @testing-library/react. Testear el componente completo requeriría instalar jsdom y configurar mocks de tRPC/Next.js, lo que es fuera del scope mínimo del feature. El patrón existente (`simulator-handlers.ts`) ya demuestra que el equipo extrae lógica de componentes a funciones puras para testear en node.
+**Alternativas descartadas:** Instalar jsdom + @testing-library/react para testear el componente renderizado (mayor fidelidad, mayor costo de setup); dejar toda la lógica inline y no testear (no cumple el spec).
+**Consecuencias / riesgo residual:** Los tests cubren el contrato de las funciones extraídas pero no verifican el render real del botón. Si en el futuro se agrega jsdom, los tests de componente complementarán (no reemplazarán) estos unit tests. El reordenamiento de useState es un cambio menor pero válido según las Rules of Hooks.
+
+> Generado por el loop · feature F-0044 · step 6
+
+---
+## ADR-0111 · 2026-09-04 · Un solo `deleteConfirmId` compartido vs. Set<string> por fila
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usa `useState<string | null>(null)` para rastrear la fila en modo confirmación, permitiendo solo una fila activa a la vez.
+**Contexto:** En la tabla hay N filas; el patrón original de `pre-approved-loan-card.tsx` usa `useState(false)` porque es un componente por-card. Había dos opciones para la tabla: string|null (una sola fila en confirm) o Set\<string\> (múltiples filas simultáneas).
+**Alternativas descartadas:** `useState<Set<string>>(new Set())` — permite varias filas en modo confirm simultáneamente, pero complica el código y no aporta valor de UX (el usuario no necesita confirmar borrado de múltiples filas a la vez).
+**Consecuencias / riesgo residual:** Al hacer click en Trash2 de otra fila mientras una ya está en modo confirm, la confirmación anterior se cancela implícitamente. Esto es el comportamiento esperado y evita estados ambiguos.
+
+> Generado por el loop · feature F-0044 · step 2
+
+---
+## ADR-0110 · 2026-09-03 · Visibilidad derivada del resultado en modo plazo custom en lugar de nulear simulation
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se dejó de nulear `simulation` imperativamente al entrar en modo custom; en cambio se derivó la visibilidad de la card/botón de compartir con el gate `!customTermError`.
+**Contexto:** Los 4 intentos previos fallaron por un dead-end: `setSimulation(null)` en el botón "Otro" dejaba un estado irrecuperable, porque el efecto de auto-simulación solo reacciona a cambios de valor de `selectedTermMonths` y re-tocar el mismo preset es un no-op.
+**Alternativas descartadas:** Agregar `useCustomTerm` a las deps del efecto de auto-simulación y re-forzar la simulación — descartado por reintroducir simulaciones redundantes y no eliminar la clase de bug (estado imperativo frágil).
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0040 · step 4
+
+---
+## ADR-0109 · 2026-09-03 · Incluir UI del input de plazo custom en step 2
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se agregó la UI (botón toggle "Otro plazo" + input) en el mismo step junto con la lógica de derivación, en lugar de dejarlo para un step separado.
+**Contexto:** La tarea especifica solo "derivar el plazo efectivo", pero sin UI que active `useCustomTerm` e ingrese `customTermMonths`, la derivación es código muerto no testeable. El spec no aclara si la UI corresponde a este step o al siguiente.
+**Alternativas descartadas:** Agregar solo el `useEffect` y dejar la UI para un step 3; el resultado sería código que compila pero que ningún flujo activa.
+**Consecuencias / riesgo residual:** Si existe un step 3 que también intenta agregar la UI del input de plazo custom, habrá conflicto. El implementador del step 3 deberá verificar qué ya está hecho antes de editar.
+
+> Generado por el loop · feature F-0040 · step 2
+
+---
+## ADR-0108 · 2026-09-03 · Testear el contrato de error sobre las opciones de mutation, no renderizando el componente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se testea el step 5 sobre los builders puros (`buildCreateLoanMutationOptions`/`buildPreApproveMutationOptions`) afirmando que el objeto devuelto solo contiene `onSuccess` (sin `onError`/`onSettled`), en lugar de renderizar `page.tsx` con `next/navigation` y `useToast` mockeados.
+**Contexto:** El step pedía "mockear next/navigation y el hook de toast", pero vitest corre en env `node` sin jsdom ni @testing-library, y todos los tests del repo son unit puros. Los 4 intentos previos fallaron por tests de error tautológicos (mocks vírgenes) que nunca se corrigieron pese a que el reviewer dio el fix exacto.
+**Alternativas descartadas:** Renderizar el componente con jsdom + @testing-library/react + vi.mock de módulos; descartada por requerir nuevas devDependencies, cambiar el env de vitest y romper el patrón del repo (fuera de alcance).
+**Consecuencias / riesgo residual:** La garantía "un error no navega" queda cubierta estructuralmente (ausencia de rama de error), no vía render real. Si en el futuro se agrega un `onError` a los builders, estos tests lo detectan y obligan a revisar el contrato de redirect.
+
+> Generado por el loop · feature F-0041 · step 5
+
+---
+## ADR-0107 · 2026-09-01 · Texto del toast de preaprobación menciona instrucción de confirmación futura
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El toast incluye la frase "Confirmalo desde la página de préstamos cuando se transfiera el dinero" para orientar al operador sobre el próximo paso, ya que el préstamo preaprobado no genera cuotas hasta ser confirmado.
+**Contexto:** El spec solo pedía "texto explícito y distinto que indique que el préstamo quedó PREAPROBADO". Dado que el flujo de preaprobados requiere un paso adicional (confirmPreApproved), el toast sin contexto podría confundir al usuario.
+**Alternativas descartadas:** Toast minimalista solo con "Préstamo preaprobado guardado" sin instrucción de próximo paso.
+**Consecuencias / riesgo residual:** Si la UX del flujo de confirmación cambia o se automatiza, el texto del toast quedará desactualizado y deberá actualizarse.
+
+> Generado por el loop · feature F-0041 · step 3
+
+---
+## ADR-0106 · 2026-09-01 · Orden de operaciones en onSuccess: cerrar → limpiar → toast → push
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se cierra el modal y se limpia el estado antes de disparar el toast y navegar, para que React no intente renderizar el Dialog con estado inconsistente durante la transición de ruta.
+**Contexto:** El spec no especifica el orden exacto de las operaciones dentro de onSuccess; existe riesgo de que un state update post-push genere un warning de "update on unmounted component" si se limpia después de navegar.
+**Alternativas descartadas:** Limpiar después del push (más simple pero genera warnings en React 18 si el componente ya se desmontó).
+**Consecuencias / riesgo residual:** ninguna
+
+> Generado por el loop · feature F-0041 · step 2
+
+---
 ## ADR-0105 · 2026-07-28 · Tests del router como nuevo archivo, no extendiendo cartera-tab-commission
 
 **Estado:** aceptada
