@@ -12,6 +12,7 @@ export interface Target {
   verifyCmd: string
   lintCmd: string
   testCmd: string
+  buildCmd?: string   // comando de build de prod; si no esta seteado, default = 'npm run build'. String vacio = sin build (targets no-JS/TS).
   qaBaseUrl: string
   dbModel?: 'prisma' | 'none'   // 'none' = app sin Prisma (ej. Supabase-client): el loop no exige dev DB ni inyecta DATABASE_URL
   devDatabaseUrl?: string

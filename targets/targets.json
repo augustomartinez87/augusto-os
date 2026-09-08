@@ -83,6 +83,7 @@
       "verifyCmd": "python -m py_compile cauciones_parser.py sync_cauciones.py fci_parser.py fci_sync.py",
       "lintCmd": "",
       "testCmd": "python -m pytest -q",
+      "buildCmd": "",
       "qaBaseUrl": "",
       "_dbNote": "Sin Prisma, sin dev DB. Igual que argos (dbModel=none), pero a diferencia de argos este target SÍ escribe directo a la Supabase real vía REST (requests + SUPABASE_SERVICE_KEY) — no hay guard de prodDbPatterns porque no hay otra DB. Cualquier feature acá debe ser extra-cuidadosa: preferir dedupe por external_ref/operation_key antes de insertar, nunca reescribir filas que pudo haber tocado la carga manual.",
       "prodDbPatterns": [

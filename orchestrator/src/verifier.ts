@@ -2,7 +2,7 @@ import { execa } from 'execa'
 import { readdirSync, readFileSync, existsSync, type Dirent } from 'fs'
 import path from 'path'
 import { log } from './limits.js'
-import { getRepoRoot } from './targets.js'
+import { getRepoRoot, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
 
 export interface VerifyResult {
@@ -20,16 +20,28 @@ async function run(cmd: string, args: string[]): Promise<{ ok: boolean; output: 
   return { ok: result.exitCode === 0, output: result.all ?? '' }
 }
 
+function parseCmd(cmdStr: string): { cmd: string; args: string[] } {
+  const parts = cmdStr.trim().split(/\s+/)
+  return { cmd: parts[0], args: parts.slice(1) }
+}
+
 export async function runVerifier(): Promise<VerifyResult> {
+  const target = getTargetConfig()
+
   log('[verifier] Corriendo typecheck...')
-  const tc = await run('npx', ['tsc', '--noEmit'])
+  const tcCmd = parseCmd(target.verifyCmd)
+  const tc = await run(tcCmd.cmd, tcCmd.args)
   if (!tc.ok) {
     log('[verifier] FAIL: typecheck')
     return { ok: false, errors: tc.output }
   }
 
+  if (!target.lintCmd || !target.lintCmd.trim()) {
+    log('[verifier] lint omitido (target sin lintCmd configurado)')
+  } else {
   log('[verifier] Corriendo lint...')
-  const lint = await run('npm', ['run', 'lint'])
+  const lintCmd = parseCmd(target.lintCmd)
+  const lint = await run(lintCmd.cmd, lintCmd.args)
   if (!lint.ok) {
     const noScript = /missing script/i.test(lint.output)
     if (!noScript) {
@@ -38,11 +50,13 @@ export async function runVerifier(): Promise<VerifyResult> {
     }
     log('[verifier] WARNING: target sin script "lint" — omitido')
   }
+  }
 
   log('[verifier] Corriendo tests...')
-  const test = await run('npm', ['run', 'test'])
+  const testCmd = parseCmd(target.testCmd)
+  const test = await run(testCmd.cmd, testCmd.args)
   if (!test.ok) {
-    const noTests = test.output.includes('No test files found') || test.output.includes('0 tests')
+    const noTests = /No test files found|0 tests|no tests ran|no tests collected/i.test(test.output)
     if (!noTests) {
       log('[verifier] FAIL: tests')
       return { ok: false, errors: test.output }
@@ -116,25 +130,39 @@ function scanTnaLeak(repoRoot: string): string {
  */
 export async function runReleaseChecks(): Promise<ReleaseResult> {
   const tnaNote = scanTnaLeak(getRepoRoot())
+  const target = getTargetConfig()
 
   log('[release] typecheck...')
-  const tc = await run('npx', ['tsc', '--noEmit'])
+  const tcCmd = parseCmd(target.verifyCmd)
+  const tc = await run(tcCmd.cmd, tcCmd.args)
   if (!tc.ok) return { ok: false, errors: `typecheck:\n${tc.output}`, tnaNote }
 
-  log('[release] lint...')
-  const lint = await run('npm', ['run', 'lint'])
-  if (!lint.ok && !/missing script/i.test(lint.output)) return { ok: false, errors: `lint:\n${lint.output}`, tnaNote }
+  if (target.lintCmd && target.lintCmd.trim()) {
+    log('[release] lint...')
+    const lintCmd = parseCmd(target.lintCmd)
+    const lint = await run(lintCmd.cmd, lintCmd.args)
+    if (!lint.ok && !/missing script/i.test(lint.output)) return { ok: false, errors: `lint:\n${lint.output}`, tnaNote }
+  } else {
+    log('[release] lint omitido (target sin lintCmd configurado)')
+  }
 
   log('[release] tests...')
-  const test = await run('npm', ['run', 'test'])
+  const testCmd = parseCmd(target.testCmd)
+  const test = await run(testCmd.cmd, testCmd.args)
   if (!test.ok) {
-    const noTests = test.output.includes('No test files found') || test.output.includes('0 tests')
+    const noTests = /No test files found|0 tests|no tests ran|no tests collected/i.test(test.output)
     if (!noTests) return { ok: false, errors: `tests:\n${test.output}`, tnaNote }
   }
 
-  log('[release] build de prod (npm run build)...')
-  const build = await run('npm', ['run', 'build'])
-  if (!build.ok && !/missing script/i.test(build.output)) return { ok: false, errors: `build:\n${build.output.slice(-4000)}`, tnaNote }
+  const buildCmdStr = target.buildCmd ?? 'npm run build'
+  if (buildCmdStr.trim()) {
+    log('[release] build de prod...')
+    const buildCmd = parseCmd(buildCmdStr)
+    const build = await run(buildCmd.cmd, buildCmd.args)
+    if (!build.ok && !/missing script/i.test(build.output)) return { ok: false, errors: `build:\n${build.output.slice(-4000)}`, tnaNote }
+  } else {
+    log('[release] build omitido (target sin buildCmd)')
+  }
 
   log(`[release] OK: typecheck + lint + tests + build. ${tnaNote}`)
   return { ok: true, errors: '', tnaNote }
