@@ -80,7 +80,7 @@
       "description": "caucion-sync / fci-sync — pipeline no supervisado (GitHub Actions cron diario) que lee el Gmail de Alycbur (martinezstreet21@gmail.com via IMAP) y sincroniza movimientos reales a la Supabase de Argos (wwzocpcolgdzkvcigchj), la misma prod que usa portfolio-tracker. Sin dev DB / sandbox propio: todo lo que este target escribe en Supabase es contra datos reales de Augusto. Python puro, sin framework de tests hoy — el loop no debe asumir tsc/vitest.",
       "stack": "python",
       "dbModel": "none",
-      "verifyCmd": "python -m py_compile cauciones_parser.py sync_cauciones.py fci_parser.py fci_sync.py",
+      "verifyCmd": "python -m compileall -q .",
       "lintCmd": "",
       "testCmd": "python -m pytest -q",
       "buildCmd": "",
