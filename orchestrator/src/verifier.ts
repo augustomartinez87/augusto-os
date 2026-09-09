@@ -11,10 +11,20 @@ export interface VerifyResult {
 }
 
 async function run(cmd: string, args: string[]): Promise<{ ok: boolean; output: string }> {
+  const cwd = getRepoRoot()
   const result = await execa(cmd, args, {
-    cwd: getRepoRoot(),
+    cwd,
     reject: false,
     all: true,
+    // preferLocal: resuelve el binario desde <cwd>/node_modules/.bin antes que el PATH global.
+    // Sin esto, un testCmd/verifyCmd como 'vitest run' (target argos) puede resolver un binario
+    // vitest distinto al que corresponde a este repo (ej. el de augusto-os/orchestrator) y romper
+    // con errores tipo 'No handler function exported from .../vitest/dist/worker.js' por mezclar
+    // versiones de vitest/tinypool entre dos node_modules distintos. npm run <script> evitaba esto
+    // por construccion (siempre resolvia local); al pasar a correr verifyCmd/testCmd tal cual, hay
+    // que pedirlo explicitamente.
+    preferLocal: true,
+    localDir: cwd,
     env: { ...process.env, ...getDbEnvOverride() },
   })
   return { ok: result.exitCode === 0, output: result.all ?? '' }
