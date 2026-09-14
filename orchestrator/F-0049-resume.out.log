@@ -1,0 +1,313 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0049
+
+[2026-09-10T12:09:54.956Z] [autopilot] Lock stale (33555s) — heartbeat 33492s atrás. Dueño anterior: feature=desconocido, pid=8632. Reclamando.
+[2026-09-10T12:09:54.963Z] [system] Modo operativo: PRODUCT
+[2026-09-10T12:09:54.967Z] [main] Resumiendo feature F-0049 — target: argos
+[2026-09-10T12:09:54.968Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-10T12:09:54.968Z] 
+[main] === Step 1/6: En src/features/fci/services/mercadoService.js, agregar `getFondosStats(filtros)` que reciba los mismos filtros que getFondosPage (moneda, clasificacion_cod, sociedad_gerente, search) + el filtro stale (universeDate vía getLatestUniverseDate) y devuelva `{ total, tnaPromedio, mejorTna }` mediante una query agregada contra fci_explorador (o fci_explorador_grupos según groupByFund), replicando exactamente la misma cadena de .eq/.or/.gte que getFondosPage para no divergir de la tabla. ===
+[2026-09-10T12:09:54.973Z] [executor] Iniciando sesión nueva para step 1: En src/features/fci/services/mercadoService.js, agregar `getFondosStats(filtros)` que reciba los mismos filtros que getFondosPage (moneda, clasificacion_cod, sociedad_gerente, search) + el filtro stale (universeDate vía getLatestUniverseDate) y devuelva `{ total, tnaPromedio, mejorTna }` mediante una query agregada contra fci_explorador (o fci_explorador_grupos según groupByFund), replicando exactamente la misma cadena de .eq/.or/.gte que getFondosPage para no divergir de la tabla.
+[2026-09-10T12:11:47.348Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step1.log
+[2026-09-10T12:11:47.351Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:11:50.212Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:11:50.212Z] [verifier] Corriendo tests...
+[2026-09-10T12:11:51.672Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:12:29.983Z] [reviewer] CHANGES_REQUESTED en step 1:
+- La función no hace una "query agregada" como pide el step: trae las filas `tna` al cliente y promedia/maximiza en JS. PostgREST/Supabase aplica un límite por defecto (~1000 filas) al `data` devuelto, mientras que `count: 'exact'` sí refleja el universo completo. Resultado: para universos grandes (p. ej. `fci_explorador` sin agrupar — todas las clases de FCI de Argentina superan holgadamente las 1000 filas), `total` será correcto pero `tnaPromedio` y `mejorTna` se calcularán solo sobre las primeras ~1000 filas, divergiendo silenciosamente del universo que `total` reporta. Usar una agregación real en el servidor (RPC con `avg(tna)`/`max(tna)` + `count`, o vista) para que las tres métricas reflejen exactamente el mismo conjunto filtrado.
+[2026-09-10T12:12:29.986Z] [executor] Resumiendo sesión 1181cec1-bd8e-4fee-8eeb-74b7d1d7c4ff para step 1
+[2026-09-10T12:12:43.195Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step1.log
+[2026-09-10T12:12:43.196Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:12:46.065Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:12:46.066Z] [verifier] Corriendo tests...
+[2026-09-10T12:12:47.340Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:13:19.030Z] [main] Step 1 trabado tras agotar reintentos — escalando a Opus (fixer) antes de bloquear.
+[2026-09-10T12:13:19.030Z] [main] Motivo: Step 1: reviewer rechaza tras segunda corrección
+[2026-09-10T12:13:19.031Z] [escalation] Step 1: intento 1/2 del fixer (Opus)
+[2026-09-10T12:13:19.032Z] [escalation] Iniciando sesión nueva del fixer (Opus) para step 1 — sin resumir la sesión trabada del builder
+[2026-09-10T12:16:10.817Z] [escalation] Log del fixer en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step1-fixer.log
+[2026-09-10T12:16:10.818Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:16:13.584Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:16:13.584Z] [verifier] Corriendo tests...
+[2026-09-10T12:16:14.834Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:16:14.835Z] [escalation] Fixer (Opus) resolvió el step 1 y pasó verifier
+[2026-09-10T12:16:14.835Z] [main] Fixer (Opus) resolvió el step 1 — retomando el flujo normal, sin marcarlo bloqueado.
+[2026-09-10T12:17:24.002Z] [reviewer] APPROVED step 1
+[2026-09-10T12:17:24.280Z] [git] Commit 7e24ecf7: step 1
+[2026-09-10T12:17:24.283Z] [adr] ADR-0142 registrado (origen: Supuesto del agente)
+[2026-09-10T12:17:24.284Z] [main] Step 1 completado y commiteado (7e24ecf7)
+[2026-09-10T12:17:24.284Z] 
+[main] === Step 2/6: En src/features/fci/services/mercadoService.js (o un pequeño helper nuevo en features/fci/services), agregar `getUltimaCaucion()` de solo lectura que consulte la tabla `cauciones` con `.order('fecha_inicio', {ascending:false}).limit(1).maybeSingle()` y devuelva `{ tna, fecha }` a partir de tna_real (fallback tna_contrato), o `null` si no hay filas. No modificar financingService.getCauciones ni el módulo de Financiación. ===
+[2026-09-10T12:17:24.287Z] [executor] Iniciando sesión nueva para step 2: En src/features/fci/services/mercadoService.js (o un pequeño helper nuevo en features/fci/services), agregar `getUltimaCaucion()` de solo lectura que consulte la tabla `cauciones` con `.order('fecha_inicio', {ascending:false}).limit(1).maybeSingle()` y devuelva `{ tna, fecha }` a partir de tna_real (fallback tna_contrato), o `null` si no hay filas. No modificar financingService.getCauciones ni el módulo de Financiación.
+[2026-09-10T12:18:12.409Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step2.log
+[2026-09-10T12:18:12.411Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:18:15.151Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:18:15.152Z] [verifier] Corriendo tests...
+[2026-09-10T12:18:16.404Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:19:21.614Z] [reviewer] CHANGES_REQUESTED en step 2:
+- El step pide explícitamente derivar la TNA "a partir de tna_real (fallback tna_contrato)", pero el diff solo hace `.select('tna_real, fecha_inicio')` y retorna `null` cuando `tna_real` viene nula, sin nunca consultar ni caer a `tna_contrato`. `tna_contrato` es una columna real de `cauciones` (campos ARCH-002 de itemización de costos, ver `financingService.ts:266`), así que el fallback es implementable y está omitido: agregar `tna_contrato` al select y usar `data.tna_real ?? data.tna_contrato ?? null`.
+- Efecto secundario de esa omisión: el step dice devolver `null` únicamente "si no hay filas", pero tal como está también devuelve `null` cuando existe una fila con `tna_real` nula (caso que el fallback a `tna_contrato` debía cubrir). Implementar el fallback corrige ambos puntos.
+[2026-09-10T12:19:21.617Z] [executor] Resumiendo sesión 086bd236-44dc-4496-b38d-890dd5adacbc para step 2
+[2026-09-10T12:19:41.137Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step2.log
+[2026-09-10T12:19:41.138Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:19:43.893Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:19:43.894Z] [verifier] Corriendo tests...
+[2026-09-10T12:19:45.142Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:20:22.758Z] [main] Step 2 trabado tras agotar reintentos — escalando a Opus (fixer) antes de bloquear.
+[2026-09-10T12:20:22.758Z] [main] Motivo: Step 2: reviewer rechaza tras segunda corrección
+[2026-09-10T12:20:22.759Z] [escalation] Step 2: intento 1/2 del fixer (Opus)
+[2026-09-10T12:20:22.760Z] [escalation] Iniciando sesión nueva del fixer (Opus) para step 2 — sin resumir la sesión trabada del builder
+[2026-09-10T12:22:51.205Z] [escalation] Log del fixer en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step2-fixer.log
+[2026-09-10T12:22:51.206Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:22:53.968Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:22:53.968Z] [verifier] Corriendo tests...
+[2026-09-10T12:22:55.237Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:22:55.237Z] [escalation] Fixer (Opus) resolvió el step 2 y pasó verifier
+[2026-09-10T12:22:55.237Z] [main] Fixer (Opus) resolvió el step 2 — retomando el flujo normal, sin marcarlo bloqueado.
+[2026-09-10T12:23:39.280Z] [reviewer] APPROVED step 2
+[2026-09-10T12:23:39.553Z] [git] Commit d98f81ce: step 2
+[2026-09-10T12:23:39.555Z] [adr] ADR-0143 registrado (origen: Supuesto del agente)
+[2026-09-10T12:23:39.556Z] [main] Step 2 completado y commiteado (d98f81ce)
+[2026-09-10T12:23:39.556Z] 
+[main] === Step 3/6: Construir un componente de franja de KPIs (p. ej. src/features/fci/components/ExploradorStatsBar.jsx) que reciba `{ total, tnaPromedio, mejorTna, caucion, loading }` y renderice 4 métricas usando KpiCard de src/components/ui (casing KpiCard.jsx). La métrica de caución debe etiquetarse honestamente como 'Tu última caución' (no 'en vivo' ni tasa de mercado), mostrar la fecha de la operación, y renderizar un estado vacío claro ('Sin cauciones registradas') cuando caucion es null, sin mostrar undefined/NaN. ===
+[2026-09-10T12:23:39.559Z] [executor] Iniciando sesión nueva para step 3: Construir un componente de franja de KPIs (p. ej. src/features/fci/components/ExploradorStatsBar.jsx) que reciba `{ total, tnaPromedio, mejorTna, caucion, loading }` y renderice 4 métricas usando KpiCard de src/components/ui (casing KpiCard.jsx). La métrica de caución debe etiquetarse honestamente como 'Tu última caución' (no 'en vivo' ni tasa de mercado), mostrar la fecha de la operación, y renderizar un estado vacío claro ('Sin cauciones registradas') cuando caucion es null, sin mostrar undefined/NaN.
+[2026-09-10T12:26:05.769Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step3.log
+[2026-09-10T12:26:05.771Z] [verifier] Corriendo typecheck...
+[2026-09-10T12:26:08.529Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T12:26:08.530Z] [verifier] Corriendo tests...
+[2026-09-10T12:26:09.778Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T12:26:10.495Z] [qa] Navegando http://localhost:5173/
+[2026-09-10T12:26:12.855Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-10T12:26:12.898Z] [qa] FAIL: 1 errores
+[2026-09-10T12:26:12.899Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-10T12:26:12.899Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-10T12:27:29.701Z] [reviewer] APPROVED step 3
+[2026-09-10T12:27:29.988Z] [git] Commit 10b2375b: step 3
+[2026-09-10T12:27:29.991Z] [adr] ADR-0144 registrado (origen: Supuesto del agente)
+[2026-09-10T12:27:29.992Z] [main] Step 3 completado y commiteado (10b2375b)
+[2026-09-10T12:27:29.992Z] 
+[main] === Step 4/6: En src/pages/FciExplorador.jsx, cablear los nuevos datos: invocar getFondosStats con los filtros activos (recalculando cuando cambian moneda, categoría, gestora o búsqueda) y getUltimaCaucion al montar; guardar los resultados en estado y renderizar <ExploradorStatsBar/> arriba de la tabla. Manejar estados de carga/error sin romper el render de la tabla existente. ===
+[2026-09-10T12:27:29.995Z] [executor] Iniciando sesión nueva para step 4: En src/pages/FciExplorador.jsx, cablear los nuevos datos: invocar getFondosStats con los filtros activos (recalculando cuando cambian moneda, categoría, gestora o búsqueda) y getUltimaCaucion al montar; guardar los resultados en estado y renderizar <ExploradorStatsBar/> arriba de la tabla. Manejar estados de carga/error sin romper el render de la tabla existente.
+[2026-09-10T12:27:32.596Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T12:27:32.597Z] [executor] Usage limit detectado
+[2026-09-10T12:27:32.598Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T12:42:36.943Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T12:42:39.809Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T12:42:39.810Z] [executor] Usage limit detectado
+[2026-09-10T12:42:39.810Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T12:57:42.630Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T12:57:45.436Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T12:57:45.437Z] [executor] Usage limit detectado
+[2026-09-10T12:57:45.437Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T13:12:50.209Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T13:12:53.212Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T13:12:53.213Z] [executor] Usage limit detectado
+[2026-09-10T13:12:53.213Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T13:27:57.565Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T13:28:00.443Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T13:28:00.444Z] [executor] Usage limit detectado
+[2026-09-10T13:28:00.444Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T13:43:05.180Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T13:43:08.044Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T13:43:08.045Z] [executor] Usage limit detectado
+[2026-09-10T13:43:08.045Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T13:58:12.709Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T13:58:15.564Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T13:58:15.565Z] [executor] Usage limit detectado
+[2026-09-10T13:58:15.565Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T14:13:20.320Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T14:13:23.320Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T14:13:23.321Z] [executor] Usage limit detectado
+[2026-09-10T14:13:23.321Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T14:28:28.243Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T14:28:31.139Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T14:28:31.140Z] [executor] Usage limit detectado
+[2026-09-10T14:28:31.140Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T14:43:35.472Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T14:43:38.214Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T14:43:38.215Z] [executor] Usage limit detectado
+[2026-09-10T14:43:38.215Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T14:58:42.678Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T14:58:45.535Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T14:58:45.536Z] [executor] Usage limit detectado
+[2026-09-10T14:58:45.536Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T15:13:50.346Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T15:13:53.213Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T15:13:53.214Z] [executor] Usage limit detectado
+[2026-09-10T15:13:53.214Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T15:28:55.989Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T15:28:58.853Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T15:28:58.854Z] [executor] Usage limit detectado
+[2026-09-10T15:28:58.854Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T15:44:03.371Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T15:44:06.566Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T15:44:06.567Z] [executor] Usage limit detectado
+[2026-09-10T15:44:06.567Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T15:59:11.514Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T15:59:14.599Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T15:59:14.600Z] [executor] Usage limit detectado
+[2026-09-10T15:59:14.600Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T16:14:18.818Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T16:14:21.590Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T16:14:21.590Z] [executor] Usage limit detectado
+[2026-09-10T16:14:21.590Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T16:29:25.730Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T16:29:28.484Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T16:29:28.484Z] [executor] Usage limit detectado
+[2026-09-10T16:29:28.485Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T16:44:32.844Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T16:44:35.580Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T16:44:35.581Z] [executor] Usage limit detectado
+[2026-09-10T16:44:35.581Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T16:59:40.180Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T16:59:43.228Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T16:59:43.229Z] [executor] Usage limit detectado
+[2026-09-10T16:59:43.230Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T17:14:50.358Z] [executor] Resumiendo sesión c8ebf18c-2fc7-4ae3-a80b-3c259967dc6b para step 4
+[2026-09-10T17:15:35.702Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step4.log
+[2026-09-10T17:15:35.705Z] [verifier] Corriendo typecheck...
+[2026-09-10T17:15:38.851Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T17:15:38.851Z] [verifier] Corriendo tests...
+[2026-09-10T17:15:40.302Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T17:15:40.451Z] [qa] Navegando http://localhost:5173/
+[2026-09-10T17:15:42.810Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-10T17:15:42.856Z] [qa] FAIL: 1 errores
+[2026-09-10T17:15:42.856Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-10T17:15:42.856Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-10T17:15:42.954Z] [reviewer] Diff vacío — step 4 aprobado sin invocar modelo
+[2026-09-10T17:15:42.954Z] [reviewer] APPROVED step 4
+[2026-09-10T17:15:43.148Z] [git] Step 4: sin cambios para commitear (no-op) — se mantiene HEAD 10b2375b
+[2026-09-10T17:15:43.150Z] [main] Step 4 completado y commiteado (10b2375b)
+[2026-09-10T17:15:43.151Z] 
+[main] === Step 5/6: En src/features/fci/services/__tests__/, agregar tests para getFondosStats (caso con filtros activos vs. sin filtros, verificando que la cadena de query replica la de getFondosPage) y para getUltimaCaucion (caso con caución existente y caso sin cauciones → null), mockeando el cliente de Supabase siguiendo el patrón de makeBuilder/vi.mock existente. ===
+[2026-09-10T17:15:43.154Z] [executor] Iniciando sesión nueva para step 5: En src/features/fci/services/__tests__/, agregar tests para getFondosStats (caso con filtros activos vs. sin filtros, verificando que la cadena de query replica la de getFondosPage) y para getUltimaCaucion (caso con caución existente y caso sin cauciones → null), mockeando el cliente de Supabase siguiendo el patrón de makeBuilder/vi.mock existente.
+[2026-09-10T17:18:18.527Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step5.log
+[2026-09-10T17:18:18.530Z] [verifier] Corriendo typecheck...
+[2026-09-10T17:18:21.539Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T17:18:21.539Z] [verifier] Corriendo tests...
+[2026-09-10T17:18:22.934Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T17:18:23.022Z] [reviewer] Diff vacío — step 5 aprobado sin invocar modelo
+[2026-09-10T17:18:23.023Z] [reviewer] APPROVED step 5
+[2026-09-10T17:18:23.337Z] [git] Commit e0295575: step 5
+[2026-09-10T17:18:23.338Z] [main] Step 5 completado y commiteado (e0295575)
+[2026-09-10T17:18:23.339Z] 
+[main] === Step 6/6: Correr typecheck y la suite de tests (incluyendo mercadoService.getFondosPage.test.js para confirmar que no se rompieron las aserciones de la cadena fluente) y resolver cualquier error de lint/tipado introducido. ===
+[2026-09-10T17:18:23.341Z] [executor] Iniciando sesión nueva para step 6: Correr typecheck y la suite de tests (incluyendo mercadoService.getFondosPage.test.js para confirmar que no se rompieron las aserciones de la cadena fluente) y resolver cualquier error de lint/tipado introducido.
+[2026-09-10T17:18:39.485Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T17:18:39.485Z] [executor] Usage limit detectado
+[2026-09-10T17:18:39.486Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T17:33:43.464Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T17:33:46.259Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T17:33:46.259Z] [executor] Usage limit detectado
+[2026-09-10T17:33:46.259Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T17:48:50.446Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T17:48:53.183Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T17:48:53.184Z] [executor] Usage limit detectado
+[2026-09-10T17:48:53.184Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T18:03:57.937Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T18:04:00.647Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T18:04:00.647Z] [executor] Usage limit detectado
+[2026-09-10T18:04:00.648Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T18:19:05.250Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T18:19:08.118Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T18:19:08.119Z] [executor] Usage limit detectado
+[2026-09-10T18:19:08.119Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T18:34:12.527Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T18:34:15.401Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T18:34:15.402Z] [executor] Usage limit detectado
+[2026-09-10T18:34:15.403Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T18:49:19.729Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T18:49:22.987Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T18:49:22.988Z] [executor] Usage limit detectado
+[2026-09-10T18:49:22.988Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T19:04:27.330Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T19:04:30.152Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T19:04:30.153Z] [executor] Usage limit detectado
+[2026-09-10T19:04:30.153Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T19:19:34.871Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T19:19:37.800Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T19:19:37.801Z] [executor] Usage limit detectado
+[2026-09-10T19:19:37.801Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T19:34:41.921Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T19:34:44.724Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T19:34:44.725Z] [executor] Usage limit detectado
+[2026-09-10T19:34:44.725Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T19:49:49.115Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T19:49:52.007Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T19:49:52.008Z] [executor] Usage limit detectado
+[2026-09-10T19:49:52.008Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T20:04:56.071Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T20:04:59.212Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T20:04:59.213Z] [executor] Usage limit detectado
+[2026-09-10T20:04:59.213Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T20:20:03.677Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T20:20:06.546Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T20:20:06.547Z] [executor] Usage limit detectado
+[2026-09-10T20:20:06.547Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T20:35:10.667Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T20:35:13.418Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T20:35:13.419Z] [executor] Usage limit detectado
+[2026-09-10T20:35:13.419Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T20:50:17.747Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T20:50:20.414Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T20:50:20.414Z] [executor] Usage limit detectado
+[2026-09-10T20:50:20.415Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T21:05:24.531Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T21:05:27.251Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T21:05:27.252Z] [executor] Usage limit detectado
+[2026-09-10T21:05:27.252Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T21:20:31.930Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T21:20:34.643Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T21:20:34.644Z] [executor] Usage limit detectado
+[2026-09-10T21:20:34.644Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T21:35:39.289Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T21:35:42.136Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T21:35:42.137Z] [executor] Usage limit detectado
+[2026-09-10T21:35:42.137Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T21:50:46.321Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T21:50:49.066Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T21:50:49.067Z] [executor] Usage limit detectado
+[2026-09-10T21:50:49.067Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T22:05:53.301Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T22:05:56.120Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T22:05:56.121Z] [executor] Usage limit detectado
+[2026-09-10T22:05:56.121Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T22:21:00.978Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T22:21:03.911Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T22:21:03.911Z] [executor] Usage limit detectado
+[2026-09-10T22:21:03.912Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T22:36:06.691Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T22:36:09.536Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T22:36:09.537Z] [executor] Usage limit detectado
+[2026-09-10T22:36:09.537Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T22:51:13.828Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T22:51:16.837Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T22:51:16.838Z] [executor] Usage limit detectado
+[2026-09-10T22:51:16.838Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-10T23:06:23.369Z] [executor] Resumiendo sesión b113f568-d410-4c38-8afe-75e35030090d para step 6
+[2026-09-10T23:07:04.870Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0049-step6.log
+[2026-09-10T23:07:04.875Z] [verifier] Corriendo typecheck...
+[2026-09-10T23:07:08.229Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T23:07:08.229Z] [verifier] Corriendo tests...
+[2026-09-10T23:07:09.971Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T23:07:10.071Z] [reviewer] Diff vacío — step 6 aprobado sin invocar modelo
+[2026-09-10T23:07:10.071Z] [reviewer] APPROVED step 6
+[2026-09-10T23:07:10.311Z] [git] Step 6: sin cambios para commitear (no-op) — se mantiene HEAD e0295575
+[2026-09-10T23:07:10.313Z] [main] Step 6 completado y commiteado (e0295575)
+[2026-09-10T23:07:10.313Z] [main] Feature F-0049: steps COMPLETOS.
+[2026-09-10T23:07:10.647Z] [git] Merge OK: feat/F-0049-argos-fci-explorador-franja-de-referenci → main (local, sin push). Push a main y deploy = manual.
+[2026-09-10T23:07:10.652Z] [system] PROGRESS.md actualizado
+[2026-09-10T23:07:10.654Z] [release] typecheck...
+[2026-09-10T23:07:13.967Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-10T23:07:13.967Z] [release] tests...
+[2026-09-10T23:07:15.454Z] [release] build de prod...
+[2026-09-10T23:07:29.255Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-10T23:07:29.256Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-10T23:07:31.924Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-10T23:07:31.945Z] [adr] ADRs generados en esta feature:
+[2026-09-10T23:07:31.946Z]   ADR-0142 — KPIs del Explorador vía agregados PostgREST, no RPC [Supuesto del agente] ← REVISAR
+[2026-09-10T23:07:31.946Z]   ADR-0143 — Fallback a tna_contrato vía select('*') en getUltimaCaucion [Supuesto del agente] ← REVISAR
+[2026-09-10T23:07:31.946Z]   ADR-0144 — getFondosStats corre en Promise.all junto a getFondosPage [Supuesto del agente] ← REVISAR
+[2026-09-10T23:07:31.946Z] [main] F-0049 RELEASED (push hecho). STATE.json archivado como STATE.F-0049.archived.json
+[2026-09-10T23:07:31.949Z] [backlog] Filas marcadas done: AR-026

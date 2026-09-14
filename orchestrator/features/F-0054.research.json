@@ -1,0 +1,133 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Argos — aplicar rescates de FCI detectados automáticamente (consumo de lotes PPC/FIFO)",
+    "archivos": [
+      "src/features/fci/services/fciService.js",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/features/fci/components/FciRescatesList.jsx",
+      "src/features/fci/components/FciLotModal.jsx",
+      "supabase/migrations/016_fci_lots_migration.sql",
+      "supabase/migrations/025_fci_lots_tipo.sql",
+      "supabase/migrations/027_fci_lot_context_changes.sql",
+      "CLAUDE.md",
+      "CONTEXTO-traspaso-argos-2026-08-16.md"
+    ],
+    "patrones": [
+      "Capas: componentes finos → hooks (React Query o cálculo puro) → services (Supabase). No hay queries en componentes.",
+      "Los servicios exponen un objeto literal (ej. fciService = { async getLots(), ... }) con operaciones de escritura que mutan Supabase y luego el hook llama a loadLots() para refrescar estado.",
+      "El rescate se modela como mutaciones JSON persistidas en la fila fci_rescates.mutations: [{ lot_id, cp_consumidas, ... }] — clave para reversión y auditoría.",
+      "Cálculos monetarios con decimal.js (Decimal) importado dinámicamente dentro de los métodos de servicio; redondeo a 6 decimales de cuotapartes y umbral de agotamiento 0.000001.",
+      "Dispatcher central: fciService.applyRedemption(..., method='PPC'|'FIFO') — PPC default, FIFO explícito; el hook expone redeem() y alias redeemFIFO() para backward-compat.",
+      "Lotes con campo tipo: 'carry' | 'portfolio' y activo (boolean); el consumo filtra por portfolio_id + fci_id + tipo + activo ordenado por fecha_suscripcion, created_at (FIFO).",
+      "Revertir un rescate (deleteRescate → revertRedemption) devuelve cuotapartes a los lotes originales y reactiva el lote.",
+      "Formato de fechas: strings ISO 'fecha' de VCP y 'fecha_suscripcion'/'fecha_rescate' como fecha pura; joins a fci_master(nombre, moneda, sociedad_gerente)."
+    ],
+    "dependencias": [
+      "@supabase/supabase-js",
+      "@tanstack/react-query",
+      "decimal.js",
+      "date-fns",
+      "react-router-dom",
+      "lucide-react",
+      "recharts",
+      "papaparse",
+      "xlsx"
+    ],
+    "riesgos": [
+      "applyRedemptionFIFO NO valida que las cuotapartes a rescatar no excedan el total activo: devuelve remainingNotApplied sin error; applyRedemptionPPC sí lanza 'Cuotapartes a rescatar exceden el saldo activo.'",
+      "applyRedemptionFIFO no calcula P&L realizado ni notas (a diferencia de PPC que guarda vcpPPC/pnl en notes y pnl_lote por mutación).",
+      "El motor actual es invocado manualmente (UI); la 'detección automática' no existe aún: no encontré código de detección (grep de detect/automático/lote consumido = []) — [NO VERIFICADO] si hay backend/cron fuera de src (scripts/, supabase/functions/) que la detecte.",
+      "Las tablas y columnas (fci_lots, fci_rescates con mutations JSON, fci_lots.tipo) no tienen documentación SQL verificada en esta sesión — [NO VERIFICADO] detalle de migraciones 016/025/027 leídas parcialmente.",
+      "Caso case-sensitive en strings ya causó un bug grave en defiLoanService.ts (RATE_ASSET 'WARS' vs 'wars'); cuidar comparaciones de texto al filtrar/detectar.",
+      "Lotes de moneda USD requieren MEP para valorización ARS; un rescate automático deberá decidir VCP de salida (manual o último precio) ya que vcp_salida es null si no se provee.",
+      "Reversión (revertRedemption) hace N+1 UPDATEs y es no-transaccional desde el cliente; un pipeline automático debería considerar RPC/transacción Postgres (patrón ya usado en reclassify_fci_lot RPC)."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemption",
+        "lineas": "430-438",
+        "explicacion": "Dispatcher central que enruta el rescate según method: 'FIFO' → applyRedemptionFIFO, si no → applyRedemptionPPC (default PPC). Punto de integración natural para aplicar rescates detectados automáticamente.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionFIFO",
+        "lineas": "339-427",
+        "explicacion": "Consumo FIFO de lotes: trae lotes activos ordenados por fecha_suscripcion/created_at, consume cuotapartes hasta cubrir la redención, persiste mutaciones y crea la fila en fci_rescates con mutations.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionPPC",
+        "lineas": "445-529",
+        "explicacion": "Consumo PPC: factor = R/totalCp, reduce todos los lotes proporcionalmente, preserva invariante de VCP promedio, calcula pnl_lote por lote y pnlTotal; valida excedente de saldo.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "revertRedemption",
+        "lineas": "293-335",
+        "explicacion": "Invierte un rescate (borra fila y devuelve cuotapartes a los lotes originales según mutations[].cp_consumidas, reactivándolos) — requerido si la detección automática genera rescates erróneos.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "getRescates",
+        "lineas": "531-549",
+        "explicacion": "Lee historial de fci_rescates de un portfolio con join a fci_master, ordenado por fecha_rescate DESC — útil para reconciliar qué rescates ya se aplicaron y evitar duplicados.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "redeem",
+        "lineas": "374-387",
+        "explicacion": "Hook que envuelve fciService.applyRedemption y refresca lotes; firma redeem(fciId, cuotapartes, fechaRescate, vcpSalida, tipo='portfolio', method='PPC') — API a reutilizar desde una automatización.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "redeemFIFO",
+        "lineas": "389-395",
+        "explicacion": "Alias backward-compat que fija method='FIFO'; la UI actual de rescate pasa tipo según contexto (portfolio/carry).",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "deleteRescate",
+        "lineas": "397-404",
+        "explicacion": "Envuelve revertRedemption y refresca — el flujo de deshacer que una aplicación automática debería poder invocar.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "getActiveLots",
+        "lineas": "30-60",
+        "explicacion": "Carga en paralelo lotes activos/todos + rescates vía fciService.getActiveLots/getLots/getRescates — estado que alimenta la detección de discrepancias entre suscripciones y rescates.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/components/FciRescatesList.jsx",
+        "simbolo": "onDelete",
+        "lineas": "70-82",
+        "explicacion": "UI de historial de rescates que confirma antes de revertir: 'Las cuotapartes volverán automáticamente a sus lotes originales de suscripción (Revertir FIFO)'.",
+        "confianza": 0.9
+      },
+      {
+        "path": "CLAUDE.md",
+        "simbolo": "fciAdapter.js",
+        "lineas": "60-75",
+        "explicacion": "Documenta que solo los lotes tipo='portfolio' entran en totales bursátiles vía fciAdapter.js; FCI tiene hooks de motor (useFciLotEngine) y páginas FciPortfolio/FciExplorador/FciComparador lazy-loaded.",
+        "confianza": 0.7
+      },
+      {
+        "path": "CONTEXTO-traspaso-argos-2026-08-16.md",
+        "simbolo": "defiLoanService.ts",
+        "lineas": "10-25",
+        "explicacion": "Bug de case-sensitive (RATE_ASSET 'WARS' vs datos en 'wars') que rompía la lectura de snapshots — lección aplicable a cualquier match automático contra strings en Supabase.",
+        "confianza": 0.9
+      }
+    ],
+    "resumen": "El núcleo de consumo de lotes FCI ya existe y está maduro en `fciService.js` (applyRedemption como dispatcher con métodos FIFO y PPC, revertRedemption para deshacer, y persistencia de mutaciones JSON en fci_rescates), expuesto al frontend vía useFciLotEngine (redeem/redeemFIFO/deleteRescate). La tarea de 'aplicar rescates detectados automáticamente' se reduce a construir la detección (hoy inexistente en src — [NO VERIFICADO] backend/cron fuera de src) y conectar su salida a ese motor ya existente, respetando el patrón components→hooks→services/Supabase, decimal.js para montos, el campo tipo ('carry'|'portfolio') y los lotes ordenados FIFO por fecha_suscripcion. Riesgos principales: FIFO no valida excedente ni calcula P&L, operaciones cliente no transaccionales, y problemas de case-sensitive al matchear identificadores. Stack: React 18 + Vite + TS/JSX, Supabase, React Query, Tailwind; datos en tablas fci_lots/fci_rescates/fci_prices/fci_master bajo supabase/migrations/016/025/027."
+  }
+]

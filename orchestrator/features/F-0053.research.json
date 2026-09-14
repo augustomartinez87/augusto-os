@@ -1,0 +1,158 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: fci-sync — detectar suscripciones/rescates de FCI en el Informe Semanal de Alycbur y sincronizarlos a Supabase",
+    "archivos": [
+      "cauciones_parser.py",
+      "sync_cauciones.py",
+      "README.md",
+      "requirements.txt",
+      ".github/workflows/cauciones.yml",
+      ".gitignore"
+    ],
+    "patrones": [
+      "IMAP (Gmail App Password) -> descarga adjunto PDF -> parser pdfplumber -> dedup por fecha/operation_key -> upsert PostgREST a Supabase con Prefer=resolution=merge-duplicates -> notificación Telegram -> etiqueta Gmail 'GitHub Actions Processed'",
+      "Upsert idempotente sobre índice único (user_id, portfolio_id, operation_key) usando POST /rest/v1/<tabla> con params on_conflict",
+      "Parser: cortar el texto del PDF por un delimitador (p.ej. BOL <10 dígitos>), agrupar en dict por clave, y emitir dicts planos con operation_key estable tipo prefijo-numero (ej. CAU-<nro_boleto>)",
+      "Workflow GitHub Actions con cron ART diario (05:00 UTC = 02:00 ART) y workflow_dispatch con modo choice [daily, backfill, enrich, diag] pasando secrets como env",
+      "Manejo de dedup en lote: keys_existentes y fechas_existentes consultadas una vez con limit=100000 y filtro user_id/portfolio_id eq."
+    ],
+    "dependencias": [
+      "pdfplumber==0.11.9",
+      "requests>=2.31",
+      "imaplib (stdlib)",
+      "email (stdlib)",
+      "argparse/tempfile/datetime/re (stdlib)",
+      "GitHub Secrets: GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY, ARGOS_USER_ID, ARGOS_PORTFOLIO_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID"
+    ],
+    "riesgos": [
+      "[NO VERIFICADO] No existe NINGÚN código FCI en el repo: grep de FCI|fci|suscrip|rescate|informe no dio matches en *.py ni *.md — el README declara explícitamente que el parser actual ignora 'suscripciones/rescates FCI', así que fci-sync requiere parser nuevo desde cero, no una modificación trivial",
+      "Las funciones de sync (fetch_pdfs, existing_keys_and_dates, upsert) están hardcodeadas a la tabla 'cauciones', al asunto 'Comprobantes Alycbur SA' y al filtro de adjunto 'comprobantes' en el nombre del archivo; para el Informe Semanal FCI habrá que parametrizarlas o duplicarlas con otro subject/filtro/tabla",
+      "El cron actual es DIARIO; fci-sync apunta a un 'Informe Semanal' → requiere un nuevo schedule (p.ej. semanal) y ventana DAYS_BACK mayor o distinta",
+      "El parser actual filtra por boletos de caución (BOL <10 dígitos> / 'Operación de apertura/cierre de caución tomadora'); los comprobantes FCI probablemente tengan otra estructura/terminología (cuotapartes, VC, etc.) que no existe en el repo",
+      "Upsert asume índice único (user_id, portfolio_id, operation_key) en la tabla destino; si la tabla FCI no existe o no tiene ese índice, el POST falla. El repo no contiene migraciones SQL de Supabase [NO VERIFICADO: no hay archivos SQL visibles]",
+      "Los secrets de Gmail/Supabase son de un proyecto específico (wwzocpcolgdzkvcigchj, user dff40101-25e9-44ef-9586-c00a55ff41a7, portfolio f30b1bb8-6ee8-4b2f-8e18-ec22345c01cd); fci-sync debería apuntar a los mismos user/portfolio y probablemente una tabla nueva"
+    ],
+    "evidencia": [
+      {
+        "path": "README.md",
+        "simbolo": "Ignora dividendos, depósitos, compras/ventas y suscripciones/rescates FCI",
+        "lineas": "[NO VERIFICADO] sección 'Qué hace' (~líneas 25-35)",
+        "explicacion": "Prueba directa de que hoy NO hay soporte FCI: el pipeline caucion-sync descarta deliberadamente suscripciones/rescates de FCI. fci-sync es funcionalidad nueva y el README deberá actualizarse.",
+        "confianza": 0.9
+      },
+      {
+        "path": "cauciones_parser.py",
+        "simbolo": "parse_pdf",
+        "lineas": "51-148",
+        "explicacion": "Función central de extracción de una fila por operación desde PDFs de Alycbur: corta en chunks por BOL, agrupa apertura/cierre por firma y emite dicts planos con campos tipo fecha/capital/operation_key. Es el molde a replicar (o extender) para detectar suscripciones/rescates FCI en el Informe Semanal.",
+        "confianza": 0.95
+      },
+      {
+        "path": "cauciones_parser.py",
+        "simbolo": "parse_money",
+        "lineas": "15-17",
+        "explicacion": "Helper de parseo '28.155.380,76' -> 28155380.76 (formato ARS de Alycbur). Reutilizable tal cual para montos de FCI.",
+        "confianza": 0.95
+      },
+      {
+        "path": "cauciones_parser.py",
+        "simbolo": "parse_date",
+        "lineas": "19-20",
+        "explicacion": "Helper de parseo de fechas dd/mm/yyyy. Reutilizable para fechas de liquidación/suscripción/rescate.",
+        "confianza": 0.95
+      },
+      {
+        "path": "cauciones_parser.py",
+        "simbolo": "extract_text",
+        "lineas": "43-49",
+        "explicacion": "Extrae texto de todas las páginas con pdfplumber (única dependencia de parsing). Base para parsear el PDF del Informe Semanal.",
+        "confianza": 0.95
+      },
+      {
+        "path": "cauciones_parser.py",
+        "simbolo": "CAU-",
+        "lineas": "~112, ~128 (f'CAU-{bol_key}')",
+        "explicacion": "Prefijo del operation_key estable por operación. Define el patrón de clave idempotente que fci-sync debería imitar (p.ej. FCI-<algo estable>) para el upsert on_conflict.",
+        "confianza": 0.8
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "fetch_pdfs",
+        "lineas": "69-129",
+        "explicacion": "IMAP: busca mails FROM alycbur.report@gmail.com con subject fijo, baja adjuntos PDF que contengan 'comprobantes' en el nombre y hace dedup por filename. fci-sync necesita una variante que busque el mail del 'Informe Semanal' y su adjunto.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "ALYCBUR_SUBJECT",
+        "lineas": "35",
+        "explicacion": "Constante 'Comprobantes Alycbur SA' hardcodeada al asunto del mail diario de cauciones; el Informe Semanal FCI tendrá otro asunto → hay que parametrizar o crear constante propia.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "existing_keys_and_dates",
+        "lineas": "244-258",
+        "explicacion": "Consulta a /rest/v1/cauciones con select fecha_inicio,operation_key y filtros user_id/portfolio_id eq para dedup. Patrón a replicar contra la tabla FCI.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "upsert",
+        "lineas": "260-273",
+        "explicacion": "POST PostgREST con Prefer=resolution=merge-duplicates y on_conflict=user_id,portfolio_id,operation_key contra la tabla 'cauciones'. Mecanismo idempotente exacto a reusar (parametrizando la tabla) para sincronizar FCI a Supabase.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "sb_headers",
+        "lineas": "235-242",
+        "explicacion": "Headers de auth con SUPABASE_SERVICE_KEY (service_role saltea RLS). Reutilizable sin cambios.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "notify",
+        "lineas": "275-291",
+        "explicacion": "Resumen por Telegram con TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID opcionales; patrón de notificación del resumen diario a replicar para el sync FCI.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "mark_processed",
+        "lineas": "131-164",
+        "explicacion": "Etiqueta en Gmail los mails ya procesados ('GitHub Actions Processed'), idempotente; conviene reutilizar para el mail semanal del Informe.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "run_diag",
+        "lineas": "166-233",
+        "explicacion": "Modo diag que lista carpetas/remitentes/asuntos del buzón sin tocar Supabase; muy útil para descubrir el subject real del 'Informe Semanal' antes de escribir el filtro FCI.",
+        "confianza": 0.95
+      },
+      {
+        "path": "sync_cauciones.py",
+        "simbolo": "main",
+        "lineas": "375-451",
+        "explicacion": "Orquestación daily/backfill/enrich con dedup en lote y etiquetado final; esboza la estructura que deberá tener un sync_fci.py.",
+        "confianza": 0.9
+      },
+      {
+        "path": ".github/workflows/cauciones.yml",
+        "simbolo": "cron: \"0 5 * * *\"",
+        "lineas": "4-6",
+        "explicacion": "Schedule diario 05:00 UTC (02:00 ART). fci-sync semanal necesitará un workflow propio/clon con otro cron (p.ej. 0 5 * * 1) y su modo daily/backfill.",
+        "confianza": 0.9
+      },
+      {
+        "path": "requirements.txt",
+        "simbolo": "pdfplumber==0.11.9",
+        "lineas": "1",
+        "explicacion": "Única dependencia de parsing + requests; alcanzan para fci-sync salvo que el Informe Semanal sea otro formato.",
+        "confianza": 0.95
+      }
+    ],
+    "resumen": "El repo actual es exclusivamente 'caucion-sync' (Alycbur → Argos/Supabase) y no contiene NADA de FCI: el README dice explícitamente que el parser ignora suscripciones/rescates FCI, y los greps no encontraron rastro de esos términos en código. Para fci-sync el implementador debe crear un parser nuevo (reusando helpers parse_money/parse_date/extract_text y el patrón de cauciones_parser.py) y un sync nuevo que clone la arquitectura de sync_cauciones.py (IMAP → parse → dedup → upsert PostgREST → Telegram → etiqueta Gmail), parametrizando tabla, asunto del mail semanal, adjunto y schedule del workflow, ya que todo eso está hardcodeado a cauciones/comprobantes diarios."
+  }
+]

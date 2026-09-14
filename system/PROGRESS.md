@@ -1148,3 +1148,326 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0045/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-07 — F-0046 completado
+
+## Feature F-0046
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/fci/services/mercadoService.js`, agregar un parámetro `groupByFund` (default true) a `getFondosPage` que seleccione `.from('fci_explorador_grupos')` cuando está activo y `.from('fci_explorador')` cuando no, reutilizando el mismo builder de filtros/orden/paginación sin duplicar lógica. (2c827fd3)
+- [x] Step 2: En `src/features/fci/services/fciService.js` / constants, exponer/normalizar los campos nuevos de la vista agrupada (`fondo_base`, `n_clases`, `clases_hermanas`) para que el consumidor los reciba tipados y con shape consistente con la vista plana. (4179dc08)
+- [x] Step 3: En `FciExplorador.jsx`, agregar el toggle 'Ver 1 clase por fondo' (on por defecto) cerca de los filtros existentes de moneda/categoría/gestora, guardarlo en estado y pasarlo a `loadPage`/`getFondosPage` como `groupByFund`. (60aa2d19)
+- [x] Step 4: En `FciExplorador.jsx`, implementar la fila expandible: cuando `groupByFund` está activo y `n_clases > 1`, mostrar un control chevron que expande y lista `clases_hermanas` (nombre + TNA) sin repetir el resto de las columnas; reutilizar cualquier patrón de expandible ya existente en el proyecto antes de crear uno nuevo. (2e2e334d)
+- [x] Step 5: Agregar tests para `getFondosPage({ groupByFund: true })` que verifiquen que apunta a `fci_explorador_grupos` y que `groupByFund: false` apunta a `fci_explorador`, y que los filtros de moneda, clasificación, gestora y búsqueda se aplican igual en ambos modos. (bf260055)
+- [x] Step 6: Correr typecheck y la suite de tests, y dejar el árbol limpio de errores de lint/typecheck. (bf260055)
+
+### Decisiones (ADR)
+- ADR-0118 — Default de groupByFund = true (vista agrupada por defecto) [Instrucción de Augusto]
+- ADR-0119 — normalizeFondo va en mercadoService, no en fciService [Supuesto del agente] **⚠ REVISAR**
+- ADR-0120 — clases_hermanas excluye la clase representativa (no incluye todas) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0046/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-08 — F-0047 completado
+
+## Feature F-0047
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/mercadoService.js, agregar un helper `getLatestUniverseDate()` que consulte a Supabase la fecha hábil más reciente del universo de fondos activos (MAX sobre la fecha de último precio / rend_updated_at expuesta por las vistas), calculada dinámicamente y nunca hardcodeada; devolver la fecha normalizada y manejar el caso sin datos (null). (80bb3dc2)
+- [x] Step 2: En src/features/fci/constants.js, exportar la constante de criterio de stale (p. ej. flag `EXCLUDE_STALE_DEFAULT` y el nombre del campo de fecha de último precio usado para comparar) para no duplicar strings mágicos entre service y tests, reutilizando el shape existente sin tocar FCI_GRUPO_DEFAULTS/FCI_CLASIFICACION. (59bf69b2)
+- [x] Step 3: En `getFondosPage` de mercadoService.js, agregar el parámetro `excludeStale` (default true) que, usando la fecha del universo del helper, filtre en la query paginada las clases cuyo último precio no coincida con esa fecha; aplicar el filtro de forma coordinada con el parámetro `groupByFund` existente (F-0046) para ambos modos plano/agrupado, manteniendo eq/or/sort/range y que el conteo total y las páginas reflejen el universo ya filtrado (sin fondos fantasma ni offsets rotos). (6bf54bc0)
+- [x] Step 4: Asegurar que 1D/7D/30D/TNA y los placeholders de YTD/1Y (cuando rend_ytd/rend_1y son NULL) sigan comportándose exactamente igual tras el filtro: no recalcular YTD/1Y client-side; verificar que normalizeFondo siga produciendo el shape canónico para las filas ya filtradas. (84391aa5)
+- [x] Step 5: En src/pages/FciExplorador.jsx, cablear el ranking curado: pasar `excludeStale: true` a `getFondosPage` para que el listado excluya (no marque) los cierres stale por defecto, respetando el toggle 'Ver 1 clase por fondo' ya existente y sin agregar queries directas en el componente. (a230a08b)
+- [x] Step 6: Agregar tests en src/features/fci/services/__tests__ (extendiendo mercadoService.getFondosPage.test.js y/o un nuevo test del helper): (a) un fondo con último precio desactualizado no aparece en el resultado; (b) con `groupByFund: true`, un fondo cuya clase default sería stale pero tiene una clase hermana fresca queda representado por la hermana fresca y no desaparece; (c) la paginación (conteo total y cantidad de páginas) refleja el universo ya filtrado; (d) `getLatestUniverseDate` calcula la fecha máxima dinámicamente. (120bdba2)
+- [x] Step 7: Correr typecheck y la suite de tests (vitest) y dejar todo verde, corrigiendo cualquier error de lint/tipos introducido por los pasos anteriores. (120bdba2)
+
+### Decisiones (ADR)
+- ADR-0121 — Fuente de MAX(rend_updated_at): fci_explorador en lugar de fci_explorador_grupos [Supuesto del agente] **⚠ REVISAR**
+- ADR-0122 — getLatestUniverseDate invocado vía mercadoService (no supabase inline) para habilitar spy en tests [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0047/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-09 — F-0053 completado
+
+## Feature F-0053
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `fci_parser.py` con `parse_pdf(path) -> list[dict]` usando pdfplumber (reusar el patrón de extract_text/parse_money/parse_date de `cauciones_parser.py`). Extraer de la sección 'Resumen de Movimientos' cada movimiento liquidado, emparejando cada línea 'Solicitud de suscripción/rescate de FCI' con su 'Liquidación de suscripción/rescate' siguiente por comprobante DOC→CL cercano en el mismo bloque de subcuenta; saltear solicitudes sin línea CL. Devolver por movimiento {tipo: 'suscripcion'|'rescate', cafci_id: int (número tras el guion en CAFCI<n>-<cafci_id>), fecha: date, comprobante: str (ej 'CL 2026007601'), cuotapartes: Decimal, vcp: Decimal, monto: Decimal}. (af998916)
+- [x] Step 2: Crear `fci_sync.py` clonando la estructura de `sync_cauciones.py`: reusar `env()`, `sb_headers()`, patrón `--mode daily|backfill`, ventana DAYS_BACK y la lógica IMAP de descarga de adjuntos, pero con constante de asunto exacto 'Informe Semanal de Operaciones', remitente `alycbur.report@gmail.com` y filtro de adjunto `Resumen-Completo_*.pdf`. Pasar el PDF descargado a `fci_parser.parse_pdf`. Reusar las mismas env vars existentes (GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY, ARGOS_USER_ID, ARGOS_PORTFOLIO_ID, TELEGRAM_*), sin inventar nuevas. (3f9b1699)
+- [x] Step 3: Implementar en `fci_sync.py` la resolución de `fci_id`: por cada movimiento hacer `GET .../fci_master?cafci_id=eq.<n>&select=id`; si no hay match, loguear `[fci-sync] WARNING: cafci_id <n> sin match en fci_master, salteando movimiento <comprobante>` y saltear ese movimiento sin abortar el resto de la corrida. (46ff81a7)
+- [x] Step 4: Implementar en `fci_sync.py` el upsert idempotente de suscripciones a `fci_lots` vía POST PostgREST con `Prefer: resolution=merge-duplicates` y `on_conflict=external_ref`, payload {user_id, portfolio_id, fci_id, fecha_suscripcion: fecha, vcp_entrada: vcp, cuotapartes, capital_invertido: monto, activo: true, tipo: 'portfolio', external_ref: comprobante}. Nunca escribir una fila sin `external_ref` seteado. (1e531183)
+- [x] Step 5: Implementar en `fci_sync.py` el upsert idempotente de rescates a `fci_rescates` vía POST PostgREST con `Prefer: resolution=merge-duplicates` y `on_conflict=external_ref`, payload {user_id, portfolio_id, fci_id, fecha_rescate: fecha, cuotapartes, vcp_salida: vcp, monto_rescatado: monto, mutations: [], external_ref: comprobante}. Dejar `mutations` siempre en `[]` (intencional, no calcular FIFO/PPC) y nunca escribir sin `external_ref`. (2ea7121d)
+- [x] Step 6: Agregar a `fci_sync.py` el etiquetado Gmail de mails procesados reusando la lógica de `mark_processed()` de `sync_cauciones.py` (extraerla a un módulo compartido `gmail_common.py` o duplicarla), usando una label propia (ej. 'FCI Sync Processed') para no reprocesar UIDs ya vistos. (4989c1c9)
+- [x] Step 7: Agregar a `fci_sync.py` la notificación por Telegram (mismo bot/formato que `sync_cauciones.py`) con el resumen de la corrida: cantidad de suscripciones y rescates nuevos sincronizados y cuántos movimientos se saltaron por fondo no reconocido. (2cbba70b)
+- [x] Step 8: Crear `.github/workflows/fci-sync.yml` (archivo nuevo, sin tocar `cauciones.yml`) que corra `python fci_sync.py --mode daily` con un cron adecuado y `workflow_dispatch`, pasando los mismos secrets que `cauciones.yml` (GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY, ARGOS_USER_ID, ARGOS_PORTFOLIO_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) como env. (d23b86a2)
+- [x] Step 9: Agregar `pytest` a un `requirements-dev.txt` nuevo (no a `requirements.txt`) y crear tests para `fci_parser.parse_pdf` usando un fixture PDF real en `tests/fixtures/`, cubriendo: extracción correcta de una suscripción, extracción correcta de un rescate, y un movimiento cuyo código CAFCI no matchea ningún `fci_master.cafci_id` (debe loguearse y no romper el parseo del resto). (7c6468a9)
+
+### Decisiones (ADR)
+- ADR-0123 — Orden de columnas en línea de liquidación (cuotapartes → vcp → monto) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0124 — Matching FIFO sin verificar tipo (suscripcion vs rescate) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0125 — parse_money devuelve Decimal (no float como en cauciones_parser) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0126 — DAYS_BACK = 10 para el modo daily semanal [Supuesto del agente] **⚠ REVISAR**
+- ADR-0127 — on_conflict en upsert usa (user_id, portfolio_id, external_ref) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0128 — resolve_fci_id con caché por cafci_id, no por movimiento [Supuesto del agente] **⚠ REVISAR**
+- ADR-0129 — `on_conflict=external_ref` aplicado también a `upsert_rescates` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0130 — No extraer gmail_common.py: la duplicación ya existía y tocar sync_cauciones.py está fuera de alcance [Supuesto del agente] **⚠ REVISAR**
+- ADR-0131 — Cron semanal lunes 09:00 UTC para fci-sync [Supuesto del agente] **⚠ REVISAR**
+- ADR-0132 — PDFs de fixture generados en conftest, no commiteados [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0053/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-09 — F-0055 completado
+
+## Feature F-0055
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En fci_parser.py, identificar el header/texto que delimita el inicio de la seccion 'Fondos de Inversion' y restringir parse_pdf() para que arranque a extraer movimientos solo desde ahi, descartando las menciones sueltas de Liquidacion que aparecen en el resumen general de arriba (zona sin Subcuenta/Comitente). (281bf5ce)
+- [x] Step 2: En parse_pdf(), agregar la validacion de tipo en el emparejamiento Solicitud->Liquidacion: comparar liq_m.group(1) contra pending['tipo'] antes de agregar el movimiento; si difieren, loguear '[fci-parser] WARNING: tipo mismatch en <comprobante> -- Solicitud dice <X>, Liquidacion dice <Y>, salteando' y NO agregar ese movimiento a results. (bd6b70a0)
+- [x] Step 3: En parse_pdf(), agregar deduplicacion por comprobante (external_ref) antes de retornar results: detectar comprobantes repetidos con valores de cuotapartes/vcp/monto distintos, loguear WARNING, y quedarse con una unica fuente de verdad por comprobante (la de la seccion Fondos de Inversion) como chequeo de seguridad redundante. (236bb4bd)
+- [x] Step 4: En conftest.py, agregar una fixture que genere un PDF sintetico (mismo patron que F-0053/ADR-0132, sin datos reales) reproduciendo la estructura del PDF real: una mencion suelta de Liquidacion de un tipo en una zona sin Subcuenta/Comitente, seguida mas abajo por la seccion Fondos de Inversion con el par Solicitud/Liquidacion correcto del otro tipo. (0f1a511e)
+- [x] Step 5: Agregar test que use esa fixture y verifique que parse_pdf() (a) no devuelve ningun comprobante repetido con montos distintos, (b) devuelve el tipo que declara la propia linea de Liquidacion de la seccion Fondos de Inversion, y (c) descarta la mencion suelta del resumen general de arriba. (b3a1fc3f)
+- [x] Step 6: Agregar test especifico para el bug de tipo mismatch: cuando el tipo de la Solicitud difiere del de la Liquidacion emparejada, parse_pdf() no agrega el movimiento y emite el WARNING esperado. (cd64de25)
+- [x] Step 7: Correr typecheck y la suite de tests completa, y corregir cualquier error hasta que pasen sin errores. (cd64de25)
+
+### Decisiones (ADR)
+- ADR-0133 — Anchor de corte: prefijo "fondos de inver" en vez del texto exacto con acento [Supuesto del agente] **⚠ REVISAR**
+- ADR-0134 — Deduplicación silenciosa para comprobantes con valores idénticos [Supuesto del agente] **⚠ REVISAR**
+- ADR-0135 — Fixture de F-0055 usa par Solicitud/Liquidacion en el resumen general, no una Liquidacion suelta [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0055/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-10 — F-0054 completado
+
+## Feature F-0054
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/fciService.js, refactorizar applyRedemptionPPC y applyRedemptionFIFO para extraer una función interna compartida (ej. computeAndApplyLotConsumption(portfolioId, fciId, cuotapartes, tipo, method)) que calcule el consumo de lotes con decimal.js, actualice fci_lots activas y devuelva el array de mutations, SIN insertar en fci_rescates. Ambas funciones existentes deben seguir comportándose igual (insertando su fila como hoy) reusando esta función; mantener la validación de excedente de PPC y agregar la misma validación de saldo insuficiente al camino FIFO para que también lance error en vez de aplicar consumo parcial. (756430f7)
+- [x] Step 2: En src/features/fci/services/fciService.js, agregar applyPendingRescate(rescateId, method = 'PPC'): lee la fila de fci_rescates por id, valida que mutations esté vacío (y external_ref no-null), corre la función compartida de consumo del paso anterior contra fci_id/cuotapartes/tipo de esa fila, y hace UPDATE de esa MISMA fila seteando mutations con el resultado — nunca un insert nuevo. Si el saldo activo no alcanza, propagar el error sin tocar fci_lots ni la fila. (0a229e32)
+- [x] Step 3: En src/features/fci/services/fciService.js, agregar getPendingRescates(portfolioId): consulta fci_rescates donde external_ref no es null y mutations es un array vacío (usar la sintaxis correcta de supabase-js para jsonb según la versión instalada; filtrar client-side si hace falta), con join a fci_master para nombre/moneda/sociedad_gerente, devolviendo fecha, cuotapartes, vcp_salida, monto_rescatado y fci_id. (bd740c7d)
+- [x] Step 4: En src/features/fci/hooks/useFciLotEngine.js, exponer los pendientes y la acción: cargar getPendingRescates en el estado (junto al load existente de lotes/rescates) y agregar applyPending(rescateId, method) que envuelve fciService.applyPendingRescate, refresca lotes/rescates/pendientes al terminar y propaga el error de saldo insuficiente para que la UI pueda mostrarlo. (dd51bfd6)
+- [x] Step 5: Agregar una sección/alert 'Rescates detectados pendientes de aplicar' en la UI de FCI (arriba de la tabla de lotes/rescates existente, siguiendo el patrón visual de alerts/pendientes ya usado en Argos), que se renderiza SOLO cuando hay al menos un pendiente. Cada fila muestra nombre del fondo, fecha, cuotapartes, vcp_salida y monto_rescatado, con un botón 'Aplicar' por fila que llama a applyPending, maneja estado de carga, y muestra el error de cuotapartes insuficientes de forma clara (inline o toast según el patrón existente). No mostrar TNA/tasa en copy nuevo. (b1bc633e)
+- [x] Step 6: Agregar tests en src/features/fci/services/__tests__ para: (a) applyPendingRescate con lotes activos suficientes puebla mutations igual que un rescate nuevo con los mismos parámetros y actualiza fci_lots igual; (b) caso de cuotapartes insuficientes lanza error y NO modifica ningún lote ni la fila; (c) getPendingRescates no devuelve rescates cargados a mano (mutations ya poblado). Correr typecheck y tests y corregir lo que rompa. (1576cb85)
+
+### Decisiones (ADR)
+- ADR-0136 — Validación FIFO antes del loop, no después [Supuesto del agente] **⚠ REVISAR**
+- ADR-0137 — `tipo` leído desde fci_rescates (columna de F-0053) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0138 — Filtro de mutations = [] aplicado client-side [Supuesto del agente] **⚠ REVISAR**
+- ADR-0139 — Mock de Supabase con chain thenable único por llamada a `from()` [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0054/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-10 — F-0056 completado
+
+## Feature F-0056
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/fciService.js, dentro de applyPendingRescate, reemplazar el argumento `rescate.tipo` que se pasa a _consumeLots por el literal `'portfolio'`, y agregar un comentario explicando por qué (los rescates detectados por F-0053 salen del informe semanal de Alycbur = tenencia real del ALyC = contexto portfolio, nunca carry; fci_rescates no tiene columna `tipo`). (985870cc)
+- [x] Step 2: En src/features/fci/services/__tests__/fciService.pendingRescates.test.js, quitar el campo inventado `tipo: 'portfolio'` del fixture PENDING_RESCATE para que refleje la forma real de la fila de fci_rescates. (985870cc)
+- [x] Step 3: En src/features/fci/services/__tests__/fciService.pendingRescates.test.js, extender el mock de Supabase (makeChain) para capturar los argumentos pasados a .eq() sobre fci_lots, y agregar una aserción explícita que verifique que applyPendingRescate llama a .eq('tipo', 'portfolio') y NO con undefined. (810f1894)
+- [x] Step 4: Verificar que getPendingRescates (fciService.js) no lea ni asuma una columna `tipo` en fci_rescates; si la lee, corregirlo para no depender de esa columna inexistente. No modificar si ya está correcto. (810f1894)
+- [x] Step 5: Correr typecheck (tsc) y la suite de tests de vitest para confirmar que todo pasa sin errores. (810f1894)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0056/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-10 — F-0048 completado
+
+## Feature F-0048
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear un componente Tooltip accesible reutilizable en src/components/ui (soporta hover + focus por teclado, usa tokens argos-*, evita ser clipeado por overflow) y exportarlo desde src/components/ui/index.js. Debe recibir children (trigger) y un texto/contenido explicativo, y ser seguro ante errores de render (compatible con ErrorBoundary). (79779b31)
+- [x] Step 2: En src/pages/FciExplorador.jsx, agregar un affordance de tooltip (icono Info/HelpCircle de lucide-react) junto al label 'TNA (30D)' dentro del componente SortHeader/su <span>, usando el Tooltip creado, con texto corto tipo 'TNA anualizada calculada sobre la variación de los últimos 30 días'. Verificar que el header sigue disparando toggleSort('tna') al hacer click y que el tooltip es accesible por teclado sin bloquear el onClick de ordenamiento. (e941c5ec)
+- [x] Step 3: Correr typecheck, lint y la suite de tests; corregir cualquier error introducido por los cambios anteriores sin modificar el cálculo de TNA ni la capa de datos. (e941c5ec)
+
+### Decisiones (ADR)
+- ADR-0140 — Tooltip usa createPortal hacia document.body para escapar overflow-x-auto [Supuesto del agente] **⚠ REVISAR**
+- ADR-0141 — Orden del icono HelpCircle entre label y ArrowUpDown [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0048/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-10 — F-0049 completado
+
+## Feature F-0049
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/mercadoService.js, agregar `getFondosStats(filtros)` que reciba los mismos filtros que getFondosPage (moneda, clasificacion_cod, sociedad_gerente, search) + el filtro stale (universeDate vía getLatestUniverseDate) y devuelva `{ total, tnaPromedio, mejorTna }` mediante una query agregada contra fci_explorador (o fci_explorador_grupos según groupByFund), replicando exactamente la misma cadena de .eq/.or/.gte que getFondosPage para no divergir de la tabla. (7e24ecf7)
+- [x] Step 2: En src/features/fci/services/mercadoService.js (o un pequeño helper nuevo en features/fci/services), agregar `getUltimaCaucion()` de solo lectura que consulte la tabla `cauciones` con `.order('fecha_inicio', {ascending:false}).limit(1).maybeSingle()` y devuelva `{ tna, fecha }` a partir de tna_real (fallback tna_contrato), o `null` si no hay filas. No modificar financingService.getCauciones ni el módulo de Financiación. (d98f81ce)
+- [x] Step 3: Construir un componente de franja de KPIs (p. ej. src/features/fci/components/ExploradorStatsBar.jsx) que reciba `{ total, tnaPromedio, mejorTna, caucion, loading }` y renderice 4 métricas usando KpiCard de src/components/ui (casing KpiCard.jsx). La métrica de caución debe etiquetarse honestamente como 'Tu última caución' (no 'en vivo' ni tasa de mercado), mostrar la fecha de la operación, y renderizar un estado vacío claro ('Sin cauciones registradas') cuando caucion es null, sin mostrar undefined/NaN. (10b2375b)
+- [x] Step 4: En src/pages/FciExplorador.jsx, cablear los nuevos datos: invocar getFondosStats con los filtros activos (recalculando cuando cambian moneda, categoría, gestora o búsqueda) y getUltimaCaucion al montar; guardar los resultados en estado y renderizar <ExploradorStatsBar/> arriba de la tabla. Manejar estados de carga/error sin romper el render de la tabla existente. (10b2375b)
+- [x] Step 5: En src/features/fci/services/__tests__/, agregar tests para getFondosStats (caso con filtros activos vs. sin filtros, verificando que la cadena de query replica la de getFondosPage) y para getUltimaCaucion (caso con caución existente y caso sin cauciones → null), mockeando el cliente de Supabase siguiendo el patrón de makeBuilder/vi.mock existente. (e0295575)
+- [x] Step 6: Correr typecheck y la suite de tests (incluyendo mercadoService.getFondosPage.test.js para confirmar que no se rompieron las aserciones de la cadena fluente) y resolver cualquier error de lint/tipado introducido. (e0295575)
+
+### Decisiones (ADR)
+- ADR-0142 — KPIs del Explorador vía agregados PostgREST, no RPC [Supuesto del agente] **⚠ REVISAR**
+- ADR-0143 — Fallback a tna_contrato vía select('*') en getUltimaCaucion [Supuesto del agente] **⚠ REVISAR**
+- ADR-0144 — getFondosStats corre en Promise.all junto a getFondosPage [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0049/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-10 — F-0050 completado
+
+## Feature F-0050
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/mercadoService.js, agregar una función exportada (p. ej. getFondosCountByCategoria) que devuelva un conteo de fondos por clasificacion_cod respetando los filtros activos (moneda, sociedad_gerente, search) y el filtro stale. Debe reutilizar applyFondosFilters y getLatestUniverseDate, y seleccionar la vista según groupByFund (fci_explorador_grupos vs fci_explorador), igual que getFondosPage/getFondosStats. Preferir una sola query agrupada por clasificacion_cod si PostgREST lo permite sin RPC nuevo; si no, disparar N queries count-only en paralelo. Nunca traer todas las filas al cliente para contar. Devolver un shape estable tipo { [cod]: number } o array normalizado. (ad6808cf)
+- [x] Step 2: En src/features/fci/services/__tests__/, agregar tests unitarios para getFondosCountByCategoria con mock de supabase: verificar que aplica la misma cadena de filtros que getFondosPage (moneda, gestora, search, stale), que respeta groupByFund seleccionando la vista correcta, que sin filtros opcionales no emite .eq/.or de más, y que los conteos reflejan combinaciones de filtros. Mantener consistencia con los contratos de los tests existentes de getFondosStats/getFondosPage. (9911de70)
+- [x] Step 3: En src/pages/FciExplorador.jsx, reemplazar el array CATEGORIAS hardcodeado (5 entradas) por uno derivado de FCI_CLASIFICACION importado desde src/features/fci/constants.js, incluyendo un chip 'Todos' (valor null). No duplicar labels; iterar sobre el map como única fuente de verdad. Este paso solo prepara la fuente de datos de las opciones, sin cambiar aún el control visual. (fc1b7bf5)
+- [x] Step 4: En src/pages/FciExplorador.jsx, agregar el estado y el efecto de carga de los conteos por categoría: invocar getFondosCountByCategoria dentro del mismo flujo reactivo (useCallback/useEffect) que ya recarga la data cuando cambian los filtros (moneda, gestora, búsqueda con su debounce, groupByFund, stale), guardando el resultado en estado local. Cuidar las dependencias para no generar loops de refetch. (42dfbb0f)
+- [x] Step 5: En src/pages/FciExplorador.jsx, reemplazar el <select> de categoría por una fila de chips (uno por cada categoría de FCI_CLASIFICACION más 'Todos'), siguiendo el mismo patrón visual y de estado que el selector de moneda ARS/USD ya presente en la pantalla (~líneas 183-193). Cada chip debe mostrar el label + el contador entre paréntesis, setear clasificacion y resetear page=0 al clickear, y distinguir visualmente el chip activo con el mismo tratamiento (bg-primary/10 border-primary/40 text-primary) usado por el toggle de moneda. (28b3b092)
+- [x] Step 6: Correr typecheck y la suite de tests (vitest) del proyecto y corregir cualquier error o test roto derivado de los cambios en mercadoService.js y FciExplorador.jsx hasta que todo pase sin errores. (28b3b092)
+
+### Decisiones (ADR)
+- ADR-0145 — Conteo por categoría vía GROUP BY implícito de PostgREST (single query) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0146 — `getFondosCountByCategoria` no acepta `clasificacion_cod` como filtro [Supuesto del agente] **⚠ REVISAR**
+- ADR-0147 — Orden de las categorías en CATEGORIAS: natural del map vs. orden anterior [Supuesto del agente] **⚠ REVISAR**
+- ADR-0148 — getFondosCountByCategoria dentro del Promise.all de loadPage, no en callback separado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0149 — Chips de categoría en fila separada, no inline en el filter strip [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0050/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-11 — F-0051 completado
+
+## Feature F-0051
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/components/, crear un componente de combobox de gestora buscable (input de texto + lista filtrable + selección + limpiar), reusando el patrón interno de FciSearchCombobox.jsx pero operando sobre una lista estática de gestoras pasada por props (los 63 valores de sociedad_gerente). No agregar librerías nuevas; seguir el estilo visual existente y aceptar props value/onChange/options. (323e5cbb)
+- [x] Step 2: En src/pages/FciExplorador.jsx, reemplazar el <select> plano de gestora por el nuevo combobox buscable, poblándolo con las gestoras que ya provee mercadoService.getAdministradoras() (sin duplicar la fuente de datos). Mantener el estado 'administradora' y el reset de page a 0 al cambiar, y asegurar que el filtro siga pasando por sharedFilters/applyFondosFilters sin cambiar el contrato de servicios. (570c0b42)
+- [x] Step 3: En src/pages/FciExplorador.jsx, agregar un contador de resultados visible ('N fondos encontrados') cerca de los filtros y arriba de la tabla, reusando el 'total' que ya devuelve getFondosPage (reflejando el total real, no solo la página actual). No introducir nuevas llamadas de servicio. (3e6317fd)
+- [x] Step 4: En src/pages/FciExplorador.jsx, agregar un botón 'Limpiar filtros' que resetee moneda, clasificacion, administradora, searchInput/search y page a sus valores iniciales en un solo click, siguiendo los defaults existentes de cada estado. (267545a4)
+- [x] Step 5: En src/pages/FciExplorador.jsx, agregar un texto de ayuda inline corto debajo del input de búsqueda explicando que se puede buscar por nombre o ticker, siguiendo el patrón visual/tipográfico ya usado en el explorador. (c455415f)
+- [x] Step 6: Agregar/actualizar tests unitarios: cubrir el nuevo componente combobox de gestora (filtrado por texto y selección) y ajustar cualquier test de FciExplorador afectado. Verificar que typecheck, lint y la suite de vitest (incluyendo los tests existentes de mercadoService) pasen sin errores. (1d258012)
+
+### Decisiones (ADR)
+- ADR-0150 — GestoraCombobox cierra dropdown al seleccionar en vez de mantenerlo abierto [Supuesto del agente] **⚠ REVISAR**
+- ADR-0151 — GestoraCombobox con filtrado client-side sobre lista pre-cargada [Supuesto del agente] **⚠ REVISAR**
+- ADR-0152 — Botón limpiar filtros visible condicionalmente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0153 — Texto de ayuda como `<p>` estático en lugar de `Tooltip` con `HelpCircle` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0154 — Tests de GestoraCombobox como lógica pura (sin jsdom) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0051/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-11 — F-0052 completado
+
+## Feature F-0052
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/pages/FciExplorador.jsx, aplicar alineación tabular a las celdas numéricas: modificar los helpers pctCell y tnaCell (y los headers correspondientes) para usar font-variant-numeric tabular-nums (clase Tailwind `tabular-nums` o la clase `.num` definida en src/index.css) en las columnas 1D/7D/30D/YTD/1Y/TNA, reemplazando/complementando el font-mono actual para que los dígitos tengan igual ancho. (378c92bd)
+- [x] Step 2: Agregar un helper subtractDays(n) (o reutilizar el existente en utils si ya hay uno) que devuelva la fecha ISO de hace n días, para acotar el rango de precios del sparkline a ~35 días. Ubicarlo en el módulo de utilidades de fechas del repo o inline en el servicio, exportado y con test unitario mínimo. (16c3a9c8)
+- [x] Step 3: En FciExplorador.jsx, dentro de loadPage (o en un efecto que dispare tras cargar la página), tomar los ids de los fondos de la página actual y llamar a mercadoService.getPricesBatch(ids, subtractDays(35)); mapear el resultado a un objeto en estado { [fciId]: number[] } con los vcp ordenados por fecha ascendente. En modo agrupado, tomar la serie de la clase representativa (STALE_DATE_FIELD/rend_updated_at). Acotar SIEMPRE al universo visible de la página, no al total. (1f28213e)
+- [x] Step 4: Agregar la columna 'Tendencia' a la tabla del Explorador: un nuevo <th> con el estilo de header del proyecto (text-[10px] font-bold uppercase tracking-wider text-ink-faint, no ordenable) y su celda <td> correspondiente en cada fila, ubicada de forma consistente con las demás columnas. (1f28213e)
+- [x] Step 5: Renderizar en la celda 'Tendencia' el componente reutilizable Sparkline (importado de @/components/ui) con data={vcps del fondo} height={28}, eligiendo el color según el signo del rendimiento del período de referencia (mismo criterio profit/loss de pctCell/tnaCell: text-profit >= 0, text-loss < 0). Envolver el Sparkline en un contenedor de tamaño fijo (ej. div w-[72px] h-[28px]) que reserve el espacio cuando el fondo tenga menos de 2 puntos y Sparkline devuelva null (mismo patrón que MobilePositionsList.jsx), evitando saltos de layout. NO modificar Sparkline.jsx. (787e01b6)
+- [x] Step 6: Verificar y ajustar que la tabla conserve el scroll horizontal en mobile con la nueva columna: el contenedor de la tabla debe mantener overflow-x-auto y el sparkline (ancho fijo) no debe forzar reflow ni romper el scroll. Ajustar clases de contenedor si hiciera falta. (787e01b6)
+- [x] Step 7: Agregar/actualizar tests unitarios: cubrir el mapeo de getPricesBatch a series por fondo (orden por fecha, fondos sin historial suficiente → sin serie / contenedor vacío) y el criterio de color por signo. Correr typecheck y lint asegurando que todo pase sin errores. (c3cb6ec7)
+
+### Decisiones (ADR)
+- ADR-0155 — Color del sparkline derivado de rend_30d [Supuesto del agente] **⚠ REVISAR**
+- ADR-0156 — Período de referencia para el color del sparkline: rend_30d [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0052/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-12 — F-0057 completado
+
+## Feature F-0057
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En scripts/cafci_sync.py, dentro de daily(): además del batch de rows para fci_prices, construir en el mismo bucle (mismo idx) un batch de filas {id: fci_master_id, patrimonio: <patrimonio_act>} parseando patrimonio_act con pd.to_numeric(..., errors='coerce') y omitiendo del batch los fondos con NaN (no pisar valor previo con null). Upsertear ese batch por lotes contra fci_master con on_conflict='id' y el mismo BATCH_SIZE=500 que ya usa fci_prices. Verificar con --dry-run que no escribe en prod. (744bc350)
+- [x] Step 2: Agregar un formateador de montos grandes (AUM/patrimonio) reutilizable — p.ej. formatAum(value) usando Intl.NumberFormat con notación compacta tipo '$ 1.240 M' — que devuelva un placeholder claro ('—') cuando el valor es null/undefined/no numérico, y nunca undefined/NaN. Ubicarlo junto a los otros formateadores del Explorador (mercadoService.js o util correspondiente). (d4cbc9bc)
+- [x] Step 3: En getFondosPage (mercadoService.js), agregar la entrada 'aum': 'patrimonio' al mapa SORT_COL, siguiendo el patrón de las claves existentes (tna/1d/7d/etc), sin tocar getFondosStats. (8bb6a60b)
+- [x] Step 4: En FciExplorador.jsx, agregar una columna nueva 'AUM' con <SortHeader label="AUM" sortK="aum" /> siguiendo exactamente el patrón de las columnas existentes (pctCell/tnaCell como referencia de estilo), renderizando fondo.patrimonio a través del formateador nuevo, mostrando el placeholder '—' cuando es null/undefined tanto en modo lista como en modo agrupado. (f8ff6979)
+- [x] Step 5: Agregar/actualizar tests unitarios: cubrir el formateador de AUM (casos: null, cero, número grande con notación compacta) y verificar que SORT_COL.aum mapea a 'patrimonio'. Asegurar que typecheck y tests pasan. (38dda002)
+
+### Decisiones (ADR)
+- ADR-0157 — Mismo filtro de fecha/inactivo para patrimonio que para VCP [Supuesto del agente] **⚠ REVISAR**
+- ADR-0158 — formatAum usa cero decimales en todas las ramas (K, M, unidad) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0057/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-13 — F-0058 completado
+
+## Feature F-0058
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En scripts/cafci_liquidez_sync.py, agregar un helper HTTP compartido para ambas fases: GET con rate limiting (delay fijo 300-500ms entre requests), timeout por request (~15s) y reintentos acotados (2-3) antes de saltear y loguear el request como fallido; tratar 404 como 'no existe' (skip silencioso, no error). Reusar el patrón de descarga/reintentos de cafci_sync.py. (65be2b24)
+- [x] Step 2: Implementar la Fase 0 (resolución de fondo padre) en cafci_liquidez_sync.py: consultar fci_master por clases con activo=true Y cafci_fondo_padre IS NULL; si no hay pendientes, loguear 'Fase 0 saltada' y no crawlear. Para las pendientes, recorrer un rango parametrizable de IDs (default range(1,2500)) haciendo GET /fondos/{id} (sin ?clase=) con el helper HTTP, y de cada página válida extraer el nombre base del fondo (quitando el sufijo '- Clase X') y la sociedad gerente. (cff382ad)
+- [x] Step 3: Implementar el matching de Fase 0: cruzar cada fondo padre encontrado contra las clases pendientes SIEMPRE por nombre base + gerente/sociedad_gerente juntos (nunca solo por nombre; nombres iguales entre gestoras distintas no deben matchear). Persistir los matches vía upsert por lotes a fci_master (on_conflict='id', payload solo {id, cafci_fondo_padre}). Loguear cuántas clases quedaron sin resolver, sin abortar. (637ea093)
+- [x] Step 4: Implementar la Fase 1 (scraping de detalle) en cafci_liquidez_sync.py: para cada clase activa con cafci_fondo_padre resuelto, armar la URL /fondos/{padre}?clase={cafci_id}, hacer GET con el helper HTTP y parsear con un parser tolerante los campos plazo_liquidacion_dias, honorario_gerente_pct, honorario_depositaria_pct, comision_ingreso_pct, comision_egreso_pct, comision_transferencia_pct, gastos_ordinarios_pct, comision_exito_pct. Campo puntual no encontrado/no parseable → loguear y dejar null solo ESE campo; distinguir 'guión → null válido' de 'valor presente pero no parseable → omitir el campo'. Nunca descartar la clase entera ni abortar la corrida por un fallo individual. (1a8b64d9)
+- [x] Step 5: Implementar el upsert por lotes de Fase 1 a fci_master (on_conflict='id', BATCH_SIZE=500), incluyendo solo los campos parseados con éxito en esa corrida más liquidez_updated_at; nunca pisar un valor bueno anterior con null por un fallo puntual (omitir del payload los campos fallidos). (20a96ce8)
+- [x] Step 6: Agregar la CLI con argparse a cafci_liquidez_sync.py: flag --fase (0 | 1), --limit N y --dry-run, aplicables independientemente a cada fase (ej. --fase 0 --limit 50 --dry-run valida solo el matching contra una muestra; --fase 1 --limit 30 --dry-run valida solo el parser). En --dry-run no escribir a Supabase, solo loguear lo que se resolvería/persistiría. Permitir parametrizar el rango de IDs de Fase 0. (2b3be6d6)
+- [x] Step 7: Crear .github/workflows/cafci_liquidez_monthly.yml: workflow separado del diario de VCP, con cron mensual (día 1, 03:00 UTC) + workflow_dispatch manual, timeout-minutes generoso (~180) para cubrir Fase 0 + Fase 1 en la primera corrida, usando los mismos secrets SUPABASE_URL/SUPABASE_SERVICE_KEY que cafci_daily.yml y ejecutando el script. (d30b5bb8)
+- [x] Step 8: Agregar tests para cafci_liquidez_sync.py mockeando los requests HTTP: Fase 0 (match exacto por nombre+gerente, caso sin match, caso de nombres iguales entre gestoras distintas que NO deben matchear) y Fase 1 (parser con los casos reales: plazo 0 y 1 día, honorarios separados gerente/depositaria, comisión de éxito ausente → null). Verificar que un fallo individual (404/timeout) se saltea sin abortar ni pisar valores con null. (d2996892)
+
+### Decisiones (ADR)
+- ADR-0161 — Reset a baseline en vez de editar sobre el diff inflado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0162 — Shape asumida del JSON de GET /fondos/{id} en estadisticas.cafci.org.ar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0163 — Upsert en lotes en lugar de update individual con guard IS NULL [Instrucción de Augusto]
+- ADR-0164 — Update individual por clase en lugar de batch upsert [Supuesto del agente] **⚠ REVISAR**
+- ADR-0165 — Parser asume JSON (igual que Fase 0), no HTML [Supuesto del agente] **⚠ REVISAR**
+- ADR-0166 — Agrupación por col-set en batch upsert para preservar valores previos [Supuesto del agente] **⚠ REVISAR**
+- ADR-0167 — Validación de --id-min/--id-max restringida a --fase 0 en parse time [Supuesto del agente] **⚠ REVISAR**
+- ADR-0168 — Fase 0 y Fase 1 como steps secuenciales, no como un solo comando [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0058/`
+
+> Revisar con Claude in Chrome para validación de UX.

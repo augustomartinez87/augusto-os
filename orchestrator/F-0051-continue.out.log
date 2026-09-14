@@ -1,0 +1,56 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0051
+
+[2026-09-11T13:03:20.259Z] [system] Modo operativo: PRODUCT
+[2026-09-11T13:03:20.263Z] [main] Resumiendo feature F-0051 — target: argos
+[2026-09-11T13:03:20.264Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-11T13:03:20.264Z] 
+[main] === Step 5/6: En src/pages/FciExplorador.jsx, agregar un texto de ayuda inline corto debajo del input de búsqueda explicando que se puede buscar por nombre o ticker, siguiendo el patrón visual/tipográfico ya usado en el explorador. ===
+[2026-09-11T13:03:20.268Z] [executor] Resumiendo sesión 5f9dfb6d-4142-4351-a892-55834a34b4ab para step 5
+[2026-09-11T13:03:56.699Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0051-step5.log
+[2026-09-11T13:03:56.703Z] [verifier] Corriendo typecheck...
+[2026-09-11T13:04:07.168Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-11T13:04:07.168Z] [verifier] Corriendo tests...
+[2026-09-11T13:04:17.311Z] [verifier] OK: typecheck + lint + tests
+[2026-09-11T13:04:17.838Z] [qa] Navegando http://localhost:5173/
+[2026-09-11T13:04:20.200Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-11T13:04:20.246Z] [qa] FAIL: 1 errores
+[2026-09-11T13:04:20.246Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-11T13:04:20.246Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-11T13:04:45.803Z] [reviewer] APPROVED step 5
+[2026-09-11T13:04:46.097Z] [git] Commit c455415f: step 5
+[2026-09-11T13:04:46.100Z] [adr] ADR-0153 registrado (origen: Supuesto del agente)
+[2026-09-11T13:04:46.101Z] [main] Step 5 completado y commiteado (c455415f)
+[2026-09-11T13:04:46.102Z] 
+[main] === Step 6/6: Agregar/actualizar tests unitarios: cubrir el nuevo componente combobox de gestora (filtrado por texto y selección) y ajustar cualquier test de FciExplorador afectado. Verificar que typecheck, lint y la suite de vitest (incluyendo los tests existentes de mercadoService) pasen sin errores. ===
+[2026-09-11T13:04:46.105Z] [executor] Iniciando sesión nueva para step 6: Agregar/actualizar tests unitarios: cubrir el nuevo componente combobox de gestora (filtrado por texto y selección) y ajustar cualquier test de FciExplorador afectado. Verificar que typecheck, lint y la suite de vitest (incluyendo los tests existentes de mercadoService) pasen sin errores.
+[2026-09-11T13:09:33.467Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0051-step6.log
+[2026-09-11T13:09:33.470Z] [verifier] Corriendo typecheck...
+[2026-09-11T13:09:36.467Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-11T13:09:36.468Z] [verifier] Corriendo tests...
+[2026-09-11T13:09:37.982Z] [verifier] OK: typecheck + lint + tests
+[2026-09-11T13:09:38.077Z] [reviewer] Diff vacío — step 6 aprobado sin invocar modelo
+[2026-09-11T13:09:38.078Z] [reviewer] APPROVED step 6
+[2026-09-11T13:09:38.401Z] [git] Commit 1d258012: step 6
+[2026-09-11T13:09:38.403Z] [adr] ADR-0154 registrado (origen: Supuesto del agente)
+[2026-09-11T13:09:38.404Z] [main] Step 6 completado y commiteado (1d258012)
+[2026-09-11T13:09:38.405Z] [main] Feature F-0051: steps COMPLETOS.
+[2026-09-11T13:09:38.710Z] [git] Merge OK: feat/F-0051-argos-fci-explorador-gestora-buscable-co → main (local, sin push). Push a main y deploy = manual.
+[2026-09-11T13:09:38.715Z] [system] PROGRESS.md actualizado
+[2026-09-11T13:09:38.717Z] [release] typecheck...
+[2026-09-11T13:09:41.741Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-11T13:09:41.742Z] [release] tests...
+[2026-09-11T13:09:43.314Z] [release] build de prod...
+[2026-09-11T13:09:56.070Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-11T13:09:56.070Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-11T13:09:58.633Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-11T13:09:58.644Z] [adr] ADRs generados en esta feature:
+[2026-09-11T13:09:58.644Z]   ADR-0150 — GestoraCombobox cierra dropdown al seleccionar en vez de mantenerlo abierto [Supuesto del agente] ← REVISAR
+[2026-09-11T13:09:58.644Z]   ADR-0151 — GestoraCombobox con filtrado client-side sobre lista pre-cargada [Supuesto del agente] ← REVISAR
+[2026-09-11T13:09:58.644Z]   ADR-0152 — Botón limpiar filtros visible condicionalmente [Supuesto del agente] ← REVISAR
+[2026-09-11T13:09:58.645Z]   ADR-0153 — Texto de ayuda como `<p>` estático en lugar de `Tooltip` con `HelpCircle` [Supuesto del agente] ← REVISAR
+[2026-09-11T13:09:58.645Z]   ADR-0154 — Tests de GestoraCombobox como lógica pura (sin jsdom) [Supuesto del agente] ← REVISAR
+[2026-09-11T13:09:58.645Z] [main] F-0051 RELEASED (push hecho). STATE.json archivado como STATE.F-0051.archived.json
+[2026-09-11T13:09:58.648Z] [backlog] Filas marcadas done: AR-028
+[2026-09-11T13:09:59.155Z] [telegram] intento 1/5 de avisar falló: fetch failed

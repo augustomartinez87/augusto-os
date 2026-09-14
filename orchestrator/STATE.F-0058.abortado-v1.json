@@ -1,0 +1,112 @@
+{
+  "featureId": "F-0058",
+  "branch": "feat/F-0058-argos-fci-persistir-liquidez-de-rescate-",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "En scripts/cafci_liquidez_sync.py, implementar la resolución de cafci_fondo_padre: reusar el patrón de descarga+parseo de descargar_panel() de cafci_sync.py (mismo CAFCI_URL y headers) para bajar el bulk pb_get una vez al arrancar y construir en memoria un mapa {cafci_id (col 20) -> cafci_fondo_padre (col 39)}. Si descargar_panel es importable sin acoplar ambos scripts, importarla; si no, duplicar solo el fetch del bulk.",
+      "ui": false,
+      "status": "blocked",
+      "commit": null,
+      "sessionId": "cbd378c0-76f9-4409-9dff-657b963e088f",
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": [
+        "reviewer: - Scope creep grave: el step pide SOLO resolver `cafci_fondo_padre` y construir en memoria el mapa `{cafci_id -> cafci_fondo_padre}` reusando el patrón de `descargar_panel()`. El diff implementa el feature entero: `fetch_detalle()` con reintentos HTTP, todo el motor de parseo de HTML (`FIELD_MAP`, `_parse_pct`, `_parse_plazo_dias`, `_extract_pairs_bs4/_stdlib`, `parsear_detalle`) y el loop completo de scraping + `UPDATE` a `fci_master` en `main()` (elimina incluso el `# TODO (step 2)`). Todo eso corresponde a steps posteriores, no al step 1.\n- Fuera del alcance del feature \"liquidez de rescate\": el `FIELD_MAP` agrega honorarios y comisiones (`honorario_gerente_pct`, `honorario_depositaria_pct`, `comision_ingreso/egreso/transferencia/exito_pct`, `gastos_ordinarios_pct`). F-0058 es…",
+        "reviewer (post-review-fix): - Scope creep grande: el step pide SOLO \"resolver cafci_fondo_padre\" — bajar el bulk pb_get una vez (reusando `descargar_panel`) y construir en memoria el mapa `{cafci_id (col 20) -> cafci_fondo_padre (col 39)}`. El diff sí hace eso (`import descargar_panel` + `construir_mapa_liquidez`), pero además implementa TODO el pipeline downstream que corresponde a steps posteriores: `FIELD_MAP` con 8 campos de comisiones/honorarios, los parsers (`_parse_pct`, `_parse_pct_nullable`, `_parse_plazo_dias`), la extracción HTML de 4 estrategias (`_extract_pairs_bs4`/`_stdlib`), `parsear_detalle`, `fetch_detalle` con reintentos y el loop de `main()` que scrapea cada fondo y hace `UPDATE` sobre `fci_master`. Eso es el feature entero en un solo step; reducir el diff a la resoluci…"
+      ],
+      "error": "- La función sigue llamándose `construir_mapa_liquidez` pero ya no construye un mapa de liquidez: ahora resuelve `cafci_id → cafci_fondo_padre`. El nombre quedó del refactor anterior y es engañoso para quien lea el código en step 2 (el docstring ya dice \"resuelve el fondo padre de cada clase\"). Renombrar a algo tipo `construir_mapa_fondo_padre`.\n- Atención (no bloqueante, pero confirmar con Augusto antes de escalar a step 2): el propio comentario nuevo documenta que col 39 solo la traen ~9 de ~3974 filas. Si `cafci_fondo_padre` es lo que se necesita para armar la URL de detalle (`{padre}?clase={cafci_id}`), el mapa queda con `None` para ~99.8% del universo y step 2 no tendría cómo scrapear esas clases. El código hace exactamente lo que pide el step, pero vale validar que esta sea realmente la fuente correcta del padre antes de construir sobre esto."
+    },
+    {
+      "id": 2,
+      "desc": "Agregar una función que consulte fci_master (supabase-py, create_client con SUPABASE_URL/SUPABASE_SERVICE_KEY) y devuelva los fondos activos con cafci_id no nulo, incluyendo sociedad_gerente para poder diversificar la muestra del piloto.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 3,
+      "desc": "Implementar un parser HTML tolerante de la página de detalle por clase que extraiga: plazo_liquidacion_dias, honorario_gerente_pct, honorario_depositaria_pct, comision_ingreso_pct, comision_egreso_pct, comision_transferencia_pct, gastos_ordinarios_pct y comision_exito_pct (tratar '—'/ausente como None). Si un campo puntual no matchea, loguearlo y dejarlo None para ESE campo sin descartar el fondo entero.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 4,
+      "desc": "Implementar el bucle de scraping por fondo: GET a /fondos/{cafci_fondo_padre}?clase={cafci_id} con delay fijo entre requests (300-500ms), timeout por request (~15s) y reintentos acotados (2-3). Un fondo que falla (timeout/404/estructura distinta) se loguea y se saltea SIN abortar la corrida completa.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 5,
+      "desc": "Agregar los flags de CLI --limit N (corre solo los primeros N fondos) y --dry-run (parsea y loguea pero no escribe a Supabase) usando argparse, respetando el patrón de CLI de cafci_sync.py.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 6,
+      "desc": "Implementar el upsert por lotes a fci_master (on_conflict='id', BATCH_SIZE=500) escribiendo SOLO los campos parseados con éxito en esa corrida más liquidez_updated_at; nunca pisar con None un valor bueno anterior por un fallo puntual de parseo.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 7,
+      "desc": "Crear el workflow .github/workflows/cafci_liquidez_monthly.yml: cron mensual (día 1, 03:00 UTC) + workflow_dispatch, timeout-minutes generoso (~120), instalación de requirements-cafci.txt y ejecución del script con los secrets SUPABASE_URL/SUPABASE_SERVICE_KEY, separado del workflow diario de VCP.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 8,
+      "desc": "Agregar tests unitarios que mockeen los requests HTTP y cubran el parser contra los 3 casos reales del spec (plazo 0 día y 1 día, honorarios gerente/depositaria separados, comisión de éxito ausente -> None), más un caso de fondo que falla al scrapear para verificar que se saltea sin abortar ni pisar con None.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-09-12T21:28:51.986Z",
+  "updatedAt": "2026-09-12T21:43:35.430Z",
+  "merged": false,
+  "pushed": false
+}

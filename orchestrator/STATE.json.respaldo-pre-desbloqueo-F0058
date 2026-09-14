@@ -1,0 +1,90 @@
+{
+  "featureId": "F-0058",
+  "branch": "feat/F-0058-argos-fci-persistir-liquidez-de-rescate-",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Crear scripts/cafci_liquidez_sync.py con esqueleto de CLI (argparse con flags --limit N y --dry-run), setup de logging y cliente Supabase (create_client con SUPABASE_URL/SUPABASE_SERVICE_KEY, mismo patrón que cafci_sync.py). Incluir una función que descargue el bulk pb_get una sola vez al arrancar reutilizando el patrón de descargar_panel() de cafci_sync.py (importándola si es trivial, o duplicando solo el fetch del bulk) y construya un mapa en memoria {cafci_id -> cafci_fondo_padre} usando la columna 39 del xlsx, para poder armar las URLs /fondos/{cafci_fondo_padre}?clase={cafci_id}.",
+      "ui": false,
+      "status": "done",
+      "commit": "01e904f1860d6c64e0320dfe7ca81474aaa998e1",
+      "sessionId": "030f21df-905f-4204-bd64-ffe71b2d2b17",
+      "retries": 0,
+      "adrIds": [
+        159
+      ],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 2,
+      "desc": "En cafci_liquidez_sync.py, implementar un parser tolerante de la página de detalle HTML de estadisticas.cafci.org.ar que extraiga: plazo_liquidacion_dias (int), honorario_gerente_pct, honorario_depositaria_pct, comision_ingreso_pct, comision_egreso_pct, comision_transferencia_pct, gastos_ordinarios_pct (numeric) y comision_exito_pct (nullable, '—' → None). El parser debe devolver un dict con solo los campos que matchearon; si un campo puntual no aparece o no matchea, loguearlo y dejarlo ausente/None para ESE campo sin descartar el fondo entero.",
+      "ui": false,
+      "status": "blocked",
+      "commit": null,
+      "sessionId": "78a570ed-8198-408d-a65e-ee835628c135",
+      "retries": 1,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": [
+        "reviewer: - Violación de una RESTRICCIÓN CLAVE (\"nunca pisar un valor bueno con null por fallo de parseo\"): en `comision_exito_pct` (nullable), `_parse_pct_nullable` devuelve `None` en DOS casos indistinguibles: (a) el valor es un guión '—' → None legítimo, correcto; pero (b) el label matchea y el valor existe pero NO es parseable (ej. \"ver reglamento\", \"según resultados\"). En el caso (b) `parsear_detalle` no lo omite (porque `nullable=True` salta el chequeo de `parsed is None`), lo mete como `comision_exito_pct: None` en `datos`, y `main` lo manda en el UPDATE → pisa un valor bueno anterior con NULL por un fallo de parseo. Hay que distinguir \"guión → None almacenable\" de \"encontrado pero no parseable → omitir el campo\" (p. ej. que `_parse_pct_nullable` señale explícitamente el guión y que…",
+        "reviewer (post-review-fix): - `--dry-run` no valida el parsing: en `main()`, cuando `a.dry_run` es True el flujo imprime las primeras 10 URLs y hace `return` ANTES de llamar a `fetch_detalle`/`parsear_detalle` (líneas 474-483). El spec exige textualmente \"Correr `--limit` + `--dry-run` contra una muestra real y confirmar el parsing ANTES de habilitar el cron\", y el propio header dice \"correr siempre --limit 5 --dry-run y confirmar parseo antes del cron\". Con este código eso es imposible: `--limit 5 --dry-run` solo lista URLs sin descargar ni parsear nada, y el log mismo (línea 481) te dice que para validar parsing hay que \"quitar --dry-run\" — lo que implica escribir en Supabase. La ruta segura de validación (fetch+parse de muestra real sin tocar la DB) que el spec manda como gate no existe…"
+      ],
+      "error": "Step 2: reviewer rechaza tras segunda corrección\n\n[fixer también falló] Fixer (Opus) agotó 2 intento(s) sin pasar verifier.\nÚltimo detalle:\ntokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"subtype\":\"success\",\"api_error_status\":429,\"result\":\"You've hit your session limit · resets 6pm (America/Argentina/Buenos_Aires)\",\"type\":\"result\",\"duration_ms\":627,\"uuid\":\"082c48db-dfd7-403e-96d1-429fa958f8cc\",\"queued_turn_count\":0}"
+    },
+    {
+      "id": 3,
+      "desc": "En cafci_liquidez_sync.py, implementar el loop principal sobre los fondos activos de fci_master con cafci_id: GET a la URL de detalle con timeout por request (~15s), delay fijo entre requests (~300-500ms) y reintentos acotados (2-3). Un fondo que falla (timeout, 404, error de estructura) se loguea y se saltea SIN abortar la corrida completa. Respetar --limit N (solo primeros N fondos) y --dry-run (parsea y loguea pero no escribe).",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 4,
+      "desc": "En cafci_liquidez_sync.py, implementar el upsert por lotes a fci_master (on_conflict='id', BATCH_SIZE=500 como cafci_sync.py) que persista SOLO los campos parseados con éxito en esa corrida más liquidez_updated_at, construyendo el payload de forma que nunca pise con null un valor bueno anterior por un fallo puntual de parseo. Loguear resumen final (fondos OK, salteados, con match sin_match).",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 5,
+      "desc": "Crear .github/workflows/cafci_liquidez_monthly.yml: workflow nuevo separado del diario de VCP, con cron mensual (día 1, 03:00 UTC) + workflow_dispatch manual, timeout-minutes generoso (~120), Python setup + instalación de requests/pandas/supabase, e inyección de los secrets SUPABASE_URL y SUPABASE_SERVICE_KEY (mismos que cafci_daily.yml), ejecutando scripts/cafci_liquidez_sync.py.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 6,
+      "desc": "Agregar tests Python para cafci_liquidez_sync.py que mockeen los requests HTTP y cubran el parser contra los 3 casos reales del spec (Mercado Fondo 798/1982 con 'Plazo de Liquidación: 0 día', MP Ahorro 1625/5393 y MP Empresas 1804/6181 con '1 día'; honorarios gerente/depositaria separados; comisión de éxito ausente → None), verificando también que un fondo que falla se saltea sin abortar y que --dry-run no escribe.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-09-12T16:23:31.045Z",
+  "updatedAt": "2026-09-12T17:15:56.171Z",
+  "merged": false,
+  "pushed": false
+}

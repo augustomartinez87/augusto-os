@@ -1,0 +1,78 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0058
+
+[2026-09-13T13:29:21.515Z] [system] Modo operativo: PRODUCT
+[2026-09-13T13:29:21.519Z] [main] Resumiendo feature F-0058 — target: argos
+[2026-09-13T13:29:21.520Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-13T13:29:21.521Z] 
+[main] === Step 5/8: Implementar el upsert por lotes de Fase 1 a fci_master (on_conflict='id', BATCH_SIZE=500), incluyendo solo los campos parseados con éxito en esa corrida más liquidez_updated_at; nunca pisar un valor bueno anterior con null por un fallo puntual (omitir del payload los campos fallidos). ===
+[2026-09-13T13:29:21.524Z] [executor] Resumiendo sesión 92658c94-f591-4baa-be42-ee3547e3032d para step 5
+[2026-09-13T13:29:48.028Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step5.log
+[2026-09-13T13:29:48.031Z] [verifier] Corriendo typecheck...
+[2026-09-13T13:29:50.887Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-13T13:29:50.887Z] [verifier] Corriendo tests...
+[2026-09-13T13:29:52.513Z] [verifier] OK: typecheck + lint + tests
+[2026-09-13T13:30:56.821Z] [reviewer] APPROVED step 5
+[2026-09-13T13:30:57.097Z] [git] Commit 20a96ce8: step 5
+[2026-09-13T13:30:57.100Z] [adr] ADR-0166 registrado (origen: Supuesto del agente)
+[2026-09-13T13:30:57.101Z] [main] Step 5 completado y commiteado (20a96ce8)
+[2026-09-13T13:30:57.101Z] 
+[main] === Step 6/8: Agregar la CLI con argparse a cafci_liquidez_sync.py: flag --fase (0 | 1), --limit N y --dry-run, aplicables independientemente a cada fase (ej. --fase 0 --limit 50 --dry-run valida solo el matching contra una muestra; --fase 1 --limit 30 --dry-run valida solo el parser). En --dry-run no escribir a Supabase, solo loguear lo que se resolvería/persistiría. Permitir parametrizar el rango de IDs de Fase 0. ===
+[2026-09-13T13:30:57.104Z] [executor] Iniciando sesión nueva para step 6: Agregar la CLI con argparse a cafci_liquidez_sync.py: flag --fase (0 | 1), --limit N y --dry-run, aplicables independientemente a cada fase (ej. --fase 0 --limit 50 --dry-run valida solo el matching contra una muestra; --fase 1 --limit 30 --dry-run valida solo el parser). En --dry-run no escribir a Supabase, solo loguear lo que se resolvería/persistiría. Permitir parametrizar el rango de IDs de Fase 0.
+[2026-09-13T13:32:29.610Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step6.log
+[2026-09-13T13:32:29.612Z] [verifier] Corriendo typecheck...
+[2026-09-13T13:32:32.386Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-13T13:32:32.387Z] [verifier] Corriendo tests...
+[2026-09-13T13:32:33.986Z] [verifier] OK: typecheck + lint + tests
+[2026-09-13T13:33:01.846Z] [reviewer] APPROVED step 6
+[2026-09-13T13:33:02.110Z] [git] Commit 2b3be6d6: step 6
+[2026-09-13T13:33:02.112Z] [adr] ADR-0167 registrado (origen: Supuesto del agente)
+[2026-09-13T13:33:02.113Z] [main] Step 6 completado y commiteado (2b3be6d6)
+[2026-09-13T13:33:02.114Z] 
+[main] === Step 7/8: Crear .github/workflows/cafci_liquidez_monthly.yml: workflow separado del diario de VCP, con cron mensual (día 1, 03:00 UTC) + workflow_dispatch manual, timeout-minutes generoso (~180) para cubrir Fase 0 + Fase 1 en la primera corrida, usando los mismos secrets SUPABASE_URL/SUPABASE_SERVICE_KEY que cafci_daily.yml y ejecutando el script. ===
+[2026-09-13T13:33:02.117Z] [executor] Iniciando sesión nueva para step 7: Crear .github/workflows/cafci_liquidez_monthly.yml: workflow separado del diario de VCP, con cron mensual (día 1, 03:00 UTC) + workflow_dispatch manual, timeout-minutes generoso (~180) para cubrir Fase 0 + Fase 1 en la primera corrida, usando los mismos secrets SUPABASE_URL/SUPABASE_SERVICE_KEY que cafci_daily.yml y ejecutando el script.
+[2026-09-13T13:33:32.157Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step7.log
+[2026-09-13T13:33:32.160Z] [verifier] Corriendo typecheck...
+[2026-09-13T13:33:34.939Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-13T13:33:34.940Z] [verifier] Corriendo tests...
+[2026-09-13T13:33:36.545Z] [verifier] OK: typecheck + lint + tests
+[2026-09-13T13:33:36.630Z] [reviewer] Diff vacío — step 7 aprobado sin invocar modelo
+[2026-09-13T13:33:36.630Z] [reviewer] APPROVED step 7
+[2026-09-13T13:33:36.907Z] [git] Commit d30b5bb8: step 7
+[2026-09-13T13:33:36.909Z] [adr] ADR-0168 registrado (origen: Supuesto del agente)
+[2026-09-13T13:33:36.911Z] [main] Step 7 completado y commiteado (d30b5bb8)
+[2026-09-13T13:33:36.911Z] 
+[main] === Step 8/8: Agregar tests para cafci_liquidez_sync.py mockeando los requests HTTP: Fase 0 (match exacto por nombre+gerente, caso sin match, caso de nombres iguales entre gestoras distintas que NO deben matchear) y Fase 1 (parser con los casos reales: plazo 0 y 1 día, honorarios separados gerente/depositaria, comisión de éxito ausente → null). Verificar que un fallo individual (404/timeout) se saltea sin abortar ni pisar valores con null. ===
+[2026-09-13T13:33:36.914Z] [executor] Iniciando sesión nueva para step 8: Agregar tests para cafci_liquidez_sync.py mockeando los requests HTTP: Fase 0 (match exacto por nombre+gerente, caso sin match, caso de nombres iguales entre gestoras distintas que NO deben matchear) y Fase 1 (parser con los casos reales: plazo 0 y 1 día, honorarios separados gerente/depositaria, comisión de éxito ausente → null). Verificar que un fallo individual (404/timeout) se saltea sin abortar ni pisar valores con null.
+[2026-09-13T13:42:56.284Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step8.log
+[2026-09-13T13:42:56.287Z] [verifier] Corriendo typecheck...
+[2026-09-13T13:42:59.089Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-13T13:42:59.089Z] [verifier] Corriendo tests...
+[2026-09-13T13:43:00.675Z] [verifier] OK: typecheck + lint + tests
+[2026-09-13T13:43:00.763Z] [reviewer] Diff vacío — step 8 aprobado sin invocar modelo
+[2026-09-13T13:43:00.764Z] [reviewer] APPROVED step 8
+[2026-09-13T13:43:01.037Z] [git] Commit d2996892: step 8
+[2026-09-13T13:43:01.039Z] [main] Step 8 completado y commiteado (d2996892)
+[2026-09-13T13:43:01.039Z] [main] Feature F-0058: steps COMPLETOS.
+[2026-09-13T13:43:01.330Z] [git] Merge OK: feat/F-0058-argos-fci-persistir-liquidez-de-rescate- → main (local, sin push). Push a main y deploy = manual.
+[2026-09-13T13:43:01.335Z] [system] PROGRESS.md actualizado
+[2026-09-13T13:43:01.338Z] [release] typecheck...
+[2026-09-13T13:43:04.101Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-13T13:43:04.102Z] [release] tests...
+[2026-09-13T13:43:05.727Z] [release] build de prod...
+[2026-09-13T13:43:17.479Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-13T13:43:17.480Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-13T13:43:20.002Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-13T13:43:20.012Z] [adr] ADRs generados en esta feature:
+[2026-09-13T13:43:20.012Z]   ADR-0161 — Reset a baseline en vez de editar sobre el diff inflado [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.013Z]   ADR-0162 — Shape asumida del JSON de GET /fondos/{id} en estadisticas.cafci.org.ar [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.013Z]   ADR-0163 — Upsert en lotes en lugar de update individual con guard IS NULL [Instrucción de Augusto]
+[2026-09-13T13:43:20.013Z]   ADR-0164 — Update individual por clase en lugar de batch upsert [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.014Z]   ADR-0165 — Parser asume JSON (igual que Fase 0), no HTML [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.014Z]   ADR-0166 — Agrupación por col-set en batch upsert para preservar valores previos [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.014Z]   ADR-0167 — Validación de --id-min/--id-max restringida a --fase 0 en parse time [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.014Z]   ADR-0168 — Fase 0 y Fase 1 como steps secuenciales, no como un solo comando [Supuesto del agente] ← REVISAR
+[2026-09-13T13:43:20.015Z] [main] F-0058 RELEASED (push hecho). STATE.json archivado como STATE.F-0058.archived.json
+[2026-09-13T13:43:20.017Z] [backlog] Filas marcadas done: AR-031
+[2026-09-13T13:43:20.523Z] [telegram] intento 1/5 de avisar falló: fetch failed

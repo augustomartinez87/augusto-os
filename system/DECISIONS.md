@@ -27,6 +27,720 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0168 · 2026-09-13 · Fase 0 y Fase 1 como steps secuenciales, no como un solo comando
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_monthly.yml
+
+**Decisión:** Se crearon dos steps independientes (`--fase 0` y `--fase 1`) en lugar de un wrapper que llame a ambas fases internamente, ya que el script requiere `--fase` obligatorio y no expone un modo "completo".
+**Contexto:** El CLI del script no tiene un modo que encadene Fase 0 + Fase 1 automáticamente; ejecutarlos en steps separados permite ver los logs de cada fase por separado en GitHub Actions y que un fallo de Fase 0 aborte antes de correr Fase 1.
+**Alternativas descartadas:** Un step único con `python -c "import subprocess; ..."` que encadene ambos comandos, o agregar un modo `--fase all` al script.
+**Consecuencias / riesgo residual:** Si se agrega un modo `--fase all` al script en el futuro, el workflow debería simplificarse a un único step.
+
+> Generado por el loop · feature F-0058 · step 7
+
+---
+## ADR-0167 · 2026-09-13 · Validación de --id-min/--id-max restringida a --fase 0 en parse time
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync.py
+
+**Decisión:** Se agrega un chequeo explícito post-parse que llama `p.error()` si `--id-min` o `--id-max` se combinan con `--fase 1`, en lugar de ignorarlos silenciosamente.
+**Contexto:** El spec dice que los flags son "aplicables independientemente a cada fase", pero `--id-min`/`--id-max` son semánticamente exclusivos de Fase 0; pasarlos con `--fase 1` es probablemente un error de invocación del usuario.
+**Alternativas descartadas:** Ignorarlos silenciosamente (sin error); hacerlos subopciones de `--fase 0` con argparse subcommands (más complejo, cambia la interfaz).
+**Consecuencias / riesgo residual:** Si en el futuro Fase 1 también necesita un rango de IDs parametrizable, habrá que remover esta validación o agregar un flag distinto.
+
+> Generado por el loop · feature F-0058 · step 6
+
+---
+## ADR-0166 · 2026-09-13 · Agrupación por col-set en batch upsert para preservar valores previos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync
+
+**Decisión:** Los payloads se agrupan por `frozenset(keys)` antes de hacer upsert. Cada grupo se upsertea por separado con filas de columnas idénticas.
+**Contexto:** PostgREST normaliza un batch al superconjunto de todas las columnas presentes en el array, rellenando las ausentes con null en el DO UPDATE. Si se mezclaran filas con distinto col-set en un mismo lote, una clase que no pudo parsear `honorario_gerente_pct` pisaría el valor existente en la DB con null, violando la restricción clave del spec.
+**Alternativas descartadas:** (a) Mantener UPDATEs individuales por clase — correcto pero no cumple "upsert por lotes". (b) SQL raw con DO UPDATE SET solo para columnas explícitas — requiere salir del cliente supabase-py.
+**Consecuencias / riesgo residual:** Si la mayoría de clases parsea el mismo subconjunto de campos, hay un solo grupo y la batching es eficiente. Si hay mucha variabilidad de campos parseados, se generan varios grupos de pocas filas cada uno. Verificar con `--dry-run` antes de la primera corrida real para confirmar que el col-set dominante cubre los campos esperados.
+
+> Generado por el loop · feature F-0058 · step 5
+
+---
+## ADR-0165 · 2026-09-13 · Parser asume JSON (igual que Fase 0), no HTML
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync — Fase 1
+
+**Decisión:** Fase 1 llama `r.json()` sobre la respuesta de `estadisticas.cafci.org.ar/fondos/{padre}?clase={cafci_id}`, sin intentar parseo HTML.
+**Contexto:** Fase 0 ya confirma que `/fondos/{id}` devuelve JSON en el mismo dominio. Si la respuesta fuera HTML, `r.json()` falla y la clase queda logueada como `fallidos++` sin abortar la corrida.
+**Alternativas descartadas:** Parser HTML con BeautifulSoup (nueva dependencia, más frágil al cambio de layout).
+**Consecuencias / riesgo residual:** Si el endpoint de clase devuelve HTML en lugar de JSON, el primer `--dry-run --limit 5` lo dejará visible en los logs (todas las clases reportadas como fallidas), permitiendo corregirlo antes de la corrida completa.
+
+> Generado por el loop · feature F-0058 · step 4
+
+---
+## ADR-0164 · 2026-09-13 · Update individual por clase en lugar de batch upsert
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync — Fase 1
+
+**Decisión:** Se usa `sb.table("fci_master").update(payload).eq("id", fci_id)` por clase, no batch upsert como en Fase 0.
+**Contexto:** Cada clase tiene un payload distinto según qué campos se parsearon con éxito. Un batch upsert con schema fijo requeriría incluir `null` para todos los campos faltantes, violando la restricción "nunca pisar valor bueno anterior con null por fallo puntual".
+**Alternativas descartadas:** Agrupar clases por conjunto de campos presentes y hacer un upsert por grupo (complejo, sin beneficio real para una corrida mensual de ~500 clases).
+**Consecuencias / riesgo residual:** ~N requests individuales a Supabase por corrida. Aceptable para el volumen esperado; si el número de clases crece considerablemente se puede revisar.
+
+> Generado por el loop · feature F-0058 · step 4
+
+---
+## ADR-0163 · 2026-09-13 · Upsert en lotes en lugar de update individual con guard IS NULL
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** cafci_liquidez_sync
+
+**Decisión:** El bloque de persistencia usa `.upsert(lote, on_conflict="id")` con payload `{id, cafci_fondo_padre}`, agrupando hasta BATCH_SIZE=200 filas por lote. Se elimina el guard `.is_("cafci_fondo_padre", "null")` que existía en el update individual.
+**Contexto:** El spec exige explícitamente upsert por lotes con on_conflict='id'. El guard IS NULL en el update individual es incompatible con la semántica de upsert (que opera sobre el conflict key, no sobre filtros de columna).
+**Alternativas descartadas:** Mantener update individual con el guard IS NULL (más seguro ante race conditions, pero no cumple el spec de batch upsert). Alternativamente, filtrar el `batch` list quitando IDs ya no-null antes del upsert, pero requeriría una segunda query.
+**Consecuencias / riesgo residual:** En una race condition teórica (otra corrida actualiza el mismo ID entre la query y el upsert), el valor sería sobreescrito con el nuevo match. El riesgo es mínimo dado que la Fase 0 solo corre mensualmente y la query inicial ya filtra IS NULL.
+
+> Generado por el loop · feature F-0058 · step 3
+
+---
+## ADR-0162 · 2026-09-13 · Shape asumida del JSON de GET /fondos/{id} en estadisticas.cafci.org.ar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync
+
+**Decisión:** Se asume `{"status":200,"data":{"nombre":"...","societyManager":{"nombre":"..."}}}` para la respuesta del endpoint. `societyManager` también puede ser string directo. Se intentan keys alternativas (`name`, `sociedad_gerente`) como fallback defensivo.
+**Contexto:** El spec indica crawlear `estadisticas.cafci.org.ar/fondos/{id}` pero no documenta la shape del JSON. El endpoint no es consultable sin credenciales de entorno, y el script será validado con `--dry-run --limit 5` antes de correr en producción.
+**Alternativas descartadas:** Parsear HTML del sitio SPA (más frágil); leer columna 39 del xlsx `pb_get` directamente (cafci_inspect.py confirma que existe `cafci_fondo_padre=39`), lo que hubiera evitado el crawl pero el spec explícitamente ordena crawlear el sitio de estadísticas.
+**Consecuencias / riesgo residual:** Si la shape real difiere (distinto nombre de campo, nivel de anidamiento), hay que ajustar únicamente `_extraer_fondo()`. El docstring en esa función señala explícitamente que debe verificarse con `--dry-run --limit 5` antes de la primera corrida completa.
+
+> Generado por el loop · feature F-0058 · step 2
+
+---
+## ADR-0161 · 2026-09-13 · Reset a baseline en vez de editar sobre el diff inflado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se descartó el working tree (Fase 0 completa + helpers de parsing + rango 2499) reseteando al commit del esqueleto y se aplicó solo el agregado de `tolerar_404` a `http_get`.
+**Contexto:** El working tree traía la misma variante de scope creep que los reviewers rechazaron en los intentos 1 y 2; editar encima habría vuelto a arrastrar Fase 0 y la ampliación de rango.
+**Alternativas descartadas:** Editar sobre el working tree existente recortando a mano (riesgo de dejar residuos del scope rechazado); descartada.
+**Consecuencias / riesgo residual:** La Fase 0 (crawl, matching nombre+gerente, escritura en fci_master) y los helpers de parsing quedan para su propio step con review dedicada.
+
+> Generado por el loop · feature F-0058 · step 1
+
+---
+## ADR-0160 · 2026-09-12 · Supabase client siempre instanciado (incluso en --dry-run)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync.py
+
+**Decisión:** `sb = get_supabase()` se llama incondicionalmente, tanto en dry-run como en ejecución normal. El flag `dry_run` se propaga a cada fase para suprimir escrituras.
+**Contexto:** `cafci_sync.py` usa `sb = get_supabase() if not a.dry_run else None`. Pero ambas fases de este script necesitan leer de Supabase (contar clases sin `cafci_fondo_padre`, traer las clases con padre conocido) incluso cuando dry-run suprime escrituras. Pasar `sb=None` al stub y obligar a cada fase a manejar ese caso era un footgun para quien implemente las fases.
+**Alternativas descartadas:** Seguir el patrón de cafci_sync.py (`sb=None` en dry-run) y documentar que la implementación debe crear su propio cliente para lecturas. Descartado porque introduce duplicación y inconsistencia en cada fase.
+**Consecuencias / riesgo residual:** Requiere que `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` estén disponibles incluso en dry-run. No es un obstáculo real (quien hace pruebas tiene el .env igualmente).
+
+> Generado por el loop · feature F-0058 · step 1
+
+---
+## ADR-0159 · 2026-09-12 · URL base del detalle de fondos CAFCI
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_liquidez_sync
+
+**Decisión:** Se usa `https://cafci.org.ar/fondos/{padre}?clase={clase}` como URL de detalle, separada del endpoint de bulk `api.pub.cafci.org.ar/pb_get`.
+**Contexto:** El spec indica construir URLs `/fondos/{cafci_fondo_padre}?clase={cafci_id}` pero no especifica el dominio base. El bulk está en `api.pub.cafci.org.ar`; las páginas de detalle con contenido scrapeble están en el sitio público `cafci.org.ar`.
+**Alternativas descartadas:** Podría ser `https://api.pub.cafci.org.ar/fondos/...` si CAFCI expone también el detalle en su API pública, pero la API pública parece ser solo para el bulk xlsx.
+**Consecuencias / riesgo residual:** Si la URL correcta tiene otro formato, hay que ajustar `CAFCI_DETAIL_BASE` antes del step de scraping. Verificar con una muestra en `--dry-run` antes de la corrida completa.
+
+> Generado por el loop · feature F-0058 · step 1
+
+---
+## ADR-0158 · 2026-09-11 · formatAum usa cero decimales en todas las ramas (K, M, unidad)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se unificaron los decimales de `formatAum` a `dec: 0` en las tres ramas (K/M/unidad), en lugar de mantener la rama K en `dec: 1`.
+**Contexto:** El builder previo dejó la rama de miles con 1 decimal y M con 0, produciendo un mismatch JSDoc-vs-comportamiento (`"$ 750 K"` documentado vs `"$ 750,0 K"` real) que el reviewer rechazó dos veces sin resolverse.
+**Alternativas descartadas:** Documentar la salida real `"$ 750,0 K"` manteniendo `dec: 1` en K — descartado porque la precisión fraccional a escala K/M es ruido para AUM y rompía la coherencia interna del helper.
+**Consecuencias / riesgo residual:** Si en el futuro se quisiera mostrar 1 decimal para valores chicos, habría que reintroducir decimales de forma consistente en todas las ramas y actualizar los ejemplos del JSDoc.
+
+> Generado por el loop · feature F-0057 · step 2
+
+---
+## ADR-0157 · 2026-09-11 · Mismo filtro de fecha/inactivo para patrimonio que para VCP
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_sync / fci_master
+
+**Decisión:** Los fondos omitidos por fecha vieja/inválida o por `es_inactivo()` también quedan excluidos del batch de patrimonio, aunque su patrimonio pudiera ser válido individualmente.
+**Contexto:** El spec dice "construir en el mismo bucle (mismo idx)" sin aclarar si los `continue` previos al mapping check deben aplicar también a patrimonio. La alternativa sería un loop separado que recolecte patrimonio antes de esos filtros.
+**Alternativas descartadas:** Colectar patrimonio en un loop propio ignorando el filtro de fecha, o moverlo antes del `es_inactivo` check para capturar más fondos.
+**Consecuencias / riesgo residual:** Un fondo cuyo VCP sea demasiado viejo (>5 días) tampoco actualizará su patrimonio ese día. En la práctica ambos datos vienen de la misma fila del mismo xlsx: si la fecha del VCP es vieja, el patrimonio también lo es, por lo que el criterio es consistente.
+
+> Generado por el loop · feature F-0057 · step 1
+
+---
+## ADR-0156 · 2026-09-11 · Período de referencia para el color del sparkline: rend_30d
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** FciExplorador
+
+**Decisión:** Se usa `fondo.rend_30d` como período de referencia para determinar el color del sparkline (profit/loss), manteniendo lo establecido en el commit del step 3.
+**Contexto:** El spec dice "eligiendo el color según el signo del rendimiento del período de referencia" sin especificar cuál período. La implementación previa eligió `rend_30d` porque es la base de la TNA (métrica principal de la tabla) y representa la tendencia reciente más significativa.
+**Alternativas descartadas:** Podría usarse `rend_1d` (más reciente), `rend_1y` (tendencia larga), o `rend_ytd`. Se descartaron por menos representativos de la tendencia mostrada por el sparkline (35 días de historia).
+**Consecuencias / riesgo residual:** Si el usuario prefiere otro período como referencia de color, hay que cambiar una sola expresión en la prop `color` del Sparkline.
+
+> Generado por el loop · feature F-0052 · step 5
+
+---
+## ADR-0155 · 2026-09-11 · Color del sparkline derivado de rend_30d
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / FciExplorador
+
+**Decisión:** El color de la línea del sparkline se elige según el signo de `rend_30d` del fondo (≥0 → `#2FD4CD` profit-teal, <0 → `#E5616A` loss-coral; null → teal).
+**Contexto:** El spec no especifica qué campo de rendimiento debe colorear el sparkline. El sparkline cubre 35 días, y `rend_30d` es el horizonte más cercano disponible en cada fila.
+**Alternativas descartadas:** Usar `rend_1y` (más estable pero dispar con la ventana visual), derivar el color de la pendiente real de la serie (calcular first vs last vcp), o no colorear (color fijo siempre teal).
+**Consecuencias / riesgo residual:** Si la serie de 35 días tiene tendencia opuesta a rend_30d (p. ej. fondo que cayó el mes pasado pero remontó esta semana), el color puede ser engañoso. El enfoque de "calcular first vs last vcp de la serie descargada" sería más preciso pero requeriría esperar a que sparklinesData esté disponible para computar el color en render-time.
+
+> Generado por el loop · feature F-0052 · step 3
+
+---
+## ADR-0154 · 2026-09-11 · Tests de GestoraCombobox como lógica pura (sin jsdom)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** portfolio-tracker
+
+**Decisión:** Se testea GestoraCombobox mediante funciones puras que replican su lógica interna (useMemo de filtrado y contratos de callbacks), en lugar de añadir jsdom/@testing-library/react para renderizado real.
+**Contexto:** El proyecto configura vitest con `environment: 'node'` y no tiene @testing-library/react instalado. Agregar happy-dom/jsdom sería una nueva dependencia de desarrollo no pedida explícitamente.
+**Alternativas descartadas:** Añadir happy-dom como devDep y usar RTL para tests de interacción real (click, focus, dropdown); pero esto amplía el scope del step y contradice el principio "cambio mínimo necesario".
+**Consecuencias / riesgo residual:** Los tests de render/interacción DOM (apertura del dropdown, selección por click) quedan sin cobertura automatizada hasta que el proyecto active un entorno de browser en vitest.
+
+> Generado por el loop · feature F-0051 · step 6
+
+---
+## ADR-0153 · 2026-09-11 · Texto de ayuda como `<p>` estático en lugar de `Tooltip` con `HelpCircle`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usó un `<p>` de texto plano debajo del input en lugar del patrón `Tooltip + HelpCircle` que usa la tabla. El texto es siempre visible, sin hover requerido.
+**Contexto:** El spec pide "texto de ayuda inline" sin especificar si debe ser persistente o detrás de un ícono. El Tooltip existente usa `position:fixed` + portal y tiene riesgo de posicionamiento incorrecto dentro de contenedores con scroll; el texto plano es más robusto y más accesible para un hint de búsqueda.
+**Alternativas descartadas:** Usar `<Tooltip content="..."><HelpCircle /></Tooltip>` adyacente al input (patrón de `SortHeader`), o poner el hint como atributo `title` en el input.
+**Consecuencias / riesgo residual:** Si en el futuro se quiere unificar todos los hints bajo el patrón `HelpCircle + Tooltip`, este elemento deberá migrarse.
+
+> Generado por el loop · feature F-0051 · step 5
+
+---
+## ADR-0152 · 2026-09-10 · Botón limpiar filtros visible condicionalmente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El botón "Limpiar filtros" solo se renderiza cuando `hasActiveFilters` es verdadero, en lugar de estar siempre visible (deshabilitado o no).
+**Contexto:** El spec dice "agregar un botón que resetee filtros" pero no especifica si debe ser siempre visible o solo cuando hay filtros activos. Un botón siempre visible pero sin efecto aparente genera confusión (UX).
+**Alternativas descartadas:** Mostrar el botón siempre con `disabled` cuando no hay filtros activos; mostrar siempre habilitado aunque no haya nada que limpiar.
+**Consecuencias / riesgo residual:** Si en el futuro se agrega un filtro nuevo (ej. sortKey/sortDir), `hasActiveFilters` debe actualizarse para incluirlo si se considera "filtro limpiable".
+
+> Generado por el loop · feature F-0051 · step 4
+
+---
+## ADR-0151 · 2026-09-10 · GestoraCombobox con filtrado client-side sobre lista pre-cargada
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se creó un nuevo componente `GestoraCombobox.jsx` que filtra client-side el array de administradoras ya en memoria, en lugar de hacer ilike queries por keystroke.
+**Contexto:** El spec indica "poblándolo con las gestoras que ya provee mercadoService.getAdministradoras() (sin duplicar la fuente de datos)", lo que implica que la lista ya está cargada. El scout señaló que el número de administradoras únicas es acotado (dedup en JS), por lo que el filtrado client-side es suficiente y evita requests extras por cada tecla.
+**Alternativas descartadas:** Server-side ilike por keystroke (más escalable para listas grandes, pero no necesario dado el dominio acotado de administradoras FCI argentinas).
+**Consecuencias / riesgo residual:** Si el número de administradoras crece significativamente (>500) o se necesita filtrar por moneda/clasificación al mismo tiempo que la gestora, habría que evaluar pasarlo a server-side; queda como deuda técnica explícita del scout.
+
+> Generado por el loop · feature F-0051 · step 2
+
+---
+## ADR-0150 · 2026-09-10 · GestoraCombobox cierra dropdown al seleccionar en vez de mantenerlo abierto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Al seleccionar una gestora, el dropdown se cierra y el valor se muestra en el input (igual que FciSearchCombobox). El estado `open` requiere que `isSelected` sea falso para renderizar el dropdown.
+**Contexto:** El spec dice "input de texto + lista filtrable + selección + limpiar" pero no especifica si el dropdown queda abierto tras seleccionar. FciSearchCombobox cierra al seleccionar; seguir ese patrón es lo más consistente.
+**Alternativas descartadas:** Mantener el dropdown abierto para permitir cambiar de selección sin hacer click en X primero.
+**Consecuencias / riesgo residual:** Para cambiar de gestora el usuario debe primero limpiar con X, luego buscar de nuevo — un step extra. Si el UX del explorador requiere cambio rápido, el step que conecte el componente puede ajustar este comportamiento.
+
+> Generado por el loop · feature F-0051 · step 1
+
+---
+## ADR-0149 · 2026-09-10 · Chips de categoría en fila separada, no inline en el filter strip
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Los chips de categoría se colocan en un `<div>` propio (fila separada) después del bloque de filtros principales, en lugar de sustituir el `<select>` in-place dentro del strip de filtros.
+**Contexto:** La spec dice "reemplazar el select por una fila de chips". Con 11 opciones (Todos + 10 categorías) ubicar los chips dentro del flex-row de filtros (que ya tiene search, moneda, administradora y groupByFund) produciría un wrap caótico e indeseable en pantallas medianas.
+**Alternativas descartadas:** Mantener los chips dentro del filter strip (wrap natural); moverlos a una fila colapsable/dropdown.
+**Consecuencias / riesgo residual:** La jerarquía visual del filtro bar queda: fila 1 = search + moneda + administradora + groupByFund; fila 2 = chips de categoría. Si en el futuro el diseño unifica ambas filas habrá que refactorizar el JSX.
+
+> Generado por el loop · feature F-0050 · step 5
+
+---
+## ADR-0148 · 2026-09-10 · getFondosCountByCategoria dentro del Promise.all de loadPage, no en callback separado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** FciExplorador
+
+**Decisión:** Se llama a getFondosCountByCategoria dentro del mismo Promise.all de loadPage en lugar de crear un useCallback/useEffect independiente con deps reducidas.
+**Contexto:** El spec pedía integrar los conteos "dentro del mismo flujo reactivo". La alternativa era un useCallback separado con solo [moneda, administradora, search, groupByFund] como deps (sin page, sortKey, sortDir, clasificacion), lo que evitaría refetches innecesarios cuando cambia el orden o la página.
+**Alternativas descartadas:** Callback separado con deps reducidas — evita los refetches de conteos al paginar/reordenar, pero duplica la lógica de estado (loading/error) y requiere coordinar dos efectos con la misma fuente de universeDate.
+**Consecuencias / riesgo residual:** Cambios de sort o page disparan un refetch de conteos que no altera su resultado (sobre-fetch leve). Si en el futuro los conteos son costosos, extraer a callback propio con deps reducidas sería la optimización natural.
+
+> Generado por el loop · feature F-0050 · step 4
+
+---
+## ADR-0147 · 2026-09-10 · Orden de las categorías en CATEGORIAS: natural del map vs. orden anterior
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se itera `Object.entries(FCI_CLASIFICACION)` en orden natural de inserción (claves 1–10), resultando en Renta Variable, Renta Fija, Mercado de Dinero… en lugar del orden anterior (MM, RF, RV, Mixta, PyMEs).
+**Contexto:** El spec pide "iterar sobre el map como única fuente de verdad" sin especificar un orden de presentación. El array anterior tenía un orden distinto al de las claves del map (3, 2, 1, 4, 5).
+**Alternativas descartadas:** Mantener el orden visual anterior requeriría hardcodear una secuencia de claves (ej. [3,2,1,4,5,6,7,8,9,10]) o reordenar FCI_CLASIFICACION — ambas opciones agregan acoplamiento o tocan la fuente de verdad.
+**Consecuencias / riesgo residual:** El orden en el `<select>` cambia a 1–10. Si el negocio requiere un orden de presentación específico, debe definirse en el step de UI o mediante una propiedad de orden en FCI_CLASIFICACION.
+
+> Generado por el loop · feature F-0050 · step 3
+
+---
+## ADR-0146 · 2026-09-10 · `getFondosCountByCategoria` no acepta `clasificacion_cod` como filtro
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / mercadoService
+
+**Decisión:** Los tests verifican explícitamente que `.eq('clasificacion_cod', ...)` NO se llama — reflejando la intención de la función de contar todas las categorías en una sola query agrupada.
+**Contexto:** La firma de `getFondosCountByCategoria` en el servicio omite `clasificacion_cod` a propósito; el spec pedía "misma cadena de filtros que `getFondosPage`" pero esa cadena incluiría `clasificacion_cod` si se pasara. La función lo excluye deliberadamente (comentario en el código: "sin clasificacion_cod en los filtros: queremos el conteo de TODAS las categorías").
+**Alternativas descartadas:** Incluir un test que verifique que `clasificacion_cod` es ignorado aunque se pase como argumento (la función lo descarta por no estar en el destructuring). Se descartó por ser comportamiento de JS, no de la lógica de negocio.
+**Consecuencias / riesgo residual:** Si alguien refactoriza `getFondosCountByCategoria` para aceptar `clasificacion_cod` como filtro (para contar una sola categoría), el test "NO aplica .eq('clasificacion_cod', ...)" fallará — lo cual es el comportamiento deseado, ya que cambiaría la semántica de la función.
+
+> Generado por el loop · feature F-0050 · step 2
+
+---
+## ADR-0145 · 2026-09-10 · Conteo por categoría vía GROUP BY implícito de PostgREST (single query)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usa `select('clasificacion_cod, count:id.count()')` sin `.maybeSingle()`, confiando en que PostgREST agrupa implícitamente por columnas no-agregadas cuando se mezclan con funciones de agregación. Devuelve N filas (una por categoría presente).
+**Contexto:** El spec pedía "una sola query agrupada si PostgREST lo permite, si no N queries paralelas". El archivo ya usa el mecanismo de agregación PostgREST en `getFondosStats`; la diferencia es que aquí se selecciona también `clasificacion_cod` (no-agregado) junto a la función `count()`, lo que dispara el GROUP BY implícito.
+**Alternativas descartadas:** N queries `count`-only en paralelo (una por código 1-10), más verboso pero garantizado si PostgREST no soporta el GROUP BY implícito en la versión desplegada.
+**Consecuencias / riesgo residual:** Si la versión de PostgREST en el proyecto no soporta GROUP BY implícito con mezcla de columnas y agregados, la query devolvería un resultado incorrecto o error — en ese caso hay que migrar a las 10 queries paralelas del fallback.
+
+> Generado por el loop · feature F-0050 · step 1
+
+---
+## ADR-0144 · 2026-09-10 · getFondosStats corre en Promise.all junto a getFondosPage
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / FciExplorador
+
+**Decisión:** Se usa `Promise.all([getFondosPage, getFondosStats])` en un único `loadPage` callback en lugar de un segundo `useEffect` independiente, lo que implica que `getLatestUniverseDate()` se llama dos veces en paralelo (una por cada función).
+**Contexto:** El spec no especifica cómo orquestar los fetches en la página. `getFondosStats` necesita los mismos filtros que `getFondosPage` y el universo tiene que ser idéntico; un `useEffect` separado podría correr en diferente momento y usar un `universeDate` distinto si el cierre de datos cambia entre renders.
+**Alternativas descartadas:** (1) Segundo `useEffect` con las mismas deps — riesgo de race condition entre ambos loads. (2) Refactorizar `getLatestUniverseDate` a nivel de página y pasarlo a ambas funciones — cambio mayor que escapa al alcance del step.
+**Consecuencias / riesgo residual:** Dos llamadas a `getLatestUniverseDate` por carga de página (ambas son `.limit(1)` sobre la misma vista, costo bajo). Si en el futuro se quiere optimizar, se puede memoizar `getLatestUniverseDate` con un TTL corto dentro del servicio.
+
+> Generado por el loop · feature F-0049 · step 3
+
+---
+## ADR-0143 · 2026-09-10 · Fallback a tna_contrato vía select('*') en getUltimaCaucion
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El fallback `tna_real ?? tna_contrato` se implementa con `.select('*')` en vez de listar `tna_contrato` por nombre, replicando el patrón de `financingService.getCauciones`.
+**Contexto:** El step y el reviewer exigen el fallback a `tna_contrato`, pero esa columna no aparece en ninguna migración de `supabase/migrations/` ni en `schema.sql`; seleccionarla por nombre podría devolver PostgREST 42703 (columna inexistente) y romper la lectura entera. Ese conflicto no reconciliado causó el loop de intentos previos.
+**Alternativas descartadas:** `.select('tna_real, tna_contrato, fecha_inicio')` literal (descartado: rompe si la columna no existe en la DB); dejar solo `tna_real` sin fallback (descartado: incumple el step y el review).
+**Consecuencias / riesgo residual:** Queda pendiente confirmar en el schema versionado si `tna_contrato` debería existir formalmente (hoy es un campo esperado por el front sin DDL de respaldo); si se agrega una migración, se puede volver al select por columnas explícito.
+
+> Generado por el loop · feature F-0049 · step 2
+
+---
+## ADR-0142 · 2026-09-10 · KPIs del Explorador vía agregados PostgREST, no RPC
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** getFondosStats calcula count/avg/max con funciones de agregación server-side de PostgREST sobre la misma vista y la misma cadena de filtros (extraída a applyFondosFilters), en vez de una RPC/vista SQL nueva o de agregar en el cliente.
+**Contexto:** Dos reviews rechazaron la agregación en JS por el truncado de ~1000 filas de PostgREST; había que mover el cálculo al servidor sin que la cadena de filtros diverja de getFondosPage.
+**Alternativas descartadas:** (a) RPC PL/pgSQL con avg/max/count — descartada porque re-encodea el WHERE en SQL (diverge de la cadena .eq/.or/.gte que el step pide replicar) y exige deploy de migración; (b) seguir agregando en el cliente — descartada por incorrecta.
+**Consecuencias / riesgo residual:** Depende de que las funciones de agregación de PostgREST estén habilitadas en el proyecto Supabase (`db-aggregates-enabled`). No se pudo verificar contra la DB en vivo (restricción del entorno); si estuvieran deshabilitadas, la query devolvería error y habría que habilitar el toggle o caer a una RPC.
+
+> Generado por el loop · feature F-0049 · step 1
+
+---
+## ADR-0141 · 2026-09-10 · Orden del icono HelpCircle entre label y ArrowUpDown
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El ícono HelpCircle se coloca entre el texto del label y el ícono de ordenamiento ArrowUpDown, en ese orden: [Label] → [HelpCircle] → [ArrowUpDown].
+**Contexto:** El spec solo dice "junto al label" sin especificar si va antes o después del indicador de sort. El orden [label][info][sort] es semánticamente natural: primero el concepto, luego su aclaración, luego la indicación de interacción.
+**Alternativas descartadas:** Poner HelpCircle después de ArrowUpDown (menos natural, el ícono de sort queda "al medio") o antes del label (rompe el flujo de lectura izquierda-derecha para un header right-aligned).
+**Consecuencias / riesgo residual:** Si el equipo prefiere el ícono de sort siempre al extremo derecho como convención estricta, habría que invertir el orden a [label][ArrowUpDown][HelpCircle].
+
+> Generado por el loop · feature F-0048 · step 2
+
+---
+## ADR-0140 · 2026-09-10 · Tooltip usa createPortal hacia document.body para escapar overflow-x-auto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El componente Tooltip renderiza el panel flotante en `document.body` via `createPortal`, posicionado con `position: fixed` calculando coordenadas desde `getBoundingClientRect()`.
+**Contexto:** La tabla del Explorador está envuelta en un contenedor `overflow-x-auto` que recorta elementos posicionados con `absolute` que salen de sus límites. El spec pedía explícitamente evitar el clipping por overflow.
+**Alternativas descartadas:** Posicionar con `position: absolute` dentro de un ancestro con `overflow: visible`, pero requería modificar el markup de la tabla y podía romper el layout de columnas. Usar el atributo nativo `title=` (ya presente en el archivo) como alternativa de bajo costo, pero no cumple accesibilidad de foco ni contenido enriquecido.
+**Consecuencias / riesgo residual:** El tooltip se descarta ante scroll/resize para evitar posiciones stale. Si en el futuro se necesita flip automático al llegar al borde del viewport, habrá que agregar detección de overflow en `show()`.
+
+> Generado por el loop · feature F-0048 · step 1
+
+---
+## ADR-0139 · 2026-09-10 · Mock de Supabase con chain thenable único por llamada a `from()`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se implementó un factory `makeChain(resolveValue)` que es simultáneamente thenable (propiedad `then`) y provee `.single()`, cubriendo con el mismo objeto tanto los SELECT con `.single()` como los UPDATE/SELECT sin él. Cada `from()` call retorna una cadena distinta via `mockReturnValueOnce`.
+**Contexto:** El servicio mezcla dos patrones de consumo de Supabase: `await .select(...).single()` (devuelve uno) y `await .select(...).order(...)` o `await .update(...).eq(...)` (se awaitea directamente la cadena). Un mock que solo proveyera `.single()` no capturaría los UPDATEs; un mock solo thenable no capturaría los selects individuales.
+**Alternativas descartadas:** Usar un Proxy de Supabase completo (más robusto pero más acoplado al API), o separar el mock en dos factories distintos (más verboso, sin ganancia). Se descartó el enfoque de `jest-mock-extended` por la restricción de no agregar librerías.
+**Consecuencias / riesgo residual:** Los tests son sensibles al orden de llamadas a `from()` (usan `mockReturnValueOnce` en secuencia). Si el servicio reordena sus llamadas a Supabase, los mocks deberán actualizarse en el mismo orden.
+
+> Generado por el loop · feature F-0054 · step 6
+
+---
+## ADR-0138 · 2026-09-09 · Filtro de mutations = [] aplicado client-side
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El filtro `mutations IS NULL OR mutations = '[]'` se aplica en JavaScript después del fetch, no como filtro PostgREST, porque la versión instalada de supabase-js/PostgREST no garantiza que `.eq('mutations', '[]')` matchee correctamente contra JSONB vacío.
+**Contexto:** El spec dice explícitamente "usar la sintaxis correcta de supabase-js para jsonb según la versión instalada; filtrar client-side si hace falta". La condición de array vacío en JSONB vía PostgREST (operador `eq` o `cs`) se comporta inconsistentemente entre versiones; el filtro server-side de `external_ref IS NOT NULL` ya reduce el conjunto a solo filas de F-0053.
+**Alternativas descartadas:** Usar `.filter('mutations', 'eq', JSON.stringify([]))` o una RPC de Postgres para hacer el filtro transaccionalmente en el servidor.
+**Consecuencias / riesgo residual:** Si el volumen de rescates con `external_ref != null` ya aplicados crece, el client-side filter descarta filas innecesariamente traídas por la red. Si eso se vuelve un problema, migrar a un RPC o a un filtro `.is('mutations', null).or(...)` con sintaxis PostgREST avanzada.
+
+> Generado por el loop · feature F-0054 · step 3
+
+---
+## ADR-0137 · 2026-09-09 · `tipo` leído desde fci_rescates (columna de F-0053)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fciService
+
+**Decisión:** La función lee `tipo` directamente del row de `fci_rescates` asumiendo que F-0053 ya agregó esa columna a la tabla. No se infiere ni se defaultea.
+**Contexto:** Los inserts existentes de `applyRedemptionPPC/FIFO` no persisten `tipo` en `fci_rescates`, por lo que la columna no está en el código anterior. El spec indica "fci_id/cuotapartes/tipo de esa fila" — implica que F-0053 la agrega como parte del schema de ingesta.
+**Alternativas descartadas:** Default silencioso a `'portfolio'` (todos los rescates auto-detectados son de portfolio). Se descartó porque oculta un bug si F-0053 llega a manejar tipo `'carry'`, y porque el spec es explícito en leer el campo de la fila.
+**Consecuencias / riesgo residual:** Si F-0053 no deployó la columna `tipo` en `fci_rescates`, `_consumeLots` recibirá `undefined` como `tipo` y el filtro `.eq('tipo', undefined)` en Supabase puede retornar resultados inesperados. Validar al integrar con F-0053.
+
+> Generado por el loop · feature F-0054 · step 2
+
+---
+## ADR-0136 · 2026-09-09 · Validación FIFO antes del loop, no después
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fciService.js
+
+**Decisión:** La validación de saldo insuficiente en FIFO se hace sumando cuotapartes totales ANTES del loop de mutaciones, no chequeando `remainingNotApplied` al final del loop.
+**Contexto:** Si la validación se hiciera al final, ya habrían corrido N `supabase.update` sobre `fci_lots` (consumiendo lotes reales) antes de lanzar el error — dejando la base corrompida sin `fci_rescates` que respalde las mutaciones. El spec solo dice "que también lance error en vez de aplicar consumo parcial", sin especificar el punto de validación.
+**Alternativas descartadas:** Chequear `remainingNotApplied > 0` después del loop y hacer rollback manual de los lotes ya actualizados — descartado porque requeriría N updates adicionales y la ventana de corrupción ya habría ocurrido.
+**Consecuencias / riesgo residual:** `remainingNotApplied` en el return de `applyRedemptionFIFO` siempre será 0 cuando no hay error (era ya el caso implícito cuando había suficiente saldo). El campo en el return queda como vestigio útil para futuros casos donde se quiera saldo parcial con flag explícito.
+
+> Generado por el loop · feature F-0054 · step 1
+
+---
+## ADR-0135 · 2026-09-09 · Fixture de F-0055 usa par Solicitud/Liquidacion en el resumen general, no una Liquidacion suelta
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync
+
+**Decisión:** El fixture sintético reproduce el bug "tipo mal" con un par Solicitud+Liquidacion del mismo tipo (rescate) bajo el encabezado "Resumen de Movimientos", en vez de una Liquidacion "suelta" como pedía literalmente la tarea.
+**Contexto:** Una Liquidacion sin Solicitud previa nunca se empareja ni interfiere (rama `elif liq_m and pendientes`), y encabezar la zona con "Resumen General" hacía que el recorte pre-fix ya la descartara; por eso los dos intentos anteriores no discriminaban el step 1 y fueron rechazados.
+**Alternativas descartadas:** Mantener la Liquidacion suelta literal (descartada: no reproduce ningún bug); simular "sin fix" desde el test (descartado: el test debe correr contra el parser real).
+**Consecuencias / riesgo residual:** Queda abierta la verificación manual contra el PDF real (paso 7), que no puede automatizarse sin commitear datos financieros reales.
+
+> Generado por el loop · feature F-0055 · step 4
+
+---
+## ADR-0134 · 2026-09-09 · Deduplicación silenciosa para comprobantes con valores idénticos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync
+
+**Decisión:** Solo se emite WARNING cuando los valores difieren; si el mismo CL aparece dos veces con idénticos cuotapartes/vcp/monto, se descarta el duplicado silenciosamente sin loguear.
+**Contexto:** El spec dice "detectar comprobantes repetidos con valores de cuotapartes/vcp/monto distintos, loguear WARNING" — no especifica qué hacer si los valores son iguales. Un duplicado exacto no es un conflicto de datos, solo redundancia estructural del PDF.
+**Alternativas descartadas:** Loguear WARNING en todos los casos de duplicado (igual o distinto), que sería más ruidoso pero más visible en logs.
+**Consecuencias / riesgo residual:** Si el PDF real alguna vez tiene duplicados exactos (mismo CL, mismos valores), pasarán silenciosamente. Si se prefiere visibilidad total, se puede trivialmente quitar la condición del `if` y siempre loguear.
+
+> Generado por el loop · feature F-0055 · step 3
+
+---
+## ADR-0133 · 2026-09-09 · Anchor de corte: prefijo "fondos de inver" en vez del texto exacto con acento
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync
+
+**Decisión:** Se usa `text.lower().find("fondos de inver")` como substring de búsqueda, omitiendo deliberadamente la 's' final de "Inversion/Inversión", para ser robusto frente a ambas grafías según lo que extraiga pdfplumber del PDF real.
+**Contexto:** El spec menciona la sección como "Fondos de Inversion" pero el PDF real probablemente tiene "Fondos de Inversión" con acento. pdfplumber puede extraer cualquiera de las dos dependiendo de la codificación del PDF. Sin acceso al PDF real no se puede determinar la grafía exacta.
+**Alternativas descartadas:** Usar `"fondos de inversión"` normalizado con unicodedata.normalize; usar regex con `re.IGNORECASE` y `[oó]`; buscar ambas variantes explícitamente. Se descartaron por mayor complejidad sin beneficio adicional dado que el prefijo "fondos de inver" cubre ambos casos con find() simple.
+**Consecuencias / riesgo residual:** Si el PDF real usa una grafía diferente (ej. "FONDOS DE INVERSIÓN" en mayúsculas), `.lower()` lo resuelve. Si usa un guion o separador inusual ("Fondos - Inversión"), el find() fallaría y caería al fallback "resumen de movimientos". Verificar con el PDF real en el paso 7.
+
+> Generado por el loop · feature F-0055 · step 1
+
+---
+## ADR-0132 · 2026-09-09 · PDFs de fixture generados en conftest, no commiteados
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Los PDFs se generan en `pytest_configure` de conftest.py en lugar de commitearse como binarios; el `.gitignore` ya excluye `*.pdf` globalmente.
+**Contexto:** No hay forma de crear PDFs sin ejecutar código, y hacerlo requeriría una librería de escritura PDF (reportlab/fpdf2) fuera del scope. Usar conftest.py con un writer mínimo de PDF 1.4 (Type1 Courier) cumple "fixture PDF real" porque los archivos son PDFs válidos que pdfplumber lee de verdad.
+**Alternativas descartadas:** Mockear `extract_text` (no testea la lectura real del PDF); commitear binarios pre-generados (requeriría actualizar .gitignore o forzar el add); usar reportlab (nueva dependencia).
+**Consecuencias / riesgo residual:** Los PDFs se regeneran en cada `pytest run`. Si pdfminer cambia su comportamiento de extracción para PDFs mínimos, los tests pueden requerir ajuste en el texto del fixture.
+
+> Generado por el loop · feature F-0053 · step 9
+
+---
+## ADR-0131 · 2026-09-09 · Cron semanal lunes 09:00 UTC para fci-sync
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Se eligió `0 9 * * 1` (lunes 06:00 ART) como schedule, asumiendo que Alycbur envía el Informe Semanal los lunes a la madrugada o temprano en la mañana y que las 06:00 ART dan margen suficiente para que el mail esté disponible.
+**Contexto:** El spec indica que el informe es "semanal" pero no especifica el día ni la hora de envío de Alycbur. El cron diario de cauciones (`0 5 * * *`) no aplica aquí; hubo que elegir un schedule nuevo.
+**Alternativas descartadas:** Cron diario (como cauciones) para no depender de asumir el día de envío — descartado porque dispararía 6 runs en falso por semana; cron los viernes o domingos si Alycbur envía el informe al cierre de semana.
+**Consecuencias / riesgo residual:** Si Alycbur envía el informe un día distinto al lunes, el run automático puede procesar el mail con hasta ~7 días de demora o disparar un `workflow_dispatch` manual. Se puede corregir sin cambio de lógica, solo ajustando el cron.
+
+> Generado por el loop · feature F-0053 · step 8
+
+---
+## ADR-0130 · 2026-09-09 · No extraer gmail_common.py: la duplicación ya existía y tocar sync_cauciones.py está fuera de alcance
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Se mantiene `mark_processed()` duplicada en `fci_sync.py` en lugar de crear un módulo compartido `gmail_common.py`.
+**Contexto:** El spec decía "extraerla a un módulo compartido o duplicarla". La función ya estaba duplicada en `fci_sync.py` desde steps anteriores. Crear `gmail_common.py` solo tiene sentido si también se refactoriza `sync_cauciones.py` para importarla — pero modificar `sync_cauciones.py` está explícitamente fuera de alcance en este feature. Un módulo "compartido" usado por un solo archivo es abstracción prematura.
+**Alternativas descartadas:** Crear `gmail_common.py` con `find_all_mail` + `mark_processed`, importarla en `fci_sync.py`, y dejar `sync_cauciones.py` sin tocar (redundancia entre el módulo y el archivo existente).
+**Consecuencias / riesgo residual:** Si en el futuro se quiere unificar, habrá que refactorizar ambos archivos a la vez. El riesgo de divergencia es bajo porque `mark_processed` es código estable sin lógica de negocio.
+
+> Generado por el loop · feature F-0053 · step 6
+
+---
+## ADR-0129 · 2026-09-08 · `on_conflict=external_ref` aplicado también a `upsert_rescates`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Se cambió `on_conflict` de `user_id,portfolio_id,external_ref` a `external_ref` en ambas funciones (`upsert_lots` y `upsert_rescates`), aunque el spec de step 4 solo especifica el payload de fci_lots.
+**Contexto:** El valor de `on_conflict` en PostgREST debe coincidir exactamente con una restricción única o índice existente en la tabla. Si fci_rescates tiene solo un índice sobre `external_ref` (patrón simétrico al de fci_lots), dejar `user_id,portfolio_id,external_ref` causaría un error 400/409 en runtime.
+**Alternativas descartadas:** Dejar `upsert_rescates` intacto hasta que un step posterior especifique su constraint.
+**Consecuencias / riesgo residual:** Si el índice real de fci_rescates es compuesto `(user_id, portfolio_id, external_ref)` y no solo `external_ref`, el upsert fallará en runtime. Augusto debe confirmar el constraint de fci_rescates mirando la migración SQL correspondiente.
+
+> Generado por el loop · feature F-0053 · step 4
+
+---
+## ADR-0128 · 2026-09-08 · resolve_fci_id con caché por cafci_id, no por movimiento
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** La cache de resolución `fci_id_cache` se comparte entre todos los PDFs del lote, indexada por `cafci_id`. Un mismo fondo que aparezca en varios movimientos (o varios PDFs del mismo informe) resuelve su `fci_id` con una sola request HTTP.
+**Contexto:** El spec pide hacer `GET .../fci_master?cafci_id=eq.<n>&select=id` "por cada movimiento", pero no prohíbe cachear. Sin caché, un fondo con 10 movimientos genera 10 requests idénticas.
+**Alternativas descartadas:** Colectar todos los `cafci_id` únicos up-front y hacer un `GET .../fci_master?cafci_id=in.(a,b,c)` en batch antes del loop (una sola request total). Descartado por agregar complejidad de formatting de filtro `in.()` sin beneficio real dado el bajo volumen semanal.
+**Consecuencias / riesgo residual:** Si el catálogo `fci_master` se actualiza mientras corre el sync (café nuevo se da de alta mid-run), la caché no lo ve — aceptable para un sync de segundos de duración.
+
+> Generado por el loop · feature F-0053 · step 3
+
+---
+## ADR-0127 · 2026-09-08 · on_conflict en upsert usa (user_id, portfolio_id, external_ref)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** fci-sync (caucion-sync)
+
+**Decisión:** El upsert idempotente se configura con `on_conflict=user_id,portfolio_id,external_ref`, asumiendo que ese es el índice único en ambas tablas Supabase.
+**Contexto:** No existen archivos de migración SQL en el repo, por lo que no se puede verificar el constraint real. El spec solo dice "nunca escribir sin external_ref seteado". El patrón de cauciones usa (user_id, portfolio_id, operation_key) como clave compuesta.
+**Alternativas descartadas:** `on_conflict=external_ref` solo (si el constraint es simple) o no usar on_conflict y confiar en el índice único de la tabla. Se eligió la forma compuesta por consistencia con cauciones y porque el service_role puede gestionar conflictos a nivel multi-tenant.
+**Consecuencias / riesgo residual:** Si la tabla tiene un constraint diferente (ej. solo `external_ref`), el upsert devolverá error 409/400. Requiere coordinación con la migración SQL de F-0053 para confirmar el nombre exacto del constraint.
+
+> Generado por el loop · feature F-0053 · step 2
+
+---
+## ADR-0126 · 2026-09-08 · DAYS_BACK = 10 para el modo daily semanal
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** fci-sync (caucion-sync)
+
+**Decisión:** Se fijó DAYS_BACK en 10 días (vs 4 días de cauciones) para el modo daily del informe semanal FCI.
+**Contexto:** El informe es semanal, no diario. Con 4 días se perdería el mail si el workflow se ejecuta el lunes pero el informe llegó el viernes anterior (diferencia de 3 días naturales + posibles feriados). El spec no especifica el valor.
+**Alternativas descartadas:** 7 días (ventana exacta semanal) o 14 días (dos semanas de buffer). Se eligió 10 como balance entre cobertura y evitar redownloads excesivos en backfill-like runs.
+**Consecuencias / riesgo residual:** Si el informe llega con más de 10 días de retraso, el modo daily lo pierde. El modo backfill siempre cubre el histórico completo sin restricción de fecha.
+
+> Generado por el loop · feature F-0053 · step 2
+
+---
+## ADR-0125 · 2026-09-08 · parse_money devuelve Decimal (no float como en cauciones_parser)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** La función local parse_money retorna Decimal en lugar de float, para cumplir con el tipo de retorno especificado en el spec ({cuotapartes: Decimal, vcp: Decimal, monto: Decimal}).
+**Contexto:** cauciones_parser.parse_money retorna float; el spec de F-0053 pide explícitamente Decimal para los campos monetarios de FCI.
+**Alternativas descartadas:** Retornar float y convertir en el caller. Descartado: el spec es explícito en Decimal y la conversión tardía puede introducir error de punto flotante antes de persistir.
+**Consecuencias / riesgo residual:** Si sync_fci.py (step siguiente) pasa estos valores a JSON para PostgREST, necesita serializar Decimal con default=str (como hace el __main__ CLI del parser). Patrón ya establecido en cauciones_parser __main__.
+
+> Generado por el loop · feature F-0053 · step 1
+
+---
+## ADR-0124 · 2026-09-08 · Matching FIFO sin verificar tipo (suscripcion vs rescate)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Cada Liquidación CL se empareja con la Solicitud DOC más antigua del bloque, sin exigir que ambas sean del mismo tipo.
+**Contexto:** El spec dice "Liquidación siguiente… por comprobante DOC→CL cercano en el mismo bloque", lo que implica emparejamiento por proximidad secuencial, no por identidad de tipo.
+**Alternativas descartadas:** Emparejar solo si tipo(solicitud) == tipo(liquidación). Más seguro ante PDFs con interleaving de suscripciones y rescates simultáneos, pero más restrictivo y descartaría pares válidos si el texto extrae el tipo con ortografía levemente distinta.
+**Consecuencias / riesgo residual:** En el caso (improbable pero posible) de un rescate y una suscripción simultáneos con sus liquidaciones entrelazadas, el tipo devuelto podría invertirse. Revisable al tener PDFs reales.
+
+> Generado por el loop · feature F-0053 · step 1
+
+---
+## ADR-0123 · 2026-09-08 · Orden de columnas en línea de liquidación (cuotapartes → vcp → monto)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** caucion-sync (fci-sync)
+
+**Decisión:** Se asume que los tres importes en la línea de liquidación aparecen en el orden cuotapartes, vcp, monto de izquierda a derecha, y se toman los primeros tres matches de MONEY_RE.
+**Contexto:** No existe un PDF de muestra del Informe Semanal FCI de Alycbur en el repo ni en la investigación previa; el formato real es desconocido hasta disponer de un ejemplar.
+**Alternativas descartadas:** Usar extracción de tablas de pdfplumber (page.extract_tables) que preserva columnas, pero requiere conocer el número de columna exacto — igual de incierto sin muestra real.
+**Consecuencias / riesgo residual:** Si el PDF real tiene un orden diferente (ej. monto primero) o columnas adicionales antes de cuotapartes, los campos quedarán mezclados. Ajustar las constantes de índice (montos[0], [1], [2]) o cambiar a extracción tabular al tener el primer PDF real.
+
+> Generado por el loop · feature F-0053 · step 1
+
+---
+## ADR-0122 · 2026-09-07 · getLatestUniverseDate invocado vía mercadoService (no supabase inline) para habilitar spy en tests
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Dentro de `getFondosPage`, la fecha del universo se obtiene llamando `mercadoService.getLatestUniverseDate()` (referencia al objeto exportado) en lugar de duplicar la query de Supabase inline.
+**Contexto:** Los tests de `getFondosPage` usan `vi.spyOn(mercadoService, 'getLatestUniverseDate')` para controlar el valor devuelto de forma aislada. Si la query se hubiera duplicado inline, los tests habrían necesitado configurar `fromMock` con dos builders distintos (uno por tabla) y los tests existentes habrían requerido cambios más invasivos.
+**Alternativas descartadas:** Duplicar la query de `fci_explorador` inline (sin DRY, tests más complejos); extraer a función libre fuera del objeto (incompatible con spy sobre el objeto exportado).
+**Consecuencias / riesgo residual:** `getFondosPage` tiene una dependencia interna hacia `mercadoService.getLatestUniverseDate` — si el objeto se reestructura (p.ej. funciones sueltas en lugar de objeto), hay que actualizar la referencia. Es una convención que el resto del codebase no usa explícitamente.
+
+> Generado por el loop · feature F-0047 · step 3
+
+---
+## ADR-0121 · 2026-09-07 · Fuente de MAX(rend_updated_at): fci_explorador en lugar de fci_explorador_grupos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se consulta `fci_explorador` (vista plana, una fila por clase) y no `fci_explorador_grupos` para obtener el MAX de `rend_updated_at`.
+**Contexto:** Ambas vistas exponen `rend_updated_at`. El spec dice "MAX sobre la fecha de último precio / rend_updated_at expuesta por las vistas" sin especificar cuál. `fci_explorador_grupos` requiere que la migration 039 esté aplicada (gate humano, dependencia de F-0046); `fci_explorador` siempre existe y cubre todas las clases activas (el MAX es el mismo o mayor que el de la vista agrupada).
+**Alternativas descartadas:** Consultar `fci_explorador_grupos` — daría el mismo resultado en producción una vez que la 039 esté aplicada, pero introduce una dependencia de infraestructura innecesaria para este helper.
+**Consecuencias / riesgo residual:** Si la vista plana `fci_explorador` se renombra o desaparece, este helper debe actualizarse; no hay impacto funcional mientras la vista exista.
+
+> Generado por el loop · feature F-0047 · step 1
+
+---
+## ADR-0120 · 2026-09-07 · clases_hermanas excluye la clase representativa (no incluye todas)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La vista `fci_explorador_grupos` construye `clases_hermanas` filtrando la fila representativa con `(c->>'id')::UUID != best.id`, de modo que el array contiene solo las "hermanas" y no la clase que ya aparece en la fila principal.
+**Contexto:** El spec dice "lista clases_hermanas" sin especificar si la clase representativa se incluye o no. El nombre "hermanas" (sibling) sugiere que son las otras clases del grupo, no todas.
+**Alternativas descartadas:** Incluir todas las clases (incluyendo la representativa) y dejar que la UI filtre. Se descartó porque duplicaría la información visible y complicaría el conteo.
+**Consecuencias / riesgo residual:** Si un fondo tiene 2 clases, `n_clases=2` y `clases_hermanas` tendrá 1 elemento. Si tiene 1 clase, `clases_hermanas=[]` y el chevron no aparece. El invariante es `n_clases = clases_hermanas.length + 1`.
+
+> Generado por el loop · feature F-0046 · step 4
+
+---
+## ADR-0119 · 2026-09-07 · normalizeFondo va en mercadoService, no en fciService
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La función `normalizeFondo` se colocó en `mercadoService.js` junto a `getFondosPage`, que es el único método que consume las vistas del Explorador. `fciService.js` no se tocó porque solo consulta `fci_master` directamente y no recibe estos campos.
+**Contexto:** El spec dice "en fciService.js / constants" pero `fci_explorador_grupos` es consultada exclusivamente desde `mercadoService.js` (paso 1). Meter la normalización en `fciService.js` requeriría importarla cruzado o duplicarla.
+**Alternativas descartadas:** Poner `normalizeFondo` en `fciService.js` como util exportada e importarla desde `mercadoService.js`; descartado porque introduce una dependencia cruzada entre dos servicios sin beneficio — la única llamada vive en `mercadoService`.
+**Consecuencias / riesgo residual:** Si en el futuro otro método de `fciService` también devuelve campos de agrupamiento, habrá que mover o re-exportar `normalizeFondo`. Por ahora el acoplamiento es cero.
+
+> Generado por el loop · feature F-0046 · step 2
+
+---
+## ADR-0118 · 2026-09-07 · Default de groupByFund = true (vista agrupada por defecto)
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** argos
+
+**Decisión:** El parámetro `groupByFund` defaultea a `true`, haciendo que `getFondosPage` consulte `fci_explorador_grupos` salvo que el caller lo deshabilite explícitamente.
+**Contexto:** El spec define `groupByFund` con default `true` sin aclarar qué debe ver el usuario cuando llega por primera vez al Explorador. Defaultear a `true` implica que hasta que la UI pase `groupByFund: false`, todos los consumidores existentes sin ese argumento verán la vista agrupada, que aún no existe en prod hasta que Augusto aplique la migración manualmente.
+**Alternativas descartadas:** Defaultear a `false` (mantener comportamiento actual hasta que la UI opte-in explícitamente); sería más conservador respecto a consumidores actuales de `getFondosPage` antes del deploy de la migración.
+**Consecuencias / riesgo residual:** Mientras `039_fci_explorador_grupos.sql` no esté aplicada en prod, cualquier llamada a `getFondosPage` sin `groupByFund: false` fallará con error Supabase (tabla inexistente). Los consumidores actuales deben pasar `groupByFund: false` como workaround temporal si necesitan funcionar antes del deploy.
+
+> Generado por el loop · feature F-0046 · step 1
+
+---
 ## ADR-0117 · 2026-09-04 · Testear las dos funciones helper en lugar del router preApprove directamente
 
 **Estado:** aceptada

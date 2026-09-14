@@ -1,0 +1,83 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0048
+
+[2026-09-10T02:40:26.454Z] [system] Modo operativo: PRODUCT
+[2026-09-10T02:40:26.457Z] [main] Feature F-0048 — target: argos
+[2026-09-10T02:40:26.458Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-10T02:40:26.603Z] [git] Branch creado: feat/F-0048-argos-fci-explorador-tooltip-explicativo
+[scout] Investigación "mapa" falló: SyntaxError: Bad control character in string literal in JSON at position 1042 (line 16 column 246)
+[scout] detective: 0 paths descartados, 1 símbolos no verificados
+[scout] Investigación "riesgos" falló: SyntaxError: Expected ',' or ']' after array element in JSON at position 9193 (line 136 column 6)
+[2026-09-10T02:41:04.495Z] [main] Research del scout cargado para F-0048 (8746 chars)
+[2026-09-10T02:41:04.495Z] [planner] Invocando Opus para descomponer feature...
+[2026-09-10T02:41:16.296Z] [main] Feature F-0048: 3 pasos planificados
+[2026-09-10T02:41:16.299Z] 
+[main] === Step 1/3: Crear un componente Tooltip accesible reutilizable en src/components/ui (soporta hover + focus por teclado, usa tokens argos-*, evita ser clipeado por overflow) y exportarlo desde src/components/ui/index.js. Debe recibir children (trigger) y un texto/contenido explicativo, y ser seguro ante errores de render (compatible con ErrorBoundary). ===
+[2026-09-10T02:41:16.303Z] [executor] Iniciando sesión nueva para step 1: Crear un componente Tooltip accesible reutilizable en src/components/ui (soporta hover + focus por teclado, usa tokens argos-*, evita ser clipeado por overflow) y exportarlo desde src/components/ui/index.js. Debe recibir children (trigger) y un texto/contenido explicativo, y ser seguro ante errores de render (compatible con ErrorBoundary).
+[2026-09-10T02:43:26.394Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0048-step1.log
+[2026-09-10T02:43:26.397Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:43:29.217Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:43:29.217Z] [verifier] Corriendo tests...
+[2026-09-10T02:43:30.657Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:43:31.226Z] [qa] Navegando http://localhost:5173/
+[2026-09-10T02:43:33.564Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-10T02:43:33.609Z] [qa] FAIL: 1 errores
+[2026-09-10T02:43:33.610Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-10T02:43:33.610Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-10T02:44:29.958Z] [reviewer] CHANGES_REQUESTED en step 1:
+- `focus-visible:ring-primary/50` (línea 43) usa un token de color inexistente: en `tailwind.config.js` no hay color top-level `primary` (solo `background.primary`, `border.primary`, `text.primary` anidados). Tailwind descarta silenciosamente el utility desconocido (lint/typecheck no lo agarran), así que el anillo de foco por teclado cae al color default azul de Tailwind en vez de un token de marca — contradice el requisito del step de "usa tokens argos-*". Cambiar por un token existente (p. ej. `ring-teal/50` o `ring-accent/50`).
+[2026-09-10T02:44:29.962Z] [executor] Resumiendo sesión fd6f204f-aae9-4e68-aaab-8cd277c46cb8 para step 1
+[2026-09-10T02:44:53.960Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0048-step1.log
+[2026-09-10T02:44:53.961Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:44:56.751Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:44:56.751Z] [verifier] Corriendo tests...
+[2026-09-10T02:44:58.029Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:45:48.889Z] [reviewer] APPROVED step 1
+[2026-09-10T02:45:49.169Z] [git] Commit 79779b31: step 1
+[2026-09-10T02:45:49.171Z] [adr] ADR-0140 registrado (origen: Supuesto del agente)
+[2026-09-10T02:45:49.172Z] [main] Step 1 completado y commiteado (79779b31)
+[2026-09-10T02:45:49.173Z] 
+[main] === Step 2/3: En src/pages/FciExplorador.jsx, agregar un affordance de tooltip (icono Info/HelpCircle de lucide-react) junto al label 'TNA (30D)' dentro del componente SortHeader/su <span>, usando el Tooltip creado, con texto corto tipo 'TNA anualizada calculada sobre la variación de los últimos 30 días'. Verificar que el header sigue disparando toggleSort('tna') al hacer click y que el tooltip es accesible por teclado sin bloquear el onClick de ordenamiento. ===
+[2026-09-10T02:45:49.175Z] [executor] Iniciando sesión nueva para step 2: En src/pages/FciExplorador.jsx, agregar un affordance de tooltip (icono Info/HelpCircle de lucide-react) junto al label 'TNA (30D)' dentro del componente SortHeader/su <span>, usando el Tooltip creado, con texto corto tipo 'TNA anualizada calculada sobre la variación de los últimos 30 días'. Verificar que el header sigue disparando toggleSort('tna') al hacer click y que el tooltip es accesible por teclado sin bloquear el onClick de ordenamiento.
+[2026-09-10T02:47:03.644Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0048-step2.log
+[2026-09-10T02:47:03.647Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:47:06.440Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:47:06.441Z] [verifier] Corriendo tests...
+[2026-09-10T02:47:07.707Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:47:07.831Z] [qa] Navegando http://localhost:5173/
+[2026-09-10T02:47:10.185Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-10T02:47:10.228Z] [qa] FAIL: 1 errores
+[2026-09-10T02:47:10.229Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-10T02:47:10.229Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-10T02:47:45.259Z] [reviewer] APPROVED step 2
+[2026-09-10T02:47:45.542Z] [git] Commit e941c5ec: step 2
+[2026-09-10T02:47:45.544Z] [adr] ADR-0141 registrado (origen: Supuesto del agente)
+[2026-09-10T02:47:45.545Z] [main] Step 2 completado y commiteado (e941c5ec)
+[2026-09-10T02:47:45.545Z] 
+[main] === Step 3/3: Correr typecheck, lint y la suite de tests; corregir cualquier error introducido por los cambios anteriores sin modificar el cálculo de TNA ni la capa de datos. ===
+[2026-09-10T02:47:45.548Z] [executor] Iniciando sesión nueva para step 3: Correr typecheck, lint y la suite de tests; corregir cualquier error introducido por los cambios anteriores sin modificar el cálculo de TNA ni la capa de datos.
+[2026-09-10T02:48:48.454Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0048-step3.log
+[2026-09-10T02:48:48.457Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:48:51.236Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:48:51.237Z] [verifier] Corriendo tests...
+[2026-09-10T02:48:52.501Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:48:52.591Z] [reviewer] Diff vacío — step 3 aprobado sin invocar modelo
+[2026-09-10T02:48:52.592Z] [reviewer] APPROVED step 3
+[2026-09-10T02:48:52.779Z] [git] Step 3: sin cambios para commitear (no-op) — se mantiene HEAD e941c5ec
+[2026-09-10T02:48:52.780Z] [main] Step 3 completado y commiteado (e941c5ec)
+[2026-09-10T02:48:52.781Z] [main] Feature F-0048: steps COMPLETOS.
+[2026-09-10T02:48:53.059Z] [git] Merge OK: feat/F-0048-argos-fci-explorador-tooltip-explicativo → main (local, sin push). Push a main y deploy = manual.
+[2026-09-10T02:48:53.063Z] [system] PROGRESS.md actualizado
+[2026-09-10T02:48:53.065Z] [release] typecheck...
+[2026-09-10T02:48:55.863Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:48:55.864Z] [release] tests...
+[2026-09-10T02:48:57.177Z] [release] build de prod...
+[2026-09-10T02:49:05.503Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-10T02:49:05.504Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-10T02:49:07.769Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-10T02:49:07.775Z] [adr] ADRs generados en esta feature:
+[2026-09-10T02:49:07.775Z]   ADR-0140 — Tooltip usa createPortal hacia document.body para escapar overflow-x-auto [Supuesto del agente] ← REVISAR
+[2026-09-10T02:49:07.775Z]   ADR-0141 — Orden del icono HelpCircle entre label y ArrowUpDown [Supuesto del agente] ← REVISAR
+[2026-09-10T02:49:07.776Z] [main] F-0048 RELEASED (push hecho). STATE.json archivado como STATE.F-0048.archived.json
+[2026-09-10T02:49:07.778Z] [backlog] Filas marcadas done: AR-025

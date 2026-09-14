@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
-import { updateBacklogStatus } from './backlog.js'
+import { execa } from 'execa'
+import { updateBacklogStatus, commitAndPushBacklog, pushBacklogFile } from './backlog.js'
 
 // Filas reales copiadas de system/BACKLOG.md (secciones Sistema y Kredy), tal cual el formato
 // de la fecha de este test — ID | P | Descripción | Estado | Ejecutor.
@@ -118,5 +119,140 @@ describe('updateBacklogStatus', () => {
     const missingFile = path.join(tmpDir, 'DOES_NOT_EXIST.md')
     const result = updateBacklogStatus('F-0099', ['S-005'], '2026-07-27', missingFile)
     expect(result).toEqual({ updated: [], missing: ['S-005'] })
+  })
+})
+
+// commitAndPushBacklog toca git de verdad — se prueba contra un repo real (bare origin +
+// working clone) en tmpdir, nunca contra el repo real de augusto-os. Sin esto la reconciliación
+// automática de arriba (updateBacklogStatus) queda escrita solo en disco: el repo remoto de
+// augusto-os nunca se entera, que es exactamente el bug que motivó esta función (ver comentario
+// en backlog.ts).
+describe('commitAndPushBacklog', () => {
+  let workDir: string
+  let originPath: string
+  let repoPath: string
+
+  beforeEach(async () => {
+    workDir = mkdtempSync(path.join(tmpdir(), 'backlog-push-test-'))
+    originPath = path.join(workDir, 'origin.git')
+    repoPath = path.join(workDir, 'repo')
+
+    await execa('git', ['init', '--bare', originPath])
+    await execa('git', ['clone', originPath, repoPath])
+    await execa('git', ['config', 'user.email', 'test@example.com'], { cwd: repoPath })
+    await execa('git', ['config', 'user.name', 'Test'], { cwd: repoPath })
+  })
+
+  afterEach(() => {
+    rmSync(workDir, { recursive: true, force: true })
+  })
+
+  async function seedRepo() {
+    const sysDir = path.join(repoPath, 'system')
+    await execa('mkdir', ['-p', sysDir])
+    writeFileSync(path.join(sysDir, 'BACKLOG.md'), FIXTURE, 'utf-8')
+    await execa('git', ['add', 'system/BACKLOG.md'], { cwd: repoPath })
+    await execa('git', ['commit', '-m', 'initial backlog'], { cwd: repoPath })
+    await execa('git', ['branch', '-m', 'master'], { cwd: repoPath })
+    await execa('git', ['push', 'origin', 'master'], { cwd: repoPath })
+    await execa('git', ['remote', 'set-head', 'origin', 'master'], { cwd: repoPath })
+  }
+
+  it('commits and pushes only system/BACKLOG.md, and origin reflects it afterward', async () => {
+    await seedRepo()
+    const backlogFile = path.join(repoPath, 'system', 'BACKLOG.md')
+    const updatedContent = readFileSync(backlogFile, 'utf-8')
+      .replace('| S-005 | 5 | Fase 5: Product Analyst (backlog desde métricas de uso real) | pending | cc |',
+        '| S-005 | ✅ | Fase 5: Product Analyst (backlog desde métricas de uso real) | done 2026-09-14 (F-0099, orquestador, liberado a prod) | cc |')
+    writeFileSync(backlogFile, updatedContent, 'utf-8')
+
+    const result = await commitAndPushBacklog('F-0099', ['S-005'], repoPath)
+    expect(result.committed).toBe(true)
+    expect(result.pushed).toBe(true)
+    expect(result.branch).toBe('master')
+
+    const checkPath = path.join(workDir, 'fresh-check')
+    await execa('git', ['clone', originPath, checkPath])
+    const remoteContent = readFileSync(path.join(checkPath, 'system', 'BACKLOG.md'), 'utf-8')
+    expect(remoteContent).toContain('done 2026-09-14 (F-0099, orquestador, liberado a prod)')
+  })
+
+  it('is a no-op when BACKLOG.md has no uncommitted changes', async () => {
+    await seedRepo()
+    const result = await commitAndPushBacklog('F-0099', ['S-005'], repoPath)
+    expect(result).toEqual({ committed: false, pushed: false })
+  })
+
+  it('returns empty result without touching git when updatedIds is empty', async () => {
+    await seedRepo()
+    const result = await commitAndPushBacklog('F-0099', [], repoPath)
+    expect(result).toEqual({ committed: false, pushed: false })
+  })
+
+  it('refuses to commit/push when HEAD is not on the default branch, leaving the change uncommitted', async () => {
+    await seedRepo()
+    await execa('git', ['checkout', '-b', 'feature/other-work'], { cwd: repoPath })
+    const backlogFile = path.join(repoPath, 'system', 'BACKLOG.md')
+    writeFileSync(backlogFile, readFileSync(backlogFile, 'utf-8') + '\n| AR-999 | 1 | test | done | cc |\n')
+
+    const result = await commitAndPushBacklog('F-0099', ['AR-999'], repoPath)
+    expect(result.committed).toBe(false)
+    expect(result.pushed).toBe(false)
+    expect(result.error).toContain("no en 'master'")
+
+    const status = await execa('git', ['status', '--porcelain', 'system/BACKLOG.md'], { cwd: repoPath })
+    expect(status.stdout.trim().length).toBeGreaterThan(0)
+  })
+})
+
+// pushBacklogFile comparte el núcleo de commitAndPushBacklog (mismo repo/garantías) pero con
+// un mensaje libre — para reconciliaciones manuales que editan el archivo con prosa, no con el
+// formato mecánico de updateBacklogStatus. Alcanza con cubrir que el mensaje se use tal cual y
+// que las mismas garantías (no-op sin cambios, respeta default branch) sigan aplicando.
+describe('pushBacklogFile', () => {
+  let workDir: string
+  let originPath: string
+  let repoPath: string
+
+  beforeEach(async () => {
+    workDir = mkdtempSync(path.join(tmpdir(), 'backlog-push-manual-test-'))
+    originPath = path.join(workDir, 'origin.git')
+    repoPath = path.join(workDir, 'repo')
+
+    await execa('git', ['init', '--bare', originPath])
+    await execa('git', ['clone', originPath, repoPath])
+    await execa('git', ['config', 'user.email', 'test@example.com'], { cwd: repoPath })
+    await execa('git', ['config', 'user.name', 'Test'], { cwd: repoPath })
+
+    const sysDir = path.join(repoPath, 'system')
+    await execa('mkdir', ['-p', sysDir])
+    writeFileSync(path.join(sysDir, 'BACKLOG.md'), FIXTURE, 'utf-8')
+    await execa('git', ['add', 'system/BACKLOG.md'], { cwd: repoPath })
+    await execa('git', ['commit', '-m', 'initial backlog'], { cwd: repoPath })
+    await execa('git', ['branch', '-m', 'master'], { cwd: repoPath })
+    await execa('git', ['push', 'origin', 'master'], { cwd: repoPath })
+    await execa('git', ['remote', 'set-head', 'origin', 'master'], { cwd: repoPath })
+  })
+
+  afterEach(() => {
+    rmSync(workDir, { recursive: true, force: true })
+  })
+
+  it('commits a manual edit with the given message and pushes it', async () => {
+    const backlogFile = path.join(repoPath, 'system', 'BACKLOG.md')
+    writeFileSync(backlogFile, readFileSync(backlogFile, 'utf-8').replace('pending', 'ya estaba resuelto, reconciliado a mano'))
+
+    const result = await pushBacklogFile('chore(backlog): reconciliar AR-999 (verificado contra prod)', repoPath)
+    expect(result.committed).toBe(true)
+    expect(result.pushed).toBe(true)
+
+    const log = await execa('git', ['log', '-1', '--pretty=%B'], { cwd: repoPath })
+    expect(log.stdout).toContain('reconciliar AR-999')
+    expect(log.stdout).toContain('reconciliación manual')
+  })
+
+  it('is a no-op when there is nothing to commit', async () => {
+    const result = await pushBacklogFile('nada que decir', repoPath)
+    expect(result).toEqual({ committed: false, pushed: false })
   })
 })

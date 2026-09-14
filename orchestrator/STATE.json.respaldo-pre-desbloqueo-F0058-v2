@@ -1,0 +1,102 @@
+{
+  "featureId": "F-0058",
+  "branch": "feat/F-0058-argos-fci-persistir-liquidez-de-rescate-",
+  "steps": [
+    {
+      "id": 1,
+      "desc": "Crear el esqueleto de `scripts/cafci_liquidez_sync.py`: cliente Supabase con create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY) siguiendo el patrón de cafci_sync.py, CLI con argparse que exponga `--fase {0,1}`, `--limit N` y `--dry-run` (aplicables por fase), y un helper HTTP compartido para requests a estadisticas.cafci.org.ar con rate limiting (delay fijo 300-500ms entre requests), timeout por request (~15s) y reintentos acotados (2-3) antes de saltear y loguear como fallido. Sin lógica de negocio todavía; main() cablea los flags a stubs de fase.",
+      "ui": false,
+      "status": "done",
+      "commit": "35dd0b9914c2eae752b3dc4d11beeb8f3f0b5aa7",
+      "sessionId": "758017ef-568c-41e3-8650-876807206cbf",
+      "retries": 0,
+      "adrIds": [
+        160
+      ],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 2,
+      "desc": "Implementar la Fase 0 (resolución de fondo padre) en cafci_liquidez_sync.py: función que consulta fci_master por clases con `activo = true` Y `cafci_fondo_padre IS NULL`; si no hay pendientes, loguea 'Fase 0 saltada' y retorna sin crawlear. Para las pendientes, recorre un rango acotado de IDs (default `range(1, 2500)`, parametrizable) haciendo GET /fondos/{id} (sin ?clase=) con el helper de rate limiting, tolera 404 como skip silencioso, y de cada página válida extrae el nombre base del fondo (quitando el sufijo '- Clase X') y la sociedad gerente.",
+      "ui": false,
+      "status": "blocked",
+      "commit": null,
+      "sessionId": "1973403f-6c78-4a51-9fd9-263ca30cd718",
+      "retries": 1,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": [
+        "reviewer: - **Bug de matching (crítico):** `_CLASE_RE` exige un guion literal antes de \"Clase\" (`\\s*-\\s*Clase\\s+\\S+…`), pero el comentario (líneas 99-101) afirma que es \"idéntico\" a la vista SQL `fci_explorador_grupos`, y no lo es: el patrón SQL real (migraciones 039/041) es `\\s+Clase\\s+[A-Z0-9]+(\\s*\\(.*\\))?$` — **sin guion**. La evidencia autoritativa del formato de nombres en `fci_master` (esa vista SQL en producción) indica que los nombres son \"Nombre Clase X\" (separador espacio, sin guion). Con el regex actual, `_strip_clase_suffix(\"Delta Pesos Clase A\")` devuelve el string sin tocar → la key del lookup queda `(\"delta pesos clase a\", gerente)`, que nunca coincide con el nombre base del fondo padre `(\"delta pesos\", gerente)`. Resultado: Fase 0 produce **cero matches en silencio** (no fa…",
+        "reviewer (post-review-fix): - `_CLASE_RE` (línea 101) **requiere un guion** antes de \"Clase\" (`\\s*-\\s*Clase\\s+\\S+...`), pero el comentario justo arriba afirma que es \"idéntico al usado en la vista SQL `fci_explorador_grupos`\" — y la vista (migración 039/041) usa `\\s+Clase\\s+[A-Z0-9]+(\\s*\\(.*\\))?$`, **sin guion**. No es idéntico. La evidencia autoritativa del formato real de los nombres (una vista en producción) indica que las clases se llaman \"Fondo XYZ Clase A\" *sin* guion. Con la regex actual, `_strip_clase_suffix` no recortaría el sufijo del lado de `fci_master` (nombre queda \"Fondo XYZ Clase A\"), mientras la página padre normaliza a \"Fondo XYZ\" → las keys nunca coinciden y Fase 0 podría no matchear nada. Es la dirección \"segura\" (under-match, no bad-match), pero deja el feature inerte.…"
+      ],
+      "error": "Step 2: reviewer rechaza tras segunda corrección\n\n[fixer también falló] Fixer (Opus) agotó 2 intento(s) sin pasar verifier.\nÚltimo detalle:\nns\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"subtype\":\"success\",\"api_error_status\":429,\"result\":\"You've hit your session limit · resets 11:20pm (America/Argentina/Buenos_Aires)\",\"type\":\"result\",\"duration_ms\":599,\"uuid\":\"34d8b08c-03f0-4d77-aa47-56bde84a95f2\",\"queued_turn_count\":0}"
+    },
+    {
+      "id": 3,
+      "desc": "Implementar el matching y persistencia de la Fase 0: cruzar cada fondo padre crawleado contra las clases pendientes por nombre base + gerente/sociedad_gerente juntos (NUNCA solo por nombre), persistir los matches vía upsert por lotes a fci_master (on_conflict='id', payload solo {id, cafci_fondo_padre}), respetar --dry-run (no escribir) y --limit (muestra del rango), loguear cuántas clases quedaron sin resolver sin abortar.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 4,
+      "desc": "Implementar la Fase 1 (scraping de detalle) en cafci_liquidez_sync.py: para cada clase activa con `cafci_fondo_padre` ya resuelto, armar la URL `/fondos/{padre}?clase={cafci_id}`, hacer GET con el helper de rate limiting, y parsear con un parser tolerante los campos `plazo_liquidacion_dias`, `honorario_gerente_pct`, `honorario_depositaria_pct`, `comision_ingreso_pct`, `comision_egreso_pct`, `comision_transferencia_pct`, `gastos_ordinarios_pct`, `comision_exito_pct` — campo no encontrado o no parseable → null solo para ESE campo (distinguir 'guión → null válido' de 'valor presente no parseable → omitir campo'), nunca descartar la clase entera.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 5,
+      "desc": "Implementar la persistencia de la Fase 1: upsert por lotes a fci_master solo con los campos parseados con éxito en esa corrida más `liquidez_updated_at`, nunca pisando un valor bueno anterior con null por un fallo puntual; una clase cuya página falla (timeout/404/estructura distinta) se loguea y se saltea sin abortar el resto. Respetar --dry-run y --limit propios de la Fase 1.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 6,
+      "desc": "Crear `.github/workflows/cafci_liquidez_monthly.yml`: workflow separado del diario de VCP con cron mensual (día 1, 03:00 UTC) + workflow_dispatch manual, setup de Python + deps (requests, pandas, supabase), inyección de los secrets SUPABASE_URL / SUPABASE_SERVICE_KEY (mismos que cafci_daily.yml) y `timeout-minutes` generoso (~180) para cubrir Fase 0 + Fase 1 en la primera corrida.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    },
+    {
+      "id": 7,
+      "desc": "Agregar tests con requests HTTP mockeados que cubran la Fase 0 (matching por nombre+gerente: match exacto, sin match, y nombres iguales entre gestoras distintas que NO deben matchear) y la Fase 1 (parser: plazo 0 y 1 día, honorarios separados gerente/depositaria, comisión de éxito ausente → null). Verificar que un fallo individual no aborta la corrida ni pisa valores buenos con null.",
+      "ui": false,
+      "status": "pending",
+      "commit": null,
+      "sessionId": null,
+      "retries": 0,
+      "adrIds": [],
+      "humanApproved": false,
+      "failureHistory": []
+    }
+  ],
+  "pausedUntil": null,
+  "needsHumanApproval": null,
+  "createdAt": "2026-09-12T22:48:16.102Z",
+  "updatedAt": "2026-09-12T22:58:46.856Z",
+  "merged": false,
+  "pushed": false
+}

@@ -1,0 +1,411 @@
+[
+  {
+    "objetivo": "Mapa del repo para: argos -- fix applyPendingRescate: usa rescate.tipo (columna que no existe en fci_rescates) y siempre falla",
+    "archivos": [
+      "src/features/fci/services/fciService.js",
+      "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/pages/Fci.jsx",
+      "src/pages/FciPortfolio.jsx",
+      "src/features/portfolio/services/portfolioHistoryService.ts",
+      "src/utils/vcpHelpers.js",
+      "supabase/migrations/025_fci_lots_tipo.sql",
+      ".claude/plans/rustling-splashing-moonbeam.md",
+      "CLAUDE.md",
+      "HANDOFF.md"
+    ],
+    "patrones": [
+      "Servicios de dominio como objeto literal exportado (`export const fciService = { ... }` o similar) con métodos async que hacen `throw error` tras cada llamada a supabase; nada de try/catch silencioso.",
+      "Engine interno `_consumeLots` con prefijo underscore: consulta lotes activos, calcula mutaciones (PPC o FIFO) y actualiza fci_lots, pero NO toca fci_rescates — el caller es dueño de esa persistencia.",
+      "El contexto/tipo de lotes se modela como string `'portfolio' | 'carry'` (columna `fci_lots.tipo`); los rescates NO tienen tipo propio y se asocian a un contexto vía las mutaciones (lot_id) o el portfolio.",
+      "Uso de `decimal.js` importado dinámicamente (`await import('decimal.js')`) dentro de las funciones para aritmética financiera; redondeo con `.toDecimalPlaces(6)`.",
+      "Mutaciones de rescate con shape canónico snake_case: `{ lot_id, cp_consumidas, cuotapartes_despues, capital_invertido_despues, agotado, vcp_entrada?, pnl_lote? }`.",
+      "En la rama FIFO solo se persisten los campos mínimos (`lot_id`, `cp_consumidas`); en PPC se persiste la mutación completa más `notes` con `PPC vcp=... pnl=...`.",
+      "applyPendingRescate siempre hace UPDATE de la fila existente de fci_rescates (nunca INSERT) — hay un test que lo exige explícitamente.",
+      "Tests con vitest + `vi.mock('@/lib/supabase')` y un helper `makeChain()` que simula el builder chainable de supabase-js.",
+      "Migraciones SQL numeradas y aditivas en `supabase/migrations/` (p. ej. `ALTER TABLE ... ADD COLUMN ... CHECK (tipo IN ('portfolio','carry'))`)."
+    ],
+    "dependencias": [
+      "@supabase/supabase-js (cliente `supabase` en `@/lib/supabase`; `.from().select()/.update()/.eq()/.not()/.single()`)",
+      "decimal.js (aritmética de cuotapartes/VCP/pnl)",
+      "vitest (tests unitarios del servicio)"
+    ],
+    "riesgos": [
+      "BUG CENTRAL: `applyPendingRescate` pasa `rescate.tipo` como 5º argumento a `_consumeLots`, pero `fci_rescates` NO tiene columna `tipo`; el SELECT '*' devuelve undefined y el filtro `.eq('tipo', tipo)` de _consumeLots no matchea lotes (o falla), por lo que el flujo 'siempre falla' (típicamente con 'No hay lotes activos para rescatar.' o 'Cuotapartes a rescatar exceden el saldo activo.').",
+      "El fixture de test PENDING_RESCATE incluye `tipo: 'portfolio'`, lo que enmascara el bug: el mock devuelve una fila con una columna que en la DB real no existe y los tests pasan igualmente.",
+      "Comentarios en src/pages/Fci.jsx:50 y src/pages/FciPortfolio.jsx:51 afirman explícitamente: \"fci_rescates no tiene un campo directo 'tipo'\", confirmando el diagnóstico.",
+      "La columna `tipo` sí existe, pero en `fci_lots` (migración 025) — el tipo de contexto debe derivarse de los lotes/portfolio o pasarse como parámetro, no leerse de fci_rescates.",
+      "El UPDATE del rescate debe seguir siendo UPDATE (nunca INSERT) y conservar el shape de mutaciones por método (FIFO reducido vs PPC completo) para no romper los tests existentes ni los consumidores (useFciLotEngine, vcpHelpers, portfolioHistoryService).",
+      "Falta de idempotencia/transacción: `_consumeLots` actualiza fci_lots y luego el caller hace UPDATE en fci_rescates; si el segundo falla quedan lotes consumidos sin registro (salvo el caso de saldo insuficiente, que valida up-front).",
+      "[NO VERIFICADO] No confirmé la existencia/DDL real de `supabase/migrations/023_fci_rescates.sql` ni el esquema efectivo en `supabase/schema.sql`: el listado de migraciones y el grep de CREATE TABLE no quedaron confirmados en esta sesión (los resultados de grep en *.sql fueron omitidos).",
+      "[NO VERIFICADO] No leí el resto de `useFciLotEngine.js` (call site en línea ~397) para ver si pasa un `tipo` propio o cómo consume el resultado; tampoco confirmé el 100% de los números de línea exactos del call site del bug."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyPendingRescate",
+        "lineas": "601-648",
+        "explicacion": "Función a arreglar: lee la fila de fci_rescates con `select('*')`, valida `mutations` vacío y `external_ref` no nulo, llama a `_consumeLots` y luego hace UPDATE de la misma fila con las mutations.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "rescate.tipo",
+        "lineas": "626-633",
+        "explicacion": "Origen exacto del bug: se pasa `rescate.tipo` como argumento `tipo` a `_consumeLots`. Esa columna no existe en `fci_rescates`, así que llega `undefined` y el consumo de lotes falla siempre.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "_consumeLots",
+        "lineas": "327-345",
+        "explicacion": "Engine interno que recibe `(portfolioId, fciId, cuotapartesToRedeem, vcpSalida, tipo, method)` y aplica `.eq('tipo', tipo)` sobre `fci_lots`; con `tipo` undefined no hay lotes activos y lanza error.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": ".eq('tipo', tipo)",
+        "lineas": "334-338",
+        "explicacion": "Filtro que materializa el fallo: sin `tipo` válido, `activeLots` vacío → 'No hay lotes activos para rescatar.' o falla la comparación de saldo.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "getPendingRescates",
+        "lineas": "568-599",
+        "explicacion": "Query hermana que alimenta el flujo: selecciona columnas explícitas de `fci_rescates` (id, fci_id, fecha_rescate, cuotapartes, vcp_salida, monto_rescatado, mutations, fci_master) — el listado confirma que no hay `tipo` entre los campos.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionFIFO",
+        "lineas": "486-513",
+        "explicacion": "Patrón de referencia para persistir en fci_rescates: INSERT con user_id, portfolio_id, fci_id, fecha_rescate, cuotapartes, vcp_salida, monto_rescatado, mutations — de nuevo sin `tipo`. El tipo se recibe como parámetro `tipo = 'portfolio'`.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionPPC",
+        "lineas": "521-547",
+        "explicacion": "Mismo patrón que FIFO pero con mutations completas y `notes` con `PPC vcp=... pnl=...`; define el shape de `updatePayload` que applyPendingRescate debe replicar.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "PENDING_RESCATE",
+        "lineas": "40-52",
+        "explicacion": "Fixture del test que incluye `tipo: 'portfolio'` — una columna que no existe en la DB real; enmascara el bug porque el mock devuelve el valor y los tests pasan.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "applyPendingRescate — lotes activos suficientes",
+        "lineas": "55-80",
+        "explicacion": "Test que exige que fci_rescates se actualice con UPDATE (nunca INSERT) y verificando las llamadas encadenadas; cualquier fix debe mantener este contrato.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "makeChain",
+        "lineas": "17-33",
+        "explicacion": "Helper de mock chainable de supabase-js (select/eq/not/order/update/insert/single + `then`); patrón que el implementador debe seguir al agregar tests del fix.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/pages/Fci.jsx",
+        "simbolo": "// fci_rescates no tiene un campo directo 'tipo' pero podemos filtrar los rescates que pertenecen a los lots de este contexto",
+        "lineas": "50",
+        "explicacion": "Confirmación explícita en código de que `fci_rescates` carece de columna `tipo`; el contexto se infiere desde los lotes.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/pages/FciPortfolio.jsx",
+        "simbolo": "// fci_rescates no tiene un campo directo 'tipo' pero podemos filtrar los rescates que pertenecen a los lots de este contexto",
+        "lineas": "51",
+        "explicacion": "Misma confirmación en la vista de Portfolio: no hay `tipo` en fci_rescates.",
+        "confianza": 0.9
+      },
+      {
+        "path": "supabase/migrations/025_fci_lots_tipo.sql",
+        "simbolo": "ALTER TABLE fci_lots ADD COLUMN tipo TEXT NOT NULL DEFAULT 'portfolio'",
+        "lineas": "1-2",
+        "explicacion": "La columna `tipo` vive en `fci_lots` (valores 'portfolio' | 'carry'), no en `fci_rescates`: el fix debe derivar el tipo de los lotes o aceptarlo como parámetro explícito.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "useFciLotEngine",
+        "lineas": "397",
+        "explicacion": "Call site del flujo de rescates detectados (comentario 'Aplica un rescate detectado automáticamente (F-0053)...'): el hook que envuelve/invoca el aplicar rescate pendiente.",
+        "confianza": 0.6
+      },
+      {
+        "path": ".claude/plans/rustling-splashing-moonbeam.md",
+        "simbolo": "CREATE TABLE fci_rescates",
+        "lineas": "38-57",
+        "explicacion": "Plan de la migración 023_fci_rescates.sql: define la tabla como `id, user_id, portfolio_id, fci_id, fecha_rescate, cuotapartes, vcp_salida, monto_rescatado, mutations` — sin columna `tipo`.",
+        "confianza": 0.7
+      },
+      {
+        "path": "CLAUDE.md",
+        "simbolo": "### FCI `tipo` field",
+        "lineas": "53-54",
+        "explicacion": "Documentación del modelo: `tipo` es 'carry' | 'portfolio' y solo los lotes `tipo = 'portfolio'` suman a los totales del portfolio (conceptualiza el campo como atributo de lotes).",
+        "confianza": 0.8
+      }
+    ],
+    "resumen": "El repo es una app React/Vite (JS + algo de TS) con Supabase como backend, donde el módulo FCI vive en `src/features/fci/` con un servicio (`fciService.js`) que concentra la lógica de lotes y rescates y usa `decimal.js` para aritmética financiera. El bug está localizado: `applyPendingRescate` pasa `rescate.tipo` a `_consumeLots`, pero `fci_rescates` no tiene columna `tipo` (la columna `tipo` con valores 'portfolio'/'carry' existe solo en `fci_lots`, migración 025) — hay incluso comentarios en `Fci.jsx`/`FciPortfolio.jsx` confirmando la ausencia del campo, y el fixture de test incluye un `tipo` inexistente que enmascara la falla. El fix debe suministrar el contexto (derivarlo de los lotes vía `fci_lots.tipo` o recibirlo como parámetro) sin romper el contrato de UPDATE y el shape de mutations por método (FIFO reducido vs PPC completo). Quedan como [NO VERIFICADO] el DDL efectivo de `fci_rescates` en `supabase/migrations/` y el detalle del call site en `useFciLotEngine.js`."
+  },
+  {
+    "objetivo": "Investigar qué existe hoy en el repo para implementar el fix de `applyPendingRescate`, que hoy usa `rescate.tipo` (columna inexistente en `fci_rescates`) y por eso siempre falla al consumir lotes.",
+    "archivos": [
+      "src/features/fci/services/fciService.js",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+      "src/features/fci/components/FciPendingRescates.jsx",
+      "src/pages/Fci.jsx",
+      "supabase/migrations/016_fci_lots_migration.sql",
+      ".claude/plans/rustling-splashing-moonbeam.md"
+    ],
+    "patrones": [
+      "Los métodos de rescate hermanos (applyRedemptionFIFO / applyRedemptionPPC) reciben `tipo` como parámetro explícito con default 'portfolio', no lo leen de la fila de fci_rescates.",
+      "_consumeLots(portfolioId, fciId, cuotapartesToRedeem, vcpSalida, tipo, method) filtra lotes con `.eq('tipo', tipo)` en fci_lots; el valor de `tipo` debe ser 'portfolio' o 'carry'.",
+      "El patrón correcto es NO leer una columna inexistente: usar un default o derivar el tipo del contexto (los lotes de fci_lots sí tienen columna `tipo`).",
+      "Todos los métodos escriben/leen fci_rescates con `.select('*')` / `.insert([...])` y usan Supabase query builder encadenable.",
+      "applyPendingRescate es un UPDATE de la MISMA fila (nunca INSERT) y corre _consumeLots antes de persistir mutations.",
+      "El hook useFciLotEngine expone `applyPending` que delega en fciService.applyPendingRescate y luego llama loadLots().",
+      "El componente FciPendingRescates invoca onApply(rescate.id) sin pasar `method`, por lo que se usa el default 'PPC'."
+    ],
+    "dependencias": [
+      "decimal.js (import dinámico dentro de _consumeLots y revertRedemption)",
+      "@supabase/supabase-js (cliente en @/lib/supabase)",
+      "vitest + vi.mock (tests unitarios con chain builder mockeado)"
+    ],
+    "riesgos": [
+      "fci_rescates no tiene columna `tipo` (confirmado por comentario en src/pages/Fci.jsx): usar `rescate.tipo` devuelve undefined, y `.eq('tipo', undefined)` en fci_lots no matchea filas → _consumeLots lanza 'No hay lotes activos para rescatar.' o devuelve resultado vacío.",
+      "El fixture del test (PENDING_RESCATE) incluye `tipo: 'portfolio'`, lo que enmascara el bug al mockear el read: el test no detecta que la columna no existe en la DB real.",
+      "Usar un default 'portfolio' hardcodeado podría ser incorrecto para FCI de contexto carry; conviene derivar el tipo desde los lotes o pasar contexto desde el caller / UI.",
+      "Los rescates detectados provienen de un pipeline externo (F-0053) que setea external_ref y deja mutations null: hay que preservar esa precondición al corregir.",
+      "No se localizó la migración SQL que crea `fci_rescates` ni la que agrega `external_ref` en supabase/migrations (016 solo define fci_lots); [NO VERIFICADO] el esquema exacto de columnas de fci_rescates.",
+      "Cambiar la firma de applyPendingRescate afecta al hook applyPending y al componente, que hoy no pasan `tipo`/`method` explícitos."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyPendingRescate",
+        "lineas": "605-631",
+        "explicacion": "Método con el bug: dentro llama a _consumeLots pasando `rescate.tipo` como argumento `tipo`. Como fci_rescates no tiene esa columna, el valor es undefined y el filtro de lotes falla. Es el punto exacto a modificar.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "rescate.tipo",
+        "lineas": "629",
+        "explicacion": "Uso literal de la columna inexistente. Debe reemplazarse por un default ('portfolio') o derivarse del contexto.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "_consumeLots",
+        "lineas": "319-332",
+        "explicacion": "Motor reutilizable que recibe `tipo` y filtra fci_lots con `.eq('tipo', tipo)`. Documenta que NO toca fci_rescates y que los callers son dueños de esa persistencia. Es la dependencia inmediata del fix.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionPPC",
+        "lineas": "518-546",
+        "explicacion": "Método hermano que recibe `tipo` como parámetro (default 'portfolio' en el dispatcher) en vez de leerlo de la fila. Es el patrón a seguir para el fix de applyPendingRescate.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemption",
+        "lineas": "509-514",
+        "explicacion": "Dispatcher que muestra el default `tipo = 'portfolio'` y `method = 'PPC'` que usa toda la familia de rescates; referencia para definir el default correcto.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "external_ref",
+        "lineas": "619-621",
+        "explicacion": "Precondición que valida que el rescate sea detectado automáticamente. El fix no debe romperla.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "applyPending",
+        "lineas": "399-410",
+        "explicacion": "Hook que envuelve fciService.applyPendingRescate(rescateId, method='PPC') y recarga lotes. Punto de integración que podría extenderse si el fix requiere pasar `tipo`.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "PENDING_RESCATE",
+        "lineas": "35-46",
+        "explicacion": "Fixture del test que incluye `tipo: 'portfolio'`, enmascarando el bug: el mock del read devuelve la propiedad aunque la DB real no la tenga. El implementador debe ajustar el fixture para reflejar el esquema real.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "makeChain",
+        "lineas": "18-36",
+        "explicacion": "Helper de mock chainable que el test usa para simular el query builder de Supabase; el implementador puede reusarlo para agregar casos de regresión del fix.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/components/FciPendingRescates.jsx",
+        "simbolo": "onApply",
+        "lineas": "23-25",
+        "explicacion": "Componente UI que dispara onApply(rescate.id) sin pasar method/tipo; define el flujo de usuario que hoy siempre falla por el bug.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/pages/Fci.jsx",
+        "simbolo": "rescatesFiltered",
+        "lineas": "48-56",
+        "explicacion": "Comentario explícito: 'fci_rescates no tiene un campo directo tipo', confirmando la causa raíz y que el filtrado se hace vía mutations/lot_id.",
+        "confianza": 0.9
+      },
+      {
+        "path": "supabase/migrations/016_fci_lots_migration.sql",
+        "simbolo": "fci_lots",
+        "lineas": "40-95",
+        "explicacion": "Define fci_lots (incluye columna `tipo`? — el DDL mostrado no incluye `tipo`, se asume agregada en migración posterior [NO VERIFICADO]) y el replay FIFO. El fix depende de que fci_lots.tipo exista con valores 'portfolio'/'carry' (usado por moveLotContext/reclassify_fci_lot mig.031).",
+        "confianza": 0.5
+      },
+      {
+        "path": ".claude/plans/rustling-splashing-moonbeam.md",
+        "simbolo": "ALTER TABLE fci_rescates ENABLE ROW LEVEL SECURITY",
+        "lineas": "53",
+        "explicacion": "Referencia al DDL de fci_rescates y su RLS; indica que existe creación de la tabla en algún script/migración no ubicado en supabase/migrations. Útil para recuperar el esquema real de columnas.",
+        "confianza": 0.6
+      }
+    ],
+    "resumen": "El bug está localizado en `applyPendingRescate` (src/features/fci/services/fciService.js, ~línea 629): pasa `rescate.tipo` a `_consumeLots`, pero `fci_rescates` no tiene columna `tipo` (confirmado por comentario en src/pages/Fci.jsx línea 48), por lo que el filtro `.eq('tipo', undefined)` en fci_lots no encuentra lotes y el método falla. El patrón correcto ya existe en los métodos hermanos `applyRedemptionPPC`/`applyRedemptionFIFO`, que reciben `tipo` como parámetro con default 'portfolio'. El fix debe reemplazar `rescate.tipo` por un default/derivación del contexto, y ajustar el fixture del test (`PENDING_RESCATE`, que hoy incluye `tipo` y enmascara el bug). Quedan [NO VERIFICADO] el DDL exacto de `fci_rescates` y la migración que agrega `fci_lots.tipo`."
+  },
+  {
+    "objetivo": "Identificar riesgos y restricciones técnicas para corregir `applyPendingRescate` en fciService: usa `rescate.tipo` como contexto de lote, pero `fci_rescates` no tiene columna `tipo`, por lo que el rescate detectado siempre falla (el contexto portfolio/carry se pierde).",
+    "archivos": [
+      "src/features/fci/services/fciService.js",
+      "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/pages/Fci.jsx",
+      "src/pages/FciPortfolio.jsx",
+      "supabase/migrations/025_fci_lots_tipo.sql",
+      ".claude/plans/rustling-splashing-moonbeam.md"
+    ],
+    "patrones": [
+      "El acceso a datos se hace vía `supabase.from('<tabla>').<query>` (supabase-js), no SQL directo desde el servicio.",
+      "El motor de consumo de lotes está aislado en `_consumeLots(...)` y NO toca `fci_rescates`; los callers (`applyRedemptionPPC`, `applyRedemptionFIFO`, `applyPendingRescate`) son dueños de la persistencia.",
+      "El contexto portfolio/carry se modela como columna `tipo` SOLO en `fci_lots` (MIGRACIÓN 025), con CHECK IN ('portfolio','carry').",
+      "`applyRedemptionPPC`/`applyRedemptionFIFO` reciben `tipo` explícito como parámetro (default 'portfolio') y lo pasan a `_consumeLots`.",
+      "Convención de errores: los métodos lanzan `throw error`/`throw new Error(...)` y el hook (`useFciLotEngine`) los re-lanza sin transformarlos, mostrando el mensaje al usuario.",
+      "Los tests mockean supabase con un `makeChain` chainable y verifican llamadas (update vs insert) sobre los mocks."
+    ],
+    "dependencias": [
+      "@supabase/supabase-js (cliente `supabase` en @/lib/supabase)",
+      "decimal.js (import dinámico dentro de _consumeLots y de los métodos de rescate)",
+      "vitest (test suite fciService.pendingRescates.test.js)",
+      "react (hooks useFciLotEngine)"
+    ],
+    "riesgos": [
+      "`fci_rescates` NO tiene columna `tipo` (confirmado por comentarios en Fci.jsx/FciPortfolio.jsx y por el CREATE TABLE del plan de migración 023). Por eso `rescate.tipo` es `undefined` en runtime.",
+      "`_consumeLots` filtra `.eq('tipo', tipo)` sobre `fci_lots`; con `tipo=undefined` no matchea lotes de ningún contexto (o la query se comporta de forma no determinista), lanzando 'No hay lotes activos para rescatar.' o consumiendo lotes incorrectos.",
+      "El caller real `useFciLotEngine.applyPending(rescateId, method='PPC')` NO pasa contexto/tipo: solo pasa 2 argumentos. Cualquier fix que requiera `tipo` debe también extender esta firma (cascada hacia la UI).",
+      "El fix no puede derivar el contexto de la fila de `fci_rescates` porque no lo almacena: hay que decidir de dónde sacar 'portfolio' vs 'carry' (o asumir default 'portfolio', lo que rompe rescates de lotes carry).",
+      "El test `fciService.pendingRescates.test.js` incluye `tipo: 'portfolio'` en el fixture `PENDING_RESCATE` (aunque la columna no existe) y compara las mutations de `applyPendingRescate` con `applyRedemptionPPC(..., PENDING_RESCATE.tipo)`. Cambiar la firma de `applyPendingRescate` puede romper ese contrato de test.",
+      "Posible inconsistencia con F-0053/F-0054: el flujo 'detectado automáticamente' no guarda `tipo`, mientras el flujo manual sí lo recibe; un fix apresurado puede introducir divergencia entre ambos.",
+      "Migración nueva (agregar columna `tipo` a `fci_rescates`) es una opción, pero cambia el esquema compartido y afecta el mapeo de imports de rescates detectados (external_ref).",
+      "[NO VERIFICADO] No pude leer el contenido literal de la migración 023_fci_rescates.sql (solo aparece en .claude/plans); no confirmé columnas exactas ni RLS de esa tabla.",
+      "[NO VERIFICADO] No confirmé si `.eq('tipo', undefined)` en supabase-js elimina el filtro o lanza; el comportamiento exacto del fallo ('siempre falla') no se reprodujo."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyPendingRescate",
+        "lineas": "601-650",
+        "explicacion": "Método con el bug: hace SELECT * de la fila, valida external_ref y mutations, y luego llama a _consumeLots pasando `rescate.tipo` como contexto. Como fci_rescates no tiene esa columna, `tipo` llega undefined.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "rescate.tipo",
+        "lineas": "624-631",
+        "explicacion": "Argumento exacto que se pasa a _consumeLots (quinto parámetro `tipo`). Es el punto de falla: `rescate.tipo` no existe en la tabla fci_rescates.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "_consumeLots",
+        "lineas": "331-345",
+        "explicacion": "Motor interno que consume lotes. Su firma es (portfolioId, fciId, cuotapartesToRedeem, vcpSalida, tipo, method) y aplica .eq('tipo', tipo) sobre fci_lots. Un `tipo` undefined rompe la selección de lotes activos.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "eq('tipo', tipo)",
+        "lineas": "340-344",
+        "explicacion": "Filtro sobre fci_lots que depende del parámetro `tipo`. Es la restricción técnica clave: el contexto debe ser uno de 'portfolio'|'carry' para encontrar lotes.",
+        "confianza": 0.75
+      },
+      {
+        "path": "supabase/migrations/025_fci_lots_tipo.sql",
+        "simbolo": "tipo",
+        "lineas": "1-3",
+        "explicacion": "Confirma que `tipo` (CHECK IN 'portfolio','carry') se agregó a fci_lots, NO a fci_rescates. Explica por qué el fix debe obtener el contexto desde otra fuente.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/pages/Fci.jsx",
+        "simbolo": "tipo",
+        "lineas": "50",
+        "explicacion": "Comentario explícito: 'fci_rescates no tiene un campo directo tipo pero podemos filtrar los rescates que pertenecen a los lots de este contexto'. Evidencia directa de la ausencia de la columna y del workaround existente (derivar contexto vía lots).",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/pages/FciPortfolio.jsx",
+        "simbolo": "tipo",
+        "lineas": "51",
+        "explicacion": "Mismo comentario que en Fci.jsx, reforzando la convención de que el contexto de rescates se infiere por los lotes, no por una columna de fci_rescates.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "applyPending",
+        "lineas": "396-408",
+        "explicacion": "Caller real de applyPendingRescate. Recibe (rescateId, method='PPC') y NO pasa tipo/contexto; el fix que requiera contexto debe extender esta firma y su propagación por la UI.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "PENDING_RESCATE",
+        "lineas": "42-55",
+        "explicacion": "Fixture que incluye `tipo: 'portfolio'` (columna inexistente en la DB). El test depende de ese valor para comparar con applyRedemptionPPC; cambiar la firma/mock puede romper la suite.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/fciService.pendingRescates.test.js",
+        "simbolo": "makeChain",
+        "lineas": "16-30",
+        "explicacion": "Helper de mock chainable (select/eq/not/order/update/insert/single/then). Cualquier query nueva o cambio de orden de llamadas debe respetar el número y orden de fromMock.mockReturnValueOnce.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "applyRedemptionPPC",
+        "lineas": "521-548",
+        "explicacion": "Flujo manual de referencia: recibe `tipo` explícito y lo pasa a _consumeLots, guardando notes 'PPC vcp=... pnl=...'. El fix debería mantener paridad de mutations con este método (el test lo exige).",
+        "confianza": 0.85
+      },
+      {
+        "path": ".claude/plans/rustling-splashing-moonbeam.md",
+        "simbolo": "CREATE TABLE fci_rescates",
+        "lineas": "38-57",
+        "explicacion": "Plan de la migración 023_fci_rescates.sql; es la única referencia al DDL de la tabla. No lista columna `tipo`, consistente con el bug. [NO VERIFICADO: no leí el .sql real de la migración 023].",
+        "confianza": 0.6
+      }
+    ],
+    "resumen": "El bug es real y bien localizado: `applyPendingRescate` en src/features/fci/services/fciService.js pasa `rescate.tipo` a `_consumeLots`, pero `fci_rescates` no tiene columna `tipo` (confirmado por los comentarios en Fci.jsx/FciPortfolio.jsx y por la migración 025 que agrega `tipo` solo a `fci_lots`). El motor filtra `.eq('tipo', tipo)` sobre `fci_lots`, así que con `tipo=undefined` no selecciona lotes y el flujo 'detectado automáticamente' (F-0054) falla o consume de forma incorrecta. El fix debe resolver de dónde proviene el contexto portfolio/carry (la fila no lo guarda), extender la firma del caller `useFciLotEngine.applyPending` y mantener la paridad de mutations con `applyRedemptionPPC` que exige el test, o bien agregar la columna `tipo` a `fci_rescates` vía migración (con impacto en esquema y RLS). Los principales riesgos son romper el contrato de tests que asume `tipo:'portfolio'` en el fixture, dejar sin cobertura el caso carry, y divergir entre el flujo manual y el detectado."
+  }
+]

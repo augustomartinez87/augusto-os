@@ -1,0 +1,156 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Kredy — el AP puede elegir tier de vínculo y referente al pre-aprobar (nuevo cliente). Hoy el tier (relationship) y el referente (referrer) viven en Person y se resuelven en el backend (con default 'conocido') durante preApprove; la tarea implica exponer esa elección en el flujo AP y persistirla al crear el nuevo cliente.",
+    "archivos": [
+      "server/services/relationshipLimit.ts",
+      "server/routers/ap.ts",
+      "prisma/schema.prisma",
+      "server/services/opportunity.service.ts",
+      "app/ap/page.tsx",
+      "app/dashboard/persons/page.tsx",
+      "lib/risk/debtorLimit.ts",
+      "lib/loan-scoring.ts",
+      "lib/identity/resolvePerson.ts",
+      ".claude/skills/spensiv-context/SKILL.md"
+    ],
+    "patrones": [
+      "tRPC procedure (publicProcedure/protectedProcedure) con validación zod y ctx.prisma; mutaciones de pre-aprobación en server/routers/ap.ts",
+      "Gates de riesgo tipo checkRelationshipLimit(input: { relationship, referrer, capital, enforcementMode, limits }) que devuelven { blocked, requiresManualReview, reason } y lanzan TRPCError BAD_REQUEST si blocked",
+      "Tier de vínculo como union de strings: 'conocido' | 'amigo' | 'amigo_de_amigo' (y 'desconocido' como fallback); RelationshipTier en server/services/relationshipLimit.ts",
+      "enforcementMode 'hard'|'soft' leído de RiskConfig con degradación segura (try/catch + defaults) si la columna no existe",
+      "Transacciones $transaction que crean Contact → Opportunity (stage nuevo→contactado→documentacion→preaprobado vía transitionOpportunity) → PreApproval en un solo commit",
+      "resolvePersonByIdentity con create:false para resolver Person (CUIL → DNI → nombre) antes de la tx y create:true dentro de la tx",
+      "Snapshots persistentes en PreApproval (debtorExposureSnapshot/debtorLimitSnapshot/debtorPersonId) en lugar de consultas posteriores",
+      "Cero métricas/límites inline: usar helper canónico, nunca reimplementar en router/componente",
+      "Soft-delete + createdAt/updatedAt en modelos nuevos; columnas camelCase sin @map salvo las existentes",
+      "Frontend AP: estado por pasos en app/ap/page.tsx con useMutation de trpc.ap.preApprove y buildWhatsAppText para notificar a Augusto"
+    ],
+    "dependencias": [
+      "@trpc/server",
+      "@prisma/client",
+      "zod",
+      "Next.js App Router (app/)",
+      "Clerk (auth)",
+      "Supabase/Neon PostgreSQL (prisma)",
+      "Tailwind + shadcn/ui componentes (Select, Input, Badge)",
+      "next-safe-action / tRPC react (trpc.ap.* hooks)"
+    ],
+    "riesgos": [
+      "La TNA/tasa nunca se muestra al prestatario (regla de dominio del SKILL.md); el spread del AP y límites por tier son lógica interna",
+      "Límite de originación es por CUIL/persona, no por AP: `checkDebtorLimit` y `checkRelationshipLimit` se aplican en preApprove solo si ya hay Person resuelta (si no hay Person, degrada a tier 'conocido' sin bloqueo)",
+      "`DATABASE_URL` local apunta a PROD: cualquier migración de schema toca producción y requiere OK explícito (SKILL.md)",
+      "La elección de tier/referente por el AP podría chocar con la regla actual donde relationship/referrer solo se editan en app/dashboard/persons/page.tsx (admin), y con `resolvePerson` que puede matchear una Person existente — definir si el AP sobreescribe el tier o solo aplica a clientes nuevos",
+      "amigo_de_amigo sin referrer siempre marca requiresManualReview=true (independiente del monto) — validar UX si el referente pasa a ser editable",
+      "[NO VERIFICADO] La columna `relationshipLimits` (JSON) en RiskConfig y el modelo RiskConfig completo no se pudieron confirmar leyendo prisma/schema.prisma en el rango explorado; la referencia es indirecta (comentarios + debtorLimit.ts + loadRelationshipLimits)",
+      "Cambios en Opportunity/PreApproval deben respetar VALID_TRANSITIONS de opportunity.service.ts; el AP solo avanza hasta 'preaprobado'"
+    ],
+    "evidencia": [
+      {
+        "path": "server/services/relationshipLimit.ts",
+        "simbolo": "checkRelationshipLimit",
+        "lineas": "86-131",
+        "explicacion": "Función canónica que evalúa capital vs límite por tier de vínculo y referente; devuelve blocked/requiresManualReview/reason. Es el punto central donde se valida tier+referrer hoy.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/services/relationshipLimit.ts",
+        "simbolo": "RelationshipTier",
+        "lineas": "8",
+        "explicacion": "Tipo union 'conocido' | 'amigo' | 'amigo_de_amigo' | 'desconocido'; el tier que el AP debería poder elegir.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/services/relationshipLimit.ts",
+        "simbolo": "DEFAULT_RELATIONSHIP_LIMITS",
+        "lineas": "17-23",
+        "explicacion": "Defaults por tier (conocido/amigo 500k, amigo_de_amigo 200k, desconocido 0) usados cuando no hay overrides en RiskConfig.relationshipLimits.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "preApprove",
+        "lineas": "347-602",
+        "explicacion": "Mutation pública (token) que recibe clientName/clientCuil/purpose/cbu/capital/termMonths/grossTna y crea Contact→Opportunity→PreApproval. Aquí se aplica el gate checkRelationshipLimit con relationship/referrer leídos de la Person (default 'conocido'). Input NO expone relationship/referrer aún.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "approvePreApproval",
+        "lineas": "626-800",
+        "explicacion": "Mutation protegida que aprueba la pre-aprobación: resuelve Person, crea el Loan y transiciona la Opportunity a 'desembolsado'. Consume los snapshots ya persistidos en PreApproval.",
+        "confianza": 0.85
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "relationship",
+        "lineas": "83",
+        "explicacion": "Campo String de Person con default 'conocido' ('amigo' | 'amigo_de_amigo' | 'conocido'); el tier vive en la persona, no en la pre-aprobación.",
+        "confianza": 0.95
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "referrer",
+        "lineas": "84",
+        "explicacion": "Campo String? de Person: 'Quien lo refiere'. Hoy solo se setea desde el dashboard admin (persons/page.tsx).",
+        "confianza": 0.95
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "model PreApproval",
+        "lineas": "131-189",
+        "explicacion": "Modelo PreApproval: guarda snapshots (debtorExposureSnapshot, requiresManualReview, opportunityId) pero NO guarda relationship/referrer/tier — decisión de diseño si debe persistirse el tier elegido por el AP.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/services/opportunity.service.ts",
+        "simbolo": "transitionOpportunity",
+        "lineas": "49-118",
+        "explicacion": "Única vía de cambio de stage con VALID_TRANSITIONS; el stage 'preaprobado' se alcanza con extras (riskFlag, preapprovedAmount/Rate/Term). Debe usarse al avanzar el pipeline.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/services/opportunity.service.ts",
+        "simbolo": "PreaprovadoExtras",
+        "lineas": "34-41",
+        "explicacion": "Extras aceptados al transicionar a 'preaprobado'; si se quiere persistir tier/referente en la Opportunity, este es el punto de extensión.",
+        "confianza": 0.85
+      },
+      {
+        "path": "app/ap/page.tsx",
+        "simbolo": "handlePreApprove",
+        "lineas": "475-492",
+        "explicacion": "Frontend del flujo AP: llama trpc.ap.preApprove.mutateAsync({ token, clientName, clientCuil, purpose, cbu, ... }); es donde habría que agregar UI para elegir tier/referente en nuevo cliente.",
+        "confianza": 0.85
+      },
+      {
+        "path": "app/dashboard/persons/page.tsx",
+        "simbolo": "relationship",
+        "lineas": "801-926",
+        "explicacion": "UI admin existente para editar relationship (Select) y referrer (Input) de una Person; referencia de patrón de edición/validación para reutilizar.",
+        "confianza": 0.85
+      },
+      {
+        "path": "lib/loan-scoring.ts",
+        "simbolo": "relationship",
+        "lineas": "6-49",
+        "explicacion": "El scoring usa relationship ('amigo' +2, 'amigo_de_amigo' +1) y referrer (+0.5) como entrada; cambiar el tier en preApprove impacta el score.",
+        "confianza": 0.85
+      },
+      {
+        "path": "lib/risk/debtorLimit.ts",
+        "simbolo": "enforcementMode",
+        "lineas": "31-128",
+        "explicacion": "Patrón hermano de checkRelationshipLimit: lee enforcementMode de RiskConfig con fallback 'soft' y degradación si el campo no existe. Modelo a imitar para relationshipLimits.",
+        "confianza": 0.85
+      },
+      {
+        "path": ".claude/skills/spensiv-context/SKILL.md",
+        "simbolo": "AgentConfig",
+        "lineas": "76-84",
+        "explicacion": "Contexto canónico del repo: reglas de dominio, modelos de la capa AP y advertencia de que DATABASE_URL local apunta a PROD (migraciones requieren OK).",
+        "confianza": 0.95
+      }
+    ],
+    "resumen": "Kredy/Spensiv es una app Next.js (App Router) + tRPC + Prisma con una capa comercial AP donde `preApprove` (server/routers/ap.ts) crea en una transacción Contact→Opportunity→PreApproval y ya ejecuta un gate por tier de vínculo (`checkRelationshipLimit` en server/services/relationshipLimit.ts) usando `relationship`/`referrer` de la Person resuelta por CUIL/nombre, con default 'conocido'. Hoy el tier y el referente solo se editan desde el dashboard admin (app/dashboard/persons/page.tsx) y no se persisten en PreApproval ni Opportunity, por lo que la feature 'AP elige tier de vínculo y referente al pre-aprobar un nuevo cliente' requiere extender el input de `preApprove` y el flujo UI de app/ap/page.tsx, decidir dónde persistir la elección (Person/Opportunity/PreApproval, con migración Prisma que toca PROD), y respetar las reglas de dominio (no exponer TNA, límite por deudor, transiciones válidas de Opportunity, requiresManualReview para amigo_de_amigo sin referente)."
+  }
+]

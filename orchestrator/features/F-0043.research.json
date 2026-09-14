@@ -1,0 +1,140 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Argos — persistir en DB la distribución objetivo (%) de estrategias",
+    "archivos": [
+      "supabase/migrations/038_user_strategy_targets.sql",
+      "src/features/portfolio/components/strategy/StrategyTab.jsx",
+      "src/features/portfolio/components/strategy/TargetAllocation.jsx",
+      "src/features/portfolio/components/strategy/RebalanceAlerts.jsx",
+      "src/features/portfolio/components/GroupedPositionsTable.jsx",
+      "src/lib/supabase.ts",
+      "src/features/auth/services/userService.js"
+    ],
+    "patrones": [
+      "Estado local con useState + useEffect y localStorage (get en lazy-init, set en effect) — hoy los targets viven SOLO en localStorage bajo la key 'portfolio_strategy_targets'; el implementador debe reemplazar ese origen de datos por un fetch a la tabla user_strategy_targets y persistir en cada cambio.",
+      "Fetch directo a REST con el helper supabaseFetch(table, { select, eq, single }) exportado desde @/lib/supabase (bypasea el cliente bloqueado). Es el patrón usado por userService.getProfile para tablas por-usuario y debe replicarse para user_strategy_targets.",
+      "Manejo de 'no existe el registro' con error PGRST116/406 → crear el registro (patrón getProfile → createProfileIfNotExists en userService.js). Al migrar desde localStorage, el primer guardado de un usuario legacy probablemente requiera un INSERT (upsert) si no hay fila previa.",
+      "Validación de rango en UI: TargetAllocation ya clampa core1+core2 ≤ 100 (handleCore1Change / handleCore2Change) y Satélite se calcula como 100 - core1 - core2 (nunca se persiste)."
+    ],
+    "dependencias": [
+      "@supabase/supabase-js (cliente supabase + helper supabaseFetch en src/lib/supabase.ts)",
+      "Función DB pública update_updated_at_column() usada por el trigger de 038",
+      "auth.users (FK de user_id en user_strategy_targets) y RLS con auth.uid()"
+    ],
+    "riesgos": [
+      "El mock de desarrollo (mockClient en supabase.ts) solo contempla trades/portfolios/user_profiles/market_prices; user_strategy_targets caería en el fallback makeMockBuilder([]) y rompería la demo en DEV/bypass — hay que agregar un mock o aceptar datos vacíos en dev.",
+      "El wrapper de localStorage.setItem en supabase.ts purga claves que contienen 'portfolio-' (entre ellas 'portfolio_strategy_targets') ante QuotaExceededError — evidencia de que localStorage es frágil y justifica la persistencia en DB.",
+      "La migración 038 fue 'aplicada manualmente vía Supabase MCP' y el comentario indica AR-006/F-0043; la tabla ya existe en prod pero el código frontend aún no la usa (sin archivos que referencien user_strategy_targets en TS/JS).",
+      "Trigger de updated_at depende de la función public.update_updated_at_column() — [NO VERIFICADO] no confirmé su definición en otra migración.",
+      "Persistir targets exige conocer el user_id del usuario autenticado (supabase.auth.getUser()) y respetar la RLS 'Users manage own strategy targets'; no hay aún un hook específico de targets en DB para reutilizar."
+    ],
+    "evidencia": [
+      {
+        "path": "supabase/migrations/038_user_strategy_targets.sql",
+        "simbolo": "user_strategy_targets",
+        "lineas": "10-14",
+        "explicacion": "La tabla DB YA existe: user_id PK → auth.users, columna targets JSONB con default '{\"core1\": 50, \"core2\": 30}', updated_at. Es el destino de persistencia para esta tarea; falta conectar el frontend.",
+        "confianza": 1
+      },
+      {
+        "path": "supabase/migrations/038_user_strategy_targets.sql",
+        "simbolo": "targets",
+        "lineas": "11",
+        "explicacion": "Columna JSONB que guarda la distribución objetivo en % (claves core1/core2). El default coincide con DEFAULT_TARGETS del frontend ({core1:50, core2:30}).",
+        "confianza": 1
+      },
+      {
+        "path": "supabase/migrations/038_user_strategy_targets.sql",
+        "simbolo": "Users manage own strategy targets",
+        "lineas": "16-17",
+        "explicacion": "Policy RLS FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id): el usuario solo puede leer/escribir su propia fila. No requiere cambios de seguridad.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/StrategyTab.jsx",
+        "simbolo": "TARGETS_KEY",
+        "lineas": "4",
+        "explicacion": "const TARGETS_KEY = 'portfolio_strategy_targets' — clave de localStorage donde hoy se persiste la distribución objetivo. Es el origen de datos que la tarea debe migrar a DB.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/StrategyTab.jsx",
+        "simbolo": "DEFAULT_TARGETS",
+        "lineas": "5",
+        "explicacion": "const DEFAULT_TARGETS = { core1: 50, core2: 30 } — valor por defecto idéntico al DEFAULT del JSONB en la migración 038. Usarlo como fallback si la consulta a DB no devuelve fila.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/StrategyTab.jsx",
+        "simbolo": "setTargets",
+        "lineas": "7-21",
+        "explicacion": "useState inicializado desde localStorage + useEffect que persiste en cada cambio; es el punto donde hoy se escribe y el que debería disparar el upsert a user_strategy_targets.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/TargetAllocation.jsx",
+        "simbolo": "TargetAllocation",
+        "lineas": "48-54",
+        "explicacion": "Componente que recibe targets={targets} y onChangeTargets={setTargets}; conoce el shape exacto del estado a persistir ({core1, core2}).",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/TargetAllocation.jsx",
+        "simbolo": "satelliteTarget",
+        "lineas": "54, 63-64",
+        "explicacion": "const satelliteTarget = Math.max(0, 100 - targets.core1 - targets.core2): el % de satélite se deriva, nunca se persiste — la DB solo guarda core1/core2.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/strategy/RebalanceAlerts.jsx",
+        "simbolo": "targets",
+        "lineas": "12, 23",
+        "explicacion": "Consume targets.core1/targets.core2 para calcular diff pp (>10 dispara alerta); se beneficiará automáticamente si StrategyTab pasa targets cargados desde DB.",
+        "confianza": 1
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "STRATEGY_GROUPS",
+        "lineas": "35-38",
+        "explicacion": "Buckets de estrategia: core1 ('Core 1 — SPY'), core2 ('Core 2 — BTC/IBIT'), satelite ('Satélite') — nomenclatura que define las claves del objeto targets.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "defaultStrategyOf",
+        "lineas": "57-61",
+        "explicacion": "Clasifica cada posición en core1/core2/satelite; lo importan TargetAllocation y RebalanceAlerts para calcular el % actual por bucket frente al target.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/lib/supabase.ts",
+        "simbolo": "supabaseFetch",
+        "lineas": "88-146",
+        "explicacion": "Helper exportado que hace queries REST directas (select/eq/single/limit) con token de localStorage; es el mecanismo recomendado para leer/escribir user_strategy_targets por usuario.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/auth/services/userService.js",
+        "simbolo": "getProfile",
+        "lineas": "37-62",
+        "explicacion": "Patrón de lectura por usuario con supabaseFetch('user_profiles', { eq: { user_id }, single: true }) y creación on-demand si error PGRST116/406 — plantilla para un eventual strategyTargetsService.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/auth/services/userService.js",
+        "simbolo": "createProfileIfNotExists",
+        "lineas": "11-35",
+        "explicacion": "Patrón de INSERT con manejo de 23505 (unique violation) → fallback a get; útil para migrar usuarios legacy que aún no tienen fila en user_strategy_targets.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/lib/supabase.ts",
+        "simbolo": "mockClient",
+        "lineas": "197-237",
+        "explicacion": "Mock de dev solo contempla trades/portfolios/user_profiles/market_prices; user_strategy_targets retornaría [] en bypass_auth — el implementador debe agregarlo o aceptar vacío en dev.",
+        "confianza": 0.9
+      }
+    ],
+    "resumen": "La infraestructura de persistencia ya está creada en DB: la migración 038 define la tabla user_strategy_targets (user_id PK + targets JSONB con default {core1:50, core2:30} + RLS por auth.uid()), pero el frontend sigue persistiendo los targets solo en localStorage (StrategyTab.jsx con TARGETS_KEY 'portfolio_strategy_targets'). La tarea consiste en conectar ambos: reemplazar el origen/destino de datos de StrategyTab por lecturas/escrituras a esa tabla usando el patrón supabaseFetch + userService (get con single + create/upsert si no existe), reutilizando DEFAULT_TARGETS como fallback y los clamps ya validados en TargetAllocation; riesgos a cubrir: agregar la tabla al mockClient de desarrollo y verificar que la función public.update_updated_at_column() exista (dependencia del trigger)."
+  }
+]

@@ -1,0 +1,353 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Argos FCI — Explorador: chips de categoría (1-10) con contador en vivo",
+    "archivos": [
+      "src/pages/FciExplorador.jsx",
+      "src/features/fci/services/mercadoService.js",
+      "src/features/fci/constants.js",
+      "src/features/fci/components/ExploradorStatsBar.jsx",
+      "supabase/migrations/039_fci_explorador_grupos.sql",
+      "supabase/migrations/026_fci_master_cafci_fields.sql",
+      "src/components/ui/Badge.jsx",
+      "src/components/ui/index.js",
+      "src/components/ui/KpiCard.jsx",
+      "src/features/fci/services/__tests__/mercadoService.getFondosPage.test.js",
+      "src/features/fci/services/__tests__/mercadoService.getFondosStats.test.js",
+      "package.json"
+    ],
+    "patrones": [
+      "Página contenedora con estado local (useState) para filtros; cada filtro hace setPage(0) al cambiar",
+      "Filtros compartidos (sharedFilters) que se pasan idénticos a getFondosPage y getFondosStats — fuente única de verdad para que KPIs y tabla nunca diverjan",
+      "Agregación server-side vía PostgREST (count/avg/max) en getFondosStats, nunca promediar en JS por el truncado a ~1000 filas",
+      "Re-fetch reactivo con useCallback(loadPage) + useEffect([loadPage]) — toda la data se recarga cuando cambia cualquier filtro",
+      "Debounce de la búsqueda de texto (400ms) con setTimeout/clearTimeout antes de comprometer el filtro",
+      "Clasificación código→label centralizada en FCI_CLASIFICACION (única fuente de verdad), importada en todos los puntos",
+      "Tailwind con tokens semánticos: bg-argos-surface, bg-argos-elevated, border-argos-border, text-ink, text-ink-mute, text-ink-faint, bg-primary, text-profit/text-loss",
+      "Componentes UI compartidos importados desde '@/components/ui' (PageHeader, KpiCard, Tooltip, Badge)",
+      "Chunks de UI con lucide-react para iconos; Tooltip + HelpCircle para explicar métricas",
+      "Manejo de estado de carga/error explícito (loading, error) con try/catch/finally"
+    ],
+    "dependencias": [
+      "react",
+      "react-router-dom",
+      "lucide-react",
+      "@supabase/supabase-js",
+      "@tanstack/react-query (presente en package.json, no usado en esta página)",
+      "tailwindcss",
+      "vitest (tests)",
+      "@testing-library / vi.spyOn con mocks de mercadoService"
+    ],
+    "riesgos": [
+      "Los contadores por categoría deben respetar el mismo universo que la tabla (filtro stale y groupByFund); calcularlos client-side sobre la página de 50 daría números incorrectos — hay que usar agregación server-side tipo getFondosStats agrupada por clasificacion_cod",
+      "El filtro stale (excludeStale/STALE_DATE_FIELD='rend_updated_at') exige resolver getLatestUniverseDate antes de contar; olvidarlo infla/desinfla contadores",
+      "groupByFund alterna entre fci_explorador y fci_explorador_grupos: los conteos difieren según la vista, y la categoría se toma de la clase representativa",
+      "PostgREST trunca data a ~1000 filas: no usar el array de filas para contar por categoría en filtros amplios",
+      "FciExplorador.jsx es un archivo grande con estado disperso; agregar chips implica nuevos estados y refetch — riesgo de loops de dependencias en useCallback/useEffect",
+      "Los chips sólo deben cubrir 10 categorías (FCI_CLASIFICACION 1-10); hoy el selector es un <select> y no hay chips de categoría ni contador en vivo implementados [NO VERIFICADO que exista ya algún contador de categoría en otro branch]",
+      "Migraciones SQL se aplican a mano (migration 039), no via CI/CD — cualquier agregado de vista debe seguir ese gate humano (F-0046)"
+    ],
+    "evidencia": [
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "CATEGORIAS",
+        "lineas": "9-16",
+        "explicacion": "Constante local con las categorías actuales del selector (label+cod), hoy solo 6 de las 10 posibles; punto natural para poblar los chips 1-10 desde FCI_CLASIFICACION.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "setClasificacion",
+        "lineas": "73",
+        "explicacion": "Estado del filtro de categoría; los chips reemplazarán el <select> y deben setear esta variable y resetear page=0.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "clasificacion",
+        "lineas": "73-74",
+        "explicacion": "Valor de categoría activa usado en sharedFilters (clasificacion_cod); el contador en vivo debe reflejar el filtro por esta categoría.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "sharedFilters",
+        "lineas": "98-103",
+        "explicacion": "Objeto de filtros compartido entre getFondosPage y getFondosStats: patrón a replicar para obtener conteos por categoría consistentes.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "getFondosStats",
+        "lineas": "115-124",
+        "explicacion": "Llamada de stats server-side; análogo de lo que se necesita para un contador por categoría (agrupado por clasificacion_cod).",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "groupByFund",
+        "lineas": "126-131",
+        "explicacion": "Toggle '1 clase por fondo' que cambia la tabla consultada y por ende los conteos; los chips deben respetarlo.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "moneda",
+        "lineas": "184-190",
+        "explicacion": "Ejemplo existente de chips (MONEDAS) con estado y toggle page=0: patrón de estilo/lógica a seguir para los nuevos chips de categoría.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "MONEDAS",
+        "lineas": "18",
+        "explicacion": "Array de opciones que renderiza los chips existentes de moneda (Todos/ARS/USD); molde directo para el array de chips 1-10.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "comparando",
+        "lineas": "196-215",
+        "explicacion": "Chips de comparador (rounded-full) con label y botón × : referencia de markup de chips (pill) y del contador 'Comparar (n)' en el header.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "FCI_CLASIFICACION",
+        "lineas": "23-34",
+        "explicacion": "Única fuente de verdad código→label para las 10 categorías (1-10); los chips deben iterar sobre este map, no duplicar strings.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "STALE_DATE_FIELD",
+        "lineas": "104-112",
+        "explicacion": "Campo de frescura ('rend_updated_at') usado para excluir fondos stale; el contador por categoría debe aplicar el mismo criterio.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "EXCLUDE_STALE_DEFAULT",
+        "lineas": "114-119",
+        "explicacion": "Default true del filtro stale; condiciona el universo contado en cada categoría.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "applyFondosFilters",
+        "lineas": "157-163",
+        "explicacion": "Función única que aplica la cadena de filtros (moneda, clasificacion_cod, sociedad_gerente, search, stale); cualquier nuevo conteo por categoría debe reutilizarla.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "getFondosStats",
+        "lineas": "211-244",
+        "explicacion": "Implementación de agregación server-side con count/avg/max; el contador en vivo por categoría requiere una variante group-by clasificacion_cod sobre esta misma base.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "getFondosPage",
+        "lineas": "166-210",
+        "explicacion": "Query paginada que devuelve { fondos, total } del universo filtrado; documenta el riesgo de offsets y por qué el count debe ser server-side con los mismos filtros.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "normalizeFondo",
+        "lineas": "15-22",
+        "explicacion": "Normaliza shape entre fci_explorador y fci_explorador_grupos (clasificacion, n_clases, clases_hermanas); los conteos de chips deben usar el mismo mapa.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "getLatestUniverseDate",
+        "lineas": "322",
+        "explicacion": "Fecha de corte del filtro stale; debe invocarse antes de contar para que los contadores coincidan con la tabla.",
+        "confianza": 0.8
+      },
+      {
+        "path": "supabase/migrations/039_fci_explorador_grupos.sql",
+        "simbolo": "fci_explorador_grupos",
+        "lineas": "32-96",
+        "explicacion": "Vista agrupada '1 clase por fondo' usada cuando groupByFund=true; expone clasificacion_cod de la clase representativa, base para conteos agrupados por categoría.",
+        "confianza": 0.9
+      },
+      {
+        "path": "supabase/migrations/026_fci_master_cafci_fields.sql",
+        "simbolo": "clasificacion_cod",
+        "lineas": "9",
+        "explicacion": "Columna origen del filtro de categoría (código CAFCI 1-10); confirma de dónde proviene el valor que los chips deben mapear.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/components/ui/Badge.jsx",
+        "simbolo": "Badge",
+        "lineas": "20-52",
+        "explicacion": "Componente pill con variantes por signo; candidato para mostrar el contador en cada chip o reutilizar su estilo de pill.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/components/ui/index.js",
+        "simbolo": "KpiCard",
+        "lineas": "5",
+        "explicacion": "Barrel de UI reutilizable; junto a ExploradorStatsBar es donde se muestran métricas agregadas del universo.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/fci/components/ExploradorStatsBar.jsx",
+        "simbolo": "ExploradorStatsBar",
+        "lineas": "27-68",
+        "explicacion": "Franja de KPIs del Explorador (total, TNA promedio, mejor TNA, caución); el contador en vivo debe ser coherente con el KPI 'total' que ya consume getFondosStats.",
+        "confianza": 0.85
+      }
+    ],
+    "resumen": "El Explorador de FCI vive en src/pages/FciExplorador.jsx y hoy filtra categoría mediante un <select> alimentado por la constante local CATEGORIAS (solo 6 opciones) y las 10 categorías canónicas en FCI_CLASIFICACION (src/features/fci/constants.js). La data se obtiene vía mercadoService (Supabase/PostgREST) alternando entre las vistas fci_explorador y fci_explorador_grupos, con filtros compartidos entre getFondosPage y getFondosStats y un criterio de frescura stale (STALE_DATE_FIELD='rend_updated_at'). Para chips 1-10 con contador en vivo el patrón natural es reutilizar applyFondosFilters y una variante de agregación server-side agrupada por clasificacion_cod (análoga a getFondosStats), renderizando los chips con el estilo ya usado por los chips de MONEDAS/comparador (tailwind argos + rounded-full). Riesgo principal: calcular conteos en el cliente sobre la página de 50 o ignorar el filtro stale/groupByFund produciría números divergentes de la tabla."
+  },
+  {
+    "objetivo": "Riesgos y restricciones técnicas para: Argos FCI — Explorador: chips de categoría (1-10) con contador en vivo",
+    "archivos": [
+      "src/pages/FciExplorador.jsx",
+      "src/features/fci/constants.js",
+      "src/features/fci/services/mercadoService.js",
+      "src/features/fci/components/ExploradorStatsBar.jsx",
+      "supabase/migrations/039_fci_explorador_grupos.sql",
+      "src/features/fci/services/__tests__/mercadoService.getFondosPage.test.js",
+      "src/features/fci/services/__tests__/mercadoService.getFondosStats.test.js"
+    ],
+    "patrones": [
+      "Fuente única de verdad para código→label: importar FCI_CLASIFICACION desde src/features/fci/constants.js (comentario explícito 'ÚNICA fuente de verdad del map'). No duplicar labels en el componente.",
+      "Filtros del Explorador se aplican vía una única función applyFondosFilters(query, filtros, universeDate) compartida por getFondosPage y getFondosStats, para que KPIs y tabla nunca diverjan.",
+      "Los servicios devuelven shapes normalizados mediante normalizeFondo() y FCI_GRUPO_DEFAULTS, garantizando tipos consistentes entre fci_explorador y fci_explorador_grupos.",
+      "Tabla activa se elige con groupByFund ? 'fci_explorador_grupos' : 'fci_explorador' (default true).",
+      "Agregados server-side con sintaxis PostgREST select('alias:col.agg()') + .maybeSingle(); se documenta explícitamente que NO se debe traer filas a JS porque PostgREST trunca a ~1000 filas.",
+      "El filtro stale usa STALE_DATE_FIELD ('rend_updated_at') con .gte() y EXCLUDE_STALE_DEFAULT=true; la fecha de universo se obtiene con getLatestUniverseDate() antes de armar la query.",
+      "Migraciones SQL se aplican a mano (comentario 'APLICAR A MANO. No via CI/CD. Gate humano obligatorio (ver F-0046)') con bloque ROLLBACK documentado.",
+      "Estilo de UI: clases argos-* (bg-argos-surface, border-argos-border, text-ink-faint), botones pill de filtro con estado activo bg-primary/10 border-primary/40 text-primary, patrón ya usado en el toggle '1 clase por fondo' y en los chips del comparador."
+    ],
+    "dependencias": [
+      "@supabase/supabase-js / @supabase/postgrest-js (query builders, sintaxis de agregación .count()/.avg()/.max())",
+      "react + react-router-dom (useNavigate, estado local del Explorador)",
+      "lucide-react (iconos de chips/tooltips)",
+      "@/components/ui (PageHeader, Tooltip, KpiCard)",
+      "@/components/common/ErrorBoundary",
+      "@/lib/supabase (cliente supabase)",
+      "vitest (tests unitarios de mercadoService con mock de supabase)",
+      "Vistas/tablas Postgres: fci_explorador, fci_explorador_grupos (migration 039), fci_class_overrides, fci_master"
+    ],
+    "riesgos": [
+      "El render actual de categorías es un <select> con un array CATEGORIAS hardcodeado (solo 6 opciones: Todos, 3, 2, 1, 4, 5) — NO cubre los 10 códigos de FCI_CLASIFICACION (faltan 6 Retorno Total, 7 Infraestructura, 8 FCIC, 9 ASG, 10 Renta Pública). Migrar a 10 chips cambia el universo de opciones y puede alterar el filtro activo por defecto / valores fuera de rango.",
+      "El 'contador en vivo' exige un agregado por clasificacion_cod que HOY NO EXISTE. getFondosStats devuelve un único total global; no hay endpoint de group-by. Implementarlo traería filas a JS (truncado a ~1000 de PostgREST, riesgo documentado en el propio código) o requeriría RPC/vista nueva en Postgres.",
+      "Contadores por categoría deben respetar los filtros activos (moneda, administradora, search) y el filtro stale (excludeStale + getLatestUniverseDate). Si se calculan con query propia e ignoran applyFondosFilters/STALE_DATE_FIELD, los chips divergirán de la tabla y de los KPIs — violando la invariante 'las métricas del header nunca pueden divergir del universo que muestra la tabla'.",
+      "Doble modo de universo: con groupByFund=true (default) el conteo es por fondo agrupado; con groupByFund=false es por clase. Un contador por categoría calculado sobre fci_explorador (plano) daría números distintos a los de fci_explorador_grupos. Hay que decidir y testear ambos modos (los tests existentes cubren explícitamente las dos vistas).",
+      "tests que pueden romperse: mercadoService.getFondosStats.test.js (espera .maybeSingle() y NO .range(), y que la cadena de filtros replique exactamente la de getFondosPage) y mercadoService.getFondosPage.test.js (espera .range() y tabla por groupByFund). Cualquier cambio en la firma de getFondosStats/applyFondosFilters o en la selección de vista impacta estos asserts.",
+      "El test 'sin filtros opcionales no llama .eq ni .or' asume que getFondosStats no emite .eq cuando no hay filtros; si los chips disparan un filtro por categoría por defecto o una query adicional, ese contrato se rompe.",
+      "migration 039 se aplica A MANO (gate humano, F-0046). Si los contadores dependen de nuevas columnas/vistas (p.ej. conteo por categoría en fci_explorador_grupos), requerirán una migración manual nueva; no se despliega por CI/CD y podría quedar desincronizada del frontend en producción.",
+      "Duplicación de la taxonomía: CATEGORIAS en FciExplorador.jsx repite códigos que ya viven en FCI_CLASIFICACION y en PRESET_MM_USD; extender a 10 chips sin centralizar perpetúa la deuda y el riesgo de labels desincronizados.",
+      "Riesgo de performance/UI: 10 chips con contador implican N consultas agregadas por cambio de filtro (search con debounce 400ms, moneda, administradora). Sin un agregado único tipo 'group by clasificacion_cod' se multiplican round-trips a Supabase; con debounce y loadPage en useCallback([...deps]) cualquier nueva dependencia (contadores) puede generar loops o refetch innecesario.",
+      "La vista fci_explorador_grupos solo expone clasificacion_cod de la clase representativa (la de rend_updated_at más fresco). Un contador por categoría en modo agrupado clasificará el fondo por su clase representativa, no por todas sus hermanas — comportamiento a validar con producto.",
+      "No verifiqué la existencia de RPCs/funciones Postgres de conteo ([NO VERIFICADO]) ni tests de componente para FciExplorador.jsx ([NO VERIFICADO]); tampoco confirmé si hay límites de rate/cuota en el cliente Supabase."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "FCI_CLASIFICACION",
+        "lineas": "22-33",
+        "explicacion": "Map completo 1-10 código→label, declarado como ÚNICA fuente de verdad. Los chips deben renderizar labels desde acá en vez de hardcodear 6 opciones.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "CATEGORIAS",
+        "lineas": "9-16",
+        "explicacion": "Array local con solo 6 categorías (Todos, 3, 2, 1, 4, 5); es la deuda/duplicación que los chips 1-10 deben reemplazar. Riesgo de divergencia con FCI_CLASIFICACION.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/pages/FciExplorador.jsx",
+        "simbolo": "setClasificacion",
+        "lineas": "230-238",
+        "explicacion": "El filtro de categoría hoy se setea desde un <select> con Number(e.target.value). Migrar a chips cambia el control y el manejo de null ('Todos'), afectando el reset de página.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "applyFondosFilters",
+        "lineas": "156-162",
+        "explicacion": "Función única compartida que aplica moneda/clasificacion_cod/sociedad_gerente/search/stale. Cualquier contador por categoría debe reusarla para no divergir de la tabla y los KPIs.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "getFondosStats",
+        "lineas": "221-259",
+        "explicacion": "Devuelve un único total/tnaPromedio/mejorTna del universo filtrado; NO hay agregado por categoría. El contador en vivo requiere extender este servicio o agregar uno nuevo.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "maybeSingle",
+        "lineas": "255-256",
+        "explicacion": "getFondosStats usa .maybeSingle() (query de agregación, no paginada); un conteo por categoría necesitaría otro shape de respuesta. Los tests asumen este contrato.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "getLatestUniverseDate",
+        "lineas": "191-193",
+        "explicacion": "La fecha de universo stale se resuelve antes de armar la query principal. Un contador por categoría debe aplicar el mismo filtro stale o los chips mostrarán fondos fantasma.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/mercadoService.js",
+        "simbolo": "groupByFund",
+        "lineas": "190",
+        "explicacion": "Selección de tabla fci_explorador_grupos vs fci_explorador según groupByFund (default true). Los contadores por categoría diferirán según el modo.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/mercadoService.getFondosStats.test.js",
+        "simbolo": "getFondosStats",
+        "lineas": "31-46",
+        "explicacion": "Tests que fijan la selección de vista por groupByFund; un refactor del servicio para contadores puede romper estos asserts.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/__tests__/mercadoService.getFondosStats.test.js",
+        "simbolo": "no llama .eq ni .or",
+        "lineas": "60-65",
+        "explicacion": "Contrato explícito: sin filtros activos getFondosStats no emite .eq/.or. Si los chips agregan queries/filtros por defecto, este test falla.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/services/__tests__/mercadoService.getFondosPage.test.js",
+        "simbolo": "normalizeFondo",
+        "lineas": "179-240",
+        "explicacion": "Tests de normalizeFondo que validan el map de clasificacion_cod → label (incluye cod 99 → '—'). Extender categorías a 1-10 debe mantener esta semántica.",
+        "confianza": 0.8
+      },
+      {
+        "path": "supabase/migrations/039_fci_explorador_grupos.sql",
+        "simbolo": "fci_explorador_grupos",
+        "lineas": "1-2",
+        "explicacion": "Cabecera que documenta que la migración se aplica A MANO con gate humano (F-0046) y no por CI/CD; cualquier cambio SQL para los contadores hereda esa restricción de despliegue.",
+        "confianza": 0.9
+      },
+      {
+        "path": "supabase/migrations/039_fci_explorador_grupos.sql",
+        "simbolo": "clasificacion_cod",
+        "lineas": "57-60",
+        "explicacion": "La vista agrupada expone clasificacion_cod de la clase representativa (ORDER BY rend_updated_at DESC). En modo agrupado un contador por categoría cuenta fondos, no clases.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "EXCLUDE_STALE_DEFAULT",
+        "lineas": "97-104",
+        "explicacion": "Default true del filtro stale; restricción que debe respetar cualquier contador para ser 'en vivo' respecto al mismo universo que la tabla.",
+        "confianza": 0.85
+      }
+    ],
+    "resumen": "El Explorador hoy filtra categoría con un <select> sobre un array CATEGORIAS local de solo 6 códigos, mientras FCI_CLASIFICACION (constants.js) es la fuente de verdad de los 10 códigos CAFCI; pasar a chips 1-10 implica centralizar la taxonomía y eliminar la duplicación. El 'contador en vivo' no tiene backend: getFondosStats solo devuelve agregados globales, y agregar conteos por clasificacion_cod exige o bien un RPC/vista nueva (migración manual con gate humano F-0046) o traer filas a JS, lo que choca con el truncado de PostgREST documentado en el propio servicio. Los riesgos centrales son la divergencia entre contadores y universo filtrado (debe reusarse applyFondosFilters + getLatestUniverseDate + EXCLUDE_STALE_DEFAULT) y la ambigüedad fondos-vs-clases entre fci_explorador_grupos y fci_explorador, ambos modos cubiertos por tests existentes que pueden romperse. Varios puntos quedaron [NO VERIFICADO]: existencia de RPCs de conteo, tests de componente para FciExplorador.jsx y límites de cuota del cliente Supabase."
+  }
+]

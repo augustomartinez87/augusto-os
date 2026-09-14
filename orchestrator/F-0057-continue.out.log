@@ -1,0 +1,60 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0057
+
+[2026-09-12T16:10:28.184Z] [system] Modo operativo: PRODUCT
+[2026-09-12T16:10:28.189Z] [main] Resumiendo feature F-0057 — target: argos
+[2026-09-12T16:10:28.190Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-12T16:10:28.191Z] 
+[main] === Step 3/5: En getFondosPage (mercadoService.js), agregar la entrada 'aum': 'patrimonio' al mapa SORT_COL, siguiendo el patrón de las claves existentes (tna/1d/7d/etc), sin tocar getFondosStats. ===
+[2026-09-12T16:10:28.193Z] [executor] Resumiendo sesión 7cc4e659-107e-4924-af8e-d2eed05e4121 para step 3
+[2026-09-12T16:10:40.783Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0057-step3.log
+[2026-09-12T16:10:40.787Z] [verifier] Corriendo typecheck...
+[2026-09-12T16:10:52.133Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T16:10:52.133Z] [verifier] Corriendo tests...
+[2026-09-12T16:11:02.524Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T16:11:15.058Z] [reviewer] APPROVED step 3
+[2026-09-12T16:11:15.362Z] [git] Commit 8bb6a60b: step 3
+[2026-09-12T16:11:15.364Z] [main] Step 3 completado y commiteado (8bb6a60b)
+[2026-09-12T16:11:15.364Z] 
+[main] === Step 4/5: En FciExplorador.jsx, agregar una columna nueva 'AUM' con <SortHeader label="AUM" sortK="aum" /> siguiendo exactamente el patrón de las columnas existentes (pctCell/tnaCell como referencia de estilo), renderizando fondo.patrimonio a través del formateador nuevo, mostrando el placeholder '—' cuando es null/undefined tanto en modo lista como en modo agrupado. ===
+[2026-09-12T16:11:15.367Z] [executor] Iniciando sesión nueva para step 4: En FciExplorador.jsx, agregar una columna nueva 'AUM' con <SortHeader label="AUM" sortK="aum" /> siguiendo exactamente el patrón de las columnas existentes (pctCell/tnaCell como referencia de estilo), renderizando fondo.patrimonio a través del formateador nuevo, mostrando el placeholder '—' cuando es null/undefined tanto en modo lista como en modo agrupado.
+[2026-09-12T16:12:15.674Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0057-step4.log
+[2026-09-12T16:12:15.676Z] [verifier] Corriendo typecheck...
+[2026-09-12T16:12:18.540Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T16:12:18.540Z] [verifier] Corriendo tests...
+[2026-09-12T16:12:20.220Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T16:12:20.803Z] [qa] Navegando http://localhost:5173/
+[2026-09-12T16:12:23.158Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-12T16:12:23.216Z] [qa] FAIL: 1 errores
+[2026-09-12T16:12:23.216Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-12T16:12:23.216Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-12T16:13:38.277Z] [reviewer] APPROVED step 4
+[2026-09-12T16:13:38.550Z] [git] Commit f8ff6979: step 4
+[2026-09-12T16:13:38.551Z] [main] Step 4 completado y commiteado (f8ff6979)
+[2026-09-12T16:13:38.552Z] 
+[main] === Step 5/5: Agregar/actualizar tests unitarios: cubrir el formateador de AUM (casos: null, cero, número grande con notación compacta) y verificar que SORT_COL.aum mapea a 'patrimonio'. Asegurar que typecheck y tests pasan. ===
+[2026-09-12T16:13:38.555Z] [executor] Iniciando sesión nueva para step 5: Agregar/actualizar tests unitarios: cubrir el formateador de AUM (casos: null, cero, número grande con notación compacta) y verificar que SORT_COL.aum mapea a 'patrimonio'. Asegurar que typecheck y tests pasan.
+[2026-09-12T16:15:26.714Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0057-step5.log
+[2026-09-12T16:15:26.716Z] [verifier] Corriendo typecheck...
+[2026-09-12T16:15:29.537Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T16:15:29.538Z] [verifier] Corriendo tests...
+[2026-09-12T16:15:31.259Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T16:16:14.256Z] [reviewer] APPROVED step 5
+[2026-09-12T16:16:14.551Z] [git] Commit 38dda002: step 5
+[2026-09-12T16:16:14.553Z] [main] Step 5 completado y commiteado (38dda002)
+[2026-09-12T16:16:14.553Z] [main] Feature F-0057: steps COMPLETOS.
+[2026-09-12T16:16:14.862Z] [git] Merge OK: feat/F-0057-argos-fci-persistir-patrimonio-aum-por-c → main (local, sin push). Push a main y deploy = manual.
+[2026-09-12T16:16:14.867Z] [system] PROGRESS.md actualizado
+[2026-09-12T16:16:14.869Z] [release] typecheck...
+[2026-09-12T16:16:17.753Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-12T16:16:17.753Z] [release] tests...
+[2026-09-12T16:16:19.536Z] [release] build de prod...
+[2026-09-12T16:16:31.880Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-12T16:16:31.881Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-12T16:16:34.361Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-12T16:16:34.370Z] [adr] ADRs generados en esta feature:
+[2026-09-12T16:16:34.371Z]   ADR-0157 — Mismo filtro de fecha/inactivo para patrimonio que para VCP [Supuesto del agente] ← REVISAR
+[2026-09-12T16:16:34.371Z]   ADR-0158 — formatAum usa cero decimales en todas las ramas (K, M, unidad) [Supuesto del agente] ← REVISAR
+[2026-09-12T16:16:34.371Z] [main] F-0057 RELEASED (push hecho). STATE.json archivado como STATE.F-0057.archived.json
+[2026-09-12T16:16:34.374Z] [backlog] Filas marcadas done: AR-030

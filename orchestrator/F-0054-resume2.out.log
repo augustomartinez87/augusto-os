@@ -1,0 +1,53 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0054
+
+[2026-09-10T02:00:45.702Z] [system] Modo operativo: PRODUCT
+[2026-09-10T02:00:45.705Z] [main] Resumiendo feature F-0054 — target: argos
+[2026-09-10T02:00:45.706Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-10T02:00:45.707Z] 
+[main] === Step 5/6: Agregar una sección/alert 'Rescates detectados pendientes de aplicar' en la UI de FCI (arriba de la tabla de lotes/rescates existente, siguiendo el patrón visual de alerts/pendientes ya usado en Argos), que se renderiza SOLO cuando hay al menos un pendiente. Cada fila muestra nombre del fondo, fecha, cuotapartes, vcp_salida y monto_rescatado, con un botón 'Aplicar' por fila que llama a applyPending, maneja estado de carga, y muestra el error de cuotapartes insuficientes de forma clara (inline o toast según el patrón existente). No mostrar TNA/tasa en copy nuevo. ===
+[2026-09-10T02:00:45.710Z] [executor] Resumiendo sesión 8081e8da-880f-4537-b35d-c3b4f657400f para step 5
+[2026-09-10T02:01:02.242Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0054-step5.log
+[2026-09-10T02:01:02.245Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:01:05.004Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:01:05.004Z] [verifier] Corriendo tests...
+[2026-09-10T02:01:06.325Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:01:06.477Z] [qa] Navegando http://localhost:5173/
+[2026-09-10T02:01:08.854Z] [qa] SKIP: servidor no disponible en http://localhost:5173
+[2026-09-10T02:01:08.901Z] [qa] FAIL: 1 errores
+[2026-09-10T02:01:08.902Z]   NO_SERVER: http://localhost:5173 no disponible — arrancar con QA_BASE_URL=<url> para QA visual
+[2026-09-10T02:01:08.902Z] [main] QA visual omitido (sin servidor). Typecheck y lint ya pasaron. Continuar con QA_BASE_URL=<url> para verificación visual.
+[2026-09-10T02:02:30.777Z] [reviewer] APPROVED step 5
+[2026-09-10T02:02:31.062Z] [git] Commit b1bc633e: step 5
+[2026-09-10T02:02:31.063Z] [main] Step 5 completado y commiteado (b1bc633e)
+[2026-09-10T02:02:31.063Z] 
+[main] === Step 6/6: Agregar tests en src/features/fci/services/__tests__ para: (a) applyPendingRescate con lotes activos suficientes puebla mutations igual que un rescate nuevo con los mismos parámetros y actualiza fci_lots igual; (b) caso de cuotapartes insuficientes lanza error y NO modifica ningún lote ni la fila; (c) getPendingRescates no devuelve rescates cargados a mano (mutations ya poblado). Correr typecheck y tests y corregir lo que rompa. ===
+[2026-09-10T02:02:31.066Z] [executor] Iniciando sesión nueva para step 6: Agregar tests en src/features/fci/services/__tests__ para: (a) applyPendingRescate con lotes activos suficientes puebla mutations igual que un rescate nuevo con los mismos parámetros y actualiza fci_lots igual; (b) caso de cuotapartes insuficientes lanza error y NO modifica ningún lote ni la fila; (c) getPendingRescates no devuelve rescates cargados a mano (mutations ya poblado). Correr typecheck y tests y corregir lo que rompa.
+[2026-09-10T02:09:17.522Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0054-step6.log
+[2026-09-10T02:09:17.525Z] [verifier] Corriendo typecheck...
+[2026-09-10T02:09:20.204Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:09:20.205Z] [verifier] Corriendo tests...
+[2026-09-10T02:09:21.542Z] [verifier] OK: typecheck + lint + tests
+[2026-09-10T02:09:21.634Z] [reviewer] Diff vacío — step 6 aprobado sin invocar modelo
+[2026-09-10T02:09:21.634Z] [reviewer] APPROVED step 6
+[2026-09-10T02:09:21.926Z] [git] Commit 1576cb85: step 6
+[2026-09-10T02:09:21.928Z] [adr] ADR-0139 registrado (origen: Supuesto del agente)
+[2026-09-10T02:09:21.930Z] [main] Step 6 completado y commiteado (1576cb85)
+[2026-09-10T02:09:21.930Z] [main] Feature F-0054: steps COMPLETOS.
+[2026-09-10T02:09:22.215Z] [git] Merge OK: feat/F-0054-argos-aplicar-rescates-de-fci-detectados → main (local, sin push). Push a main y deploy = manual.
+[2026-09-10T02:09:22.220Z] [system] PROGRESS.md actualizado
+[2026-09-10T02:09:22.222Z] [release] typecheck...
+[2026-09-10T02:09:24.934Z] [release] lint omitido (target sin lintCmd configurado)
+[2026-09-10T02:09:24.935Z] [release] tests...
+[2026-09-10T02:09:26.328Z] [release] build de prod...
+[2026-09-10T02:09:35.811Z] [release] OK: typecheck + lint + tests + build. TNA check: limpio (sin patrones TNA/tasa/TEA en vistas de prestatario)
+[2026-09-10T02:09:35.811Z] [main] Verificaciones OK — pusheando main (Vercel deploya prod automáticamente)...
+[2026-09-10T02:09:38.262Z] [git] push a main OK → Vercel deploya prod automáticamente
+[2026-09-10T02:09:38.272Z] [adr] ADRs generados en esta feature:
+[2026-09-10T02:09:38.273Z]   ADR-0136 — Validación FIFO antes del loop, no después [Supuesto del agente] ← REVISAR
+[2026-09-10T02:09:38.273Z]   ADR-0137 — `tipo` leído desde fci_rescates (columna de F-0053) [Supuesto del agente] ← REVISAR
+[2026-09-10T02:09:38.273Z]   ADR-0138 — Filtro de mutations = [] aplicado client-side [Supuesto del agente] ← REVISAR
+[2026-09-10T02:09:38.274Z]   ADR-0139 — Mock de Supabase con chain thenable único por llamada a `from()` [Supuesto del agente] ← REVISAR
+[2026-09-10T02:09:38.274Z] [main] F-0054 RELEASED (push hecho). STATE.json archivado como STATE.F-0054.archived.json
+[2026-09-10T02:09:38.277Z] [backlog] Filas marcadas done: AR-007

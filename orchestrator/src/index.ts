@@ -7,7 +7,7 @@ import {
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
 } from './state.js'
 import { planFeature, loadFeatureSpec, parseResolvesField } from './planner.js'
-import { updateBacklogStatus } from './backlog.js'
+import { updateBacklogStatus, commitAndPushBacklog } from './backlog.js'
 import { executeStepWithRetry } from './executor.js'
 import { escalateStep } from './escalation.js'
 import { runScout } from './scout/index.js'
@@ -362,6 +362,22 @@ async function runLoop(state: OrchestratorState) {
           const { updated, missing } = updateBacklogStatus(state.featureId, resolves, today)
           if (updated.length) log(`[backlog] Filas marcadas done: ${updated.join(', ')}`)
           if (missing.length) log(`[backlog] ⚠ IDs de 'resolves' no encontrados en BACKLOG.md: ${missing.join(', ')}`)
+
+          // S-047b: lo de arriba solo escribe en disco. Sin esto, el repo remoto de augusto-os
+          // (GitHub) nunca se entera del cambio — el push de este release fue al repo del
+          // TARGET, un repo distinto. Comitea y pushea system/BACKLOG.md en el propio repo de
+          // augusto-os para que una lectura fresca (raw.githubusercontent.com, un clone nuevo)
+          // ya refleje el estado real. Nunca bloquea el release: cualquier falla queda logueada.
+          if (updated.length) {
+            const backlogPush = await commitAndPushBacklog(state.featureId, updated)
+            if (backlogPush.pushed) {
+              log(`[backlog] system/BACKLOG.md comiteado y pusheado a augusto-os/${backlogPush.branch}`)
+            } else if (backlogPush.committed) {
+              log(`[backlog] ⚠ BACKLOG.md comiteado localmente pero el push a augusto-os falló: ${backlogPush.error}`)
+            } else if (backlogPush.error) {
+              log(`[backlog] ⚠ No se comiteó BACKLOG.md en augusto-os: ${backlogPush.error}`)
+            }
+          }
         }
       } catch (e) {
         log(`[backlog] ⚠ No se pudo reconciliar BACKLOG.md para ${state.featureId}: ${(e as Error).message}`)

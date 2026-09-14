@@ -1,0 +1,88 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Argos FCI — agrupamiento de clases (1 fondo = N clases) + toggle en el Explorador",
+    "archivos": [
+      "src/features/fci/constants.js",
+      "src/features/fci/services/fciService.js",
+      "src/lib/supabase"
+    ],
+    "patrones": [
+      "Constante única de map cod→label (FCI_CLASIFICACION) importada como fuente de verdad, seguida de labels tipo/categoría.",
+      "selects server-side de Supabase con whitelist explícita de columnas (FCI_MASTER_COLS) y filtros .eq/.ilike opcionales construidos incrementalmente.",
+      "Agrupado en JS de filas por una clave (pattern en getPricesBatch: grouped[row.fci_id]) — reutilizable para agrupar filas de fci_master por fondo/master.",
+      "Servicio expuesto como objeto único `fciService` con métodos async que lanzan error y devuelven data — el Explorador debe consumirlo así.",
+      "getTipos() devuelve [{cod, label}] derivado de clasificacion_cod + mapa canónico — patrón para construir opciones de filtro/agrupación."
+    ],
+    "dependencias": [
+      "@/lib/supabase (cliente Supabase; única dependencia importada verificada en fciService.js)",
+      "Tabla `fci_master` (id, cafci_id, nombre, moneda, clasificacion_cod, sociedad_gerente, sociedad_depositaria, activo) [NO VERIFICADO: schema SQL no confirmado]",
+      "Tablas `fci_prices` (fci_id, fecha, vcp) y `fci_transactions` (portfolio_id, fci_id) referenciadas por el servicio"
+    ],
+    "riesgos": [
+      "No se encontró evidencia de tabla/columna explícita de 'clases' (p.ej. fci_clases, clase_id, master_id) — grep devolvió vacío; puede requerir nueva columna/relación en fci_master.",
+      "FCI_MASTER_COLS es whitelist usada en todos los selects; agregar un campo de agrupación obliga a tocarla en un solo punto (bien, pero es el punto único).",
+      "Campo `currency` está deprecado en favor de `moneda` (documentado en fciService.js) — no usar el viejo para agrupar.",
+      "No se pudo confirmar la existencia/ubicación exacta del componente 'Explorador' ni de un patrón de toggle existente (búsquedas de 'Explorador/Explorer/toggle' sin resultado visible) [NO VERIFICADO].",
+      "fciService.js fue leído solo hasta ~línea 150; puede haber más métodos útiles (createTransaction, etc.) no auditados [NO VERIFICADO]."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "FCI_CLASIFICACION",
+        "lineas": "17-32",
+        "explicacion": "Map único cod→label de clasificación (1..10) usado como fuente de verdad para convertir códigos de fci_master en labels; el Explorador lo usa para filtros y el agrupamiento por tipo.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "PRESET_MM_USD",
+        "lineas": "35-37",
+        "explicacion": "Preset { clasificacion_cod: 3, moneda: 'USD' } — ejemplo del shape {clasificacion_cod, moneda} que el Explorador ya maneja como filtro combinado.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "FCI_MASTER_COLS",
+        "lineas": "5",
+        "explicacion": "Whitelist de columnas de fci_master ('id, cafci_id, nombre, moneda, clasificacion_cod, sociedad_gerente, sociedad_depositaria, activo') expuesta en todos los selects; no hay aún columna de 'clase/fondo padre'.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "fciService",
+        "lineas": "7",
+        "explicacion": "Objeto servicio que encapsula toda la capa de datos FCI (getFcis, searchFcis, getAdministradoras, getTipos, getPrices, getPricesBatch, getLatestPrice, getTransactions, createTransaction); el Explorador debe consumirlo.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "getFcis",
+        "lineas": "8-31",
+        "explicacion": "Listado server-side con filtros opcionales (activo, search ilike, sociedad_gerente, clasificacion_cod, moneda) + paginación range; punto donde se filtraría/aplanaría el listado de clases según el toggle.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "getTipos",
+        "lineas": "58-76",
+        "explicacion": "Deriva opciones [{cod, label}] desde clasificacion_cod + FCI_CLASIFICACION — patrón a replicar si el toggle 'agrupar por fondo' expone opciones de agrupamiento.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/fci/services/fciService.js",
+        "simbolo": "getPricesBatch",
+        "lineas": "88-105",
+        "explicacion": "Patrón de agrupado por clave en JS (grouped[row.fci_id]) para retornar { [fciId]: [...] }; análogo a lo que haría '1 fondo = N clases' al agrupar filas de fci_master por su fondo.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/constants.js",
+        "simbolo": "RANGES",
+        "lineas": "43-44",
+        "explicacion": "Rangos de comparación disponibles ('1M','3M','6M','YTD','1Y','2Y','MAX','CUSTOM') y MAX_FUNDS=10 — restricción de UI del comparador que limita cuántos fondos/clases mostrar.",
+        "confianza": 0.85
+      }
+    ],
+    "resumen": "El dominio FCI está centralizado en src/features/fci: constants.js aporta el mapa canónico FCI_CLASIFICACION (cod→label) y fciService.js (cliente supabase de @/lib/supabase) expone getFcis/searchFcis/getTipos sobre la tabla fci_master, cuyas columnas (whitelist FCI_MASTER_COLS) NO incluyen aún ninguna clave de 'clase/fondo padre' — el grep de tablas/columnas tipo fci_clases, clase_id o master_id no devolvió nada. El implementador deberá: agregar la relación 1 fondo = N clases (nueva columna/relación en fci_master y en FCI_MASTER_COLS), reusar el patrón de agrupado por clave ya usado en getPricesBatch para colapsar filas bajo un fondo master, y sumar el toggle en la UI del Explorador (cuya ubicación exacta no se pudo confirmar [NO VERIFICADO]) siguiendo el estilo de filtros {clasificacion_cod, moneda} ya existente."
+  }
+]

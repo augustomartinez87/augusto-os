@@ -1,0 +1,128 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Kredy — permitir borrar un préstamo confirmado sin actividad real (préstamos de testing)",
+    "archivos": [
+      "server/routers/loans/crud.ts",
+      "server/routers/loans/operations.ts",
+      "server/routers/loans/index.ts",
+      "server/services/loan-accounting.service.ts",
+      "prisma/schema.prisma"
+    ],
+    "patrones": [
+      "protectedProcedure.mutation con input z.object({ id: z.string(), ... }) y validación de ownership vía ctx.prisma.loan.findFirst({ where: { id, userId: ctx.user.id } })",
+      "Borrado multi-paso dentro de ctx.prisma.$transaction(async (tx) => {...}) con limpieza de referencias (ApCommission, PreApproval) antes de tx.loan.delete",
+      "Errores con throw new TRPCError({ code: 'NOT_FOUND' | 'BAD_REQUEST', message })",
+      "La confirmación de preaprobado (confirmPreApproved) crea cuotas con loanInstallment.createMany y setea status: 'active' — patrón inverso al borrado",
+      "Routers agrupados con mergeRouters en server/routers/loans/index.ts"
+    ],
+    "dependencias": [
+      "@prisma/client",
+      "@trpc/server",
+      "zod",
+      "date-fns",
+      "decimal.js",
+      "LoanAccountingService (server/services/loan-accounting.service.ts)"
+    ],
+    "riesgos": [
+      "Ya existe loanCrudRouter.delete que borra CUALQUIER loan (sin filtrar por status ni por ausencia de actividad real): si el requisito es permitir borrar sólo préstamos de testing 'sin actividad', hoy no hay ninguna marca 'esTesting' en el modelo Loan [NO VERIFICADO: no encontré campo ni flag de testing]",
+      "El borrado depende de cascadas/SetNull del schema (LoanInstallment/LoanPayment/LoanRealCashflow/LoanAccrualMonthly/LoanAttachment/LoanActivityLog con onDelete: Cascade; Opportunity.loanId y ApLedgerEvent.loanId con SetNull según comentario en crud.ts) — hay que verificar FKs reales antes de borrar un préstamo con pagos/accruals/commissions [NO VERIFICADO en schema más abajo de línea 420]",
+      "Si el préstamo confirmado tuvo pagos/cashflows/accruals o comisión AP realizada, borrarlo puede dejar inconsistencias contables y de IRR; el delete actual revierte comisión AP con ApLedgerEvent type 'reversal' (reason 'loan_deleted') pero NO revalida ausencia de LoanPayment/LoanRealCashflow/LoanAccrualMonthly",
+      "No encontré (por grep) uso de confirmPreApproved/createPreApproved en el frontend ni un botón/endpoint de borrado en la UI [NO VERIFICADO]",
+      "Los números de línea citados son aproximados (el contenido leído no mostraba numeración): [NO VERIFICADO]"
+    ],
+    "evidencia": [
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "delete",
+        "lineas": "≈415-470",
+        "explicacion": "Procedimiento TRPC ya existente que borra un préstamo por id+userId. NO valida status ni ausencia de actividad: sólo busca el loan, revierte/cancela ApCommission si existe (con ApLedgerEvent 'reversal' metadata reason 'loan_deleted'), limpia el puntero loanId en PreApproval y ejecuta tx.loan.delete. Es el punto natural a reusar/ajustar para el requisito de borrar préstamos de testing.",
+        "confianza": 0.85
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "createPreApproved",
+        "lineas": "≈470-510",
+        "explicacion": "Crea préstamos con status 'pre_approved' (sin cuotas). Útil para entender el ciclo de vida: la 'confirmación' posterior (confirmPreApproved) es lo que convierte el préstamo en 'active' con cuotas.",
+        "confianza": 0.8
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "confirmPreApproved",
+        "lineas": "≈510-650",
+        "explicacion": "Confirma un preaprobado: genera las cuotas (loanInstallment.createMany con smart/french/interest-only) y setea status: 'active'. Un préstamo 'confirmado sin actividad real' sale de acá; es la contraparte que el borrado de testing debe permitir deshacer.",
+        "confianza": 0.8
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "tx.loan.delete",
+        "lineas": "≈460",
+        "explicacion": "La sentencia concreta de borrado físico dentro de la transacción del router delete; el comentario indica que Prisma aplica SetNull en Opportunity.loanId y ApLedgerEvent.loanId.",
+        "confianza": 0.7
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "Loan",
+        "lineas": "≈118-205",
+        "explicacion": "Modelo central. status es String con comentario: \"active\" | \"completed\" | \"defaulted\" | \"pre_approved\" | \"refinanced\" — no existe status/flag de testing. Campos clave para detectar actividad: capital, principalOutstanding, overdueInterestOutstanding, installmentAmount, loanInstallments.",
+        "confianza": 0.9
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "LoanInstallment",
+        "lineas": "≈206-229",
+        "explicacion": "Relación loan con onDelete: Cascade (isPaid, paidAmount indican actividad). Se borran en cascada con el loan.",
+        "confianza": 0.9
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "LoanPayment",
+        "lineas": "≈230-254",
+        "explicacion": "onDelete: Cascade. Tener LoanPayment registrados es la señal principal de 'actividad real' que el borrado de testing debería prohibir/considerar.",
+        "confianza": 0.9
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "LoanRealCashflow",
+        "lineas": "≈255-280",
+        "explicacion": "Cashflows reales (disbursement/pagos) con onDelete: Cascade y relación a ApLedgerEvent; borrar un préstamo con cashflows reales impacta comisiones AP e IRR.",
+        "confianza": 0.9
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "LoanAccrualMonthly",
+        "lineas": "≈281-310",
+        "explicacion": "Devengamientos mensuales con onDelete: Cascade; reconstruidos por LoanAccountingService (rebuildMonthlyAccruals). Actividad contable a chequear antes de borrar.",
+        "confianza": 0.9
+      },
+      {
+        "path": "prisma/schema.prisma",
+        "simbolo": "LoanActivityLog",
+        "lineas": "≈344-365",
+        "explicacion": "Logs de actividad (llamadas, pagos, acuerdos) con onDelete: Cascade. 'Sin actividad real' probablemente signifique: sin LoanPayment, sin LoanRealCashflow y sin estos logs.",
+        "confianza": 0.85
+      },
+      {
+        "path": "server/services/loan-accounting.service.ts",
+        "simbolo": "registerPayment",
+        "lineas": "≈80-105",
+        "explicacion": "Única vía de alta de pagos reales (crea LoanPayment y cashflows en transacción). Relevante para definir qué cuenta como 'actividad real' que bloquearía el borrado de testing.",
+        "confianza": 0.75
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "status: 'active'",
+        "lineas": "≈25 y 630",
+        "explicacion": "En create el préstamo nace 'active' directo; en confirmPreApproved el préstamo pasa a 'active'. El 'préstamo confirmado' del objetivo es un loan con status active.",
+        "confianza": 0.85
+      },
+      {
+        "path": "server/routers/loans/index.ts",
+        "simbolo": "loansRouter",
+        "lineas": "1-13",
+        "explicacion": "mergeRouters que exporta loanCrudRouter (donde vive delete/confirmPreApproved). Si se agrega un router nuevo de testing/borrado debe mergearse acá.",
+        "confianza": 0.9
+      }
+    ],
+    "resumen": "El repo ya tiene un endpoint de borrado (loanCrudRouter.delete en server/routers/loans/crud.ts) que elimina cualquier préstamo del usuario en una transacción, revirtiendo comisión AP y limpiando punteros PreApproval/Opportunity, apoyándose en cascadas del schema Prisma (installments, payments, cashflows, accruals, attachments, activity logs). Para 'permitir borrar un préstamo confirmado sin actividad real (testing)' el implementador debería reusar ese delete existente y agregarle una guarda que verifique la ausencia de actividad real (LoanPayment/LoanRealCashflow/LoanAccrualMonthly/LoanActivityLog/ApCommission realizada) y/o un flag/marca de préstamo de testing, que hoy no existe en el modelo Loan. Quedó sin verificar la UI del frontend (botones/acciones de borrado y confirmación) y las FKs reales de Opportunity/ApLedgerEvent/apCommission respecto a loan en las secciones del schema posteriores a la línea 420."
+  }
+]

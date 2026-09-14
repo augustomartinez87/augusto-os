@@ -1,0 +1,72 @@
+
+> orchestrator@0.1.0 start
+> tsx --env-file=.env src/index.ts F-0058
+
+[2026-09-12T16:22:20.026Z] [system] Modo operativo: PRODUCT
+[2026-09-12T16:22:20.030Z] [main] Feature F-0058 — target: argos
+[2026-09-12T16:22:20.031Z] [guard] target "argos" sin DB Prisma (dbModel=none) — el loop no exige dev DB ni inyecta DATABASE_URL
+[2026-09-12T16:22:20.176Z] [git] Branch creado: feat/F-0058-argos-fci-persistir-liquidez-de-rescate-
+[scout] Investigación "mapa" falló: SyntaxError: Expected ',' or ']' after array element in JSON at position 10569 (line 184 column 6)
+[scout] Investigación "riesgos" falló: SyntaxError: Expected ',' or ']' after array element in JSON at position 8276 (line 62 column 6)
+[2026-09-12T16:23:02.957Z] [main] Research del scout cargado para F-0058 (8048 chars)
+[2026-09-12T16:23:02.957Z] [planner] Invocando Opus para descomponer feature...
+[2026-09-12T16:23:31.045Z] [main] Feature F-0058: 6 pasos planificados
+[2026-09-12T16:23:31.047Z] 
+[main] === Step 1/6: Crear scripts/cafci_liquidez_sync.py con esqueleto de CLI (argparse con flags --limit N y --dry-run), setup de logging y cliente Supabase (create_client con SUPABASE_URL/SUPABASE_SERVICE_KEY, mismo patrón que cafci_sync.py). Incluir una función que descargue el bulk pb_get una sola vez al arrancar reutilizando el patrón de descargar_panel() de cafci_sync.py (importándola si es trivial, o duplicando solo el fetch del bulk) y construya un mapa en memoria {cafci_id -> cafci_fondo_padre} usando la columna 39 del xlsx, para poder armar las URLs /fondos/{cafci_fondo_padre}?clase={cafci_id}. ===
+[2026-09-12T16:23:31.050Z] [executor] Iniciando sesión nueva para step 1: Crear scripts/cafci_liquidez_sync.py con esqueleto de CLI (argparse con flags --limit N y --dry-run), setup de logging y cliente Supabase (create_client con SUPABASE_URL/SUPABASE_SERVICE_KEY, mismo patrón que cafci_sync.py). Incluir una función que descargue el bulk pb_get una sola vez al arrancar reutilizando el patrón de descargar_panel() de cafci_sync.py (importándola si es trivial, o duplicando solo el fetch del bulk) y construya un mapa en memoria {cafci_id -> cafci_fondo_padre} usando la columna 39 del xlsx, para poder armar las URLs /fondos/{cafci_fondo_padre}?clase={cafci_id}.
+[2026-09-12T16:25:18.873Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step1.log
+[2026-09-12T16:25:18.876Z] [verifier] Corriendo typecheck...
+[2026-09-12T16:25:21.673Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T16:25:21.673Z] [verifier] Corriendo tests...
+[2026-09-12T16:25:23.290Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T16:25:23.380Z] [reviewer] Diff vacío — step 1 aprobado sin invocar modelo
+[2026-09-12T16:25:23.380Z] [reviewer] APPROVED step 1
+[2026-09-12T16:25:23.650Z] [git] Commit 01e904f1: step 1
+[2026-09-12T16:25:23.653Z] [adr] ADR-0159 registrado (origen: Supuesto del agente)
+[2026-09-12T16:25:23.654Z] [main] Step 1 completado y commiteado (01e904f1)
+[2026-09-12T16:25:23.654Z] 
+[main] === Step 2/6: En cafci_liquidez_sync.py, implementar un parser tolerante de la página de detalle HTML de estadisticas.cafci.org.ar que extraiga: plazo_liquidacion_dias (int), honorario_gerente_pct, honorario_depositaria_pct, comision_ingreso_pct, comision_egreso_pct, comision_transferencia_pct, gastos_ordinarios_pct (numeric) y comision_exito_pct (nullable, '—' → None). El parser debe devolver un dict con solo los campos que matchearon; si un campo puntual no aparece o no matchea, loguearlo y dejarlo ausente/None para ESE campo sin descartar el fondo entero. ===
+[2026-09-12T16:25:23.656Z] [executor] Iniciando sesión nueva para step 2: En cafci_liquidez_sync.py, implementar un parser tolerante de la página de detalle HTML de estadisticas.cafci.org.ar que extraiga: plazo_liquidacion_dias (int), honorario_gerente_pct, honorario_depositaria_pct, comision_ingreso_pct, comision_egreso_pct, comision_transferencia_pct, gastos_ordinarios_pct (numeric) y comision_exito_pct (nullable, '—' → None). El parser debe devolver un dict con solo los campos que matchearon; si un campo puntual no aparece o no matchea, loguearlo y dejarlo ausente/None para ESE campo sin descartar el fondo entero.
+[2026-09-12T16:38:58.494Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2.log
+[2026-09-12T16:38:58.495Z] [executor] Usage limit detectado
+[2026-09-12T16:38:58.496Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-12T16:54:03.375Z] [executor] Resumiendo sesión 78a570ed-8198-408d-a65e-ee835628c135 para step 2
+[2026-09-12T16:54:43.116Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2.log
+[2026-09-12T16:54:43.117Z] [executor] Usage limit detectado
+[2026-09-12T16:54:43.117Z] Sin hora de reset parseable. Sondeando disponibilidad cada 15 min.
+[2026-09-12T17:09:47.708Z] [executor] Resumiendo sesión 78a570ed-8198-408d-a65e-ee835628c135 para step 2
+[2026-09-12T17:10:18.659Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2.log
+[2026-09-12T17:10:18.661Z] [verifier] Corriendo typecheck...
+[2026-09-12T17:10:21.483Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T17:10:21.484Z] [verifier] Corriendo tests...
+[2026-09-12T17:10:23.156Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T17:11:30.102Z] [reviewer] CHANGES_REQUESTED en step 2:
+- Violación de una RESTRICCIÓN CLAVE ("nunca pisar un valor bueno con null por fallo de parseo"): en `comision_exito_pct` (nullable), `_parse_pct_nullable` devuelve `None` en DOS casos indistinguibles: (a) el valor es un guión '—' → None legítimo, correcto; pero (b) el label matchea y el valor existe pero NO es parseable (ej. "ver reglamento", "según resultados"). En el caso (b) `parsear_detalle` no lo omite (porque `nullable=True` salta el chequeo de `parsed is None`), lo mete como `comision_exito_pct: None` en `datos`, y `main` lo manda en el UPDATE → pisa un valor bueno anterior con NULL por un fallo de parseo. Hay que distinguir "guión → None almacenable" de "encontrado pero no parseable → omitir el campo" (p. ej. que `_parse_pct_nullable` señale explícitamente el guión y que un valor presente-pero-no-parseable se trate como fallo y se omita, igual que los campos no-nullable).
+- Eficiencia / respeto al origen: `main` descarga el HTML (`fetch_detalle` + `time.sleep(REQUEST_DELAY)`) ANTES de chequear `cafci_id_map`. Si el panel bulk trae ~4283 clases pero `fci_master` activo tiene bastantes menos, se scrapean y descartan (`sin_map_db`) cientos/miles de fondos innecesariamente contra CAFCI, contradiciendo el espíritu de la restricción de disparar pedidos con pausa y solo lo necesario. Filtrar `claves` contra `cafci_id_map` (o al menos intersectar) antes del loop de scraping, no después de bajar cada página.
+[2026-09-12T17:11:30.106Z] [executor] Resumiendo sesión 78a570ed-8198-408d-a65e-ee835628c135 para step 2
+[2026-09-12T17:12:10.044Z] [executor] Log completo en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2.log
+[2026-09-12T17:12:10.046Z] [verifier] Corriendo typecheck...
+[2026-09-12T17:12:12.871Z] [verifier] lint omitido (target sin lintCmd configurado)
+[2026-09-12T17:12:12.872Z] [verifier] Corriendo tests...
+[2026-09-12T17:12:14.532Z] [verifier] OK: typecheck + lint + tests
+[2026-09-12T17:13:30.290Z] [main] Step 2 trabado tras agotar reintentos — escalando a Opus (fixer) antes de bloquear.
+[2026-09-12T17:13:30.290Z] [main] Motivo: Step 2: reviewer rechaza tras segunda corrección
+[2026-09-12T17:13:30.292Z] [escalation] Step 2: intento 1/2 del fixer (Opus)
+[2026-09-12T17:13:30.293Z] [escalation] Iniciando sesión nueva del fixer (Opus) para step 2 — sin resumir la sesión trabada del builder
+[2026-09-12T17:15:53.766Z] [escalation] Log del fixer en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2-fixer.log
+[2026-09-12T17:15:53.768Z] [escalation] Fixer (Opus) salió con código 1 para step 2
+[2026-09-12T17:15:53.768Z] [escalation] Fixer falló en el intento 1 para step 2
+[2026-09-12T17:15:53.768Z] [escalation] Step 2: intento 2/2 del fixer (Opus)
+[2026-09-12T17:15:53.768Z] [escalation] Resumiendo sesión del fixer 569a75d5-2759-422b-9da2-5502bd37ab94 para step 2
+[2026-09-12T17:15:56.170Z] [escalation] Log del fixer en: C:\Users\Augusto\Downloads\Proyectos\augusto-os\orchestrator\logs\F-0058-step2-fixer.log
+[2026-09-12T17:15:56.170Z] [escalation] Fixer (Opus) salió con código 1 para step 2
+[2026-09-12T17:15:56.170Z] [escalation] Fixer falló en el intento 2 para step 2
+[2026-09-12T17:15:56.171Z] [main] Fixer también falló — step 2 BLOQUEADO de verdad (requiere fix manual).
+[2026-09-12T17:15:56.171Z] [main] Corregí el problema y re-ejecutá `npm start F-0058` para reintentar.
+[2026-09-12T17:15:57.293Z] [main] Step 2 BLOQUEADO — ejecución detenida. Requiere intervención humana.
+[2026-09-12T17:15:57.294Z] [main] Error: Step 2: reviewer rechaza tras segunda corrección
+
+[fixer también falló] Fixer (Opus) agotó 2 intento(s) sin pasar verifier.
+Último detalle:
+tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard"},"modelUsage":{},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"subtype":"success","api_error_status":429,"result":"You've hit your session limit · resets 6pm (America/Argentina/Buenos_Aires)","type":"result","duration_ms":627,"uuid":"082c48db-dfd7-403e-96d1-429fa958f8cc","queued_turn_count":0}
+[2026-09-12T17:15:57.294Z] [main] Restaurá el step a 'pending' en STATE.json y re-ejecutá `npm start F-0058`.

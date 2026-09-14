@@ -1,0 +1,235 @@
+[
+  {
+    "objetivo": "Mapa del repo para implementar confirmación visible (toast/feedback) y redirect después de crear o preaprobar un préstamo en Kredy (Next.js + tRPC + Prisma)",
+    "archivos": [
+      "app/dashboard/simulator/page.tsx",
+      "server/routers/loans/crud.ts",
+      "app/dashboard/loans/page.tsx",
+      "components/loans/loans-table-view.tsx",
+      "components/loans/refinance-dialog.tsx",
+      "components/loans/register-payment-dialog.tsx",
+      "hooks/use-toast.ts",
+      "lib/contexts/trpc-client.ts",
+      "lib/utils.ts",
+      "app/api/trpc/[trpc]/route.ts",
+      "server/routers/loans/index.ts"
+    ],
+    "patrones": [
+      "Mutations tRPC con useMutation({ onSuccess }) y invalidación de queries: utils.loans.list.invalidate() y utils.loans.getDashboardMetrics.invalidate()",
+      "Diálogos Radix (Dialog open/onOpenChange) con feedback inline <p> de error/success dentro del form y botón submit deshabilitado por isSuccess/isPending",
+      "Toasts con useToast() de @/hooks/use-toast (shadcn/ui) — ya usado en app/dashboard/loans/page.tsx",
+      "Redirect con useRouter() de next/navigation (router.push) — ya importado en app/dashboard/loans/page.tsx",
+      "Rutas protegidas por auth con protectedProcedure en tRPC y @clerk/nextjs",
+      "Mutations devuelven el objeto loan creado (create/createPreApproved/confirmPreApproved retornan el loan), utilizable como mutation.data para redirigir"
+    ],
+    "dependencias": [
+      "next@14.1.0 / react@18",
+      "@trpc/server@11, @trpc/client, @trpc/react-query (tRPC v11 rc)",
+      "@tanstack/react-query@5",
+      "@prisma/client@5.9.1 + prisma",
+      "@clerk/nextjs@5",
+      "@radix-ui/react-dialog, react-toast (vía hooks/use-toast)",
+      "zod@3.22.4 (schemas de input en createLoanInput)",
+      "date-fns@3.6.0, decimal.js, superjson"
+    ],
+    "riesgos": [
+      "En app/dashboard/simulator/page.tsx el Dialog se cierra en onSuccess (setCreateLoanOpen(false)) y el único feedback es un <p> inline dentro del dialog que se cierra casi al instante: no hay toast ni redirect (grep de useToast/useRouter en ese archivo no arrojó matches). [NO VERIFICADO: confirmado por greps vacíos en turnos 9 y 11]",
+      "preApproveMutation.onSuccess resetea isPreApprove(false) y cierra el dialog sin redirigir a /dashboard/loans donde vive la confirmación del preaprobado",
+      "En components/loans/loans-table-view.tsx, confirmMutation (trpc.loans.confirmPreApproved) solo invalida queries; no mostré toast ni redirect en ese archivo (grep vacío) [NO VERIFICADO: los greps de toast/useRouter/Confirm en ese archivo devolvieron sin resultados]",
+      "El préstamo preaprobado no genera cuotas hasta confirmPreApproved; redirigir a un detalle de préstamo preaprobado podría no tener cuotas que mostrar",
+      "No se confirmó si existe ruta de detalle de préstamo (app/dashboard/loans/[id]); loans/page.tsx mantiene estado local selectedLoanId en vez de ruta [NO VERIFICADO]",
+      "createLoanInput requiere campos como direction, producto, capital, tna, termMonths; cualquier confirmación/redirect debe preservar el payload ya usado por el simulador"
+    ],
+    "evidencia": [
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "createLoanMutation",
+        "lineas": "313-322",
+        "explicacion": "Mutation trpc.loans.create.useMutation cuyo onSuccess solo cierra el dialog y limpia borrowerName. No hay toast ni redirect — punto de inserción para confirmación visible + redirect tras crear préstamo.",
+        "confianza": 0.9
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "preApproveMutation",
+        "lineas": "324-332",
+        "explicacion": "Mutation trpc.loans.createPreApproved.useMutation; onSuccess cierra dialog y resetea isPreApprove(false) sin feedback visible ni redirect a /dashboard/loans para confirmar luego.",
+        "confianza": 0.9
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "handlePreApproveLoan",
+        "lineas": "349-363",
+        "explicacion": "Abre el dialog con isPreApprove=true y setea createLoanDefaults; junto con handleCreateLoan y submitCreateLoan (362-374) define el flujo crear/preaprobar desde la simulación.",
+        "confianza": 0.85
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "submitCreateLoan",
+        "lineas": "362-374",
+        "explicacion": "Dispatch del submit: si isPreApprove llama preApproveMutation.mutate(payload) sino createLoanMutation.mutate(payload). Acá se decide a qué mutation llega el usuario.",
+        "confianza": 0.85
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "createLoanOpen",
+        "lineas": "277-281",
+        "explicacion": "Estado del Dialog de crear/prpreaprobar; el feedback actual son <p> inline de isSuccess (líneas ~883-888) que desaparecen al cerrarse el dialog.",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "create",
+        "lineas": "104-138",
+        "explicacion": "RPC create: crea loan con status 'active' y genera cuotas (plan.installmentRows). Retorna el loan creado (usable como data para redirect).",
+        "confianza": 0.85
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "createPreApproved",
+        "lineas": "500-526",
+        "explicacion": "RPC createPreApproved: crea loan con status 'pre_approved' y sin cuotas (comentario: 'Pre-approved loans don't get installments until confirmed'). Retorna el loan.",
+        "confianza": 0.8
+      },
+      {
+        "path": "server/routers/loans/crud.ts",
+        "simbolo": "confirmPreApproved",
+        "lineas": "528-600",
+        "explicacion": "RPC confirmPreApproved: valida status 'pre_approved', genera cuotas (smartDueDate/francés/interest_only) y setea status 'active'. Es el backend que la UI debe confirmar con feedback visible.",
+        "confianza": 0.8
+      },
+      {
+        "path": "components/loans/loans-table-view.tsx",
+        "simbolo": "confirmMutation",
+        "lineas": "122-128",
+        "explicacion": "trpc.loans.confirmPreApproved.useMutation({ onSuccess: () => { utils.loans.list.invalidate(); utils.loans.getDashboardMetrics.invalidate() } }) — solo invalida, sin toast ni redirect.",
+        "confianza": 0.9
+      },
+      {
+        "path": "components/loans/loans-table-view.tsx",
+        "simbolo": "PreApprovedLoanCard",
+        "lineas": "283-293",
+        "explicacion": "Card que lista preaprobados regulares y llama onConfirm={(loanId, startDate) => confirmMutation.mutate(...)}; la confirmación visible/redirect debería agregarse acá o en loans/page.tsx.",
+        "confianza": 0.85
+      },
+      {
+        "path": "app/dashboard/loans/page.tsx",
+        "simbolo": "useRouter",
+        "lineas": "3",
+        "explicacion": "useRouter de next/navigation ya importado en la página de préstamos; patrón disponible para router.push tras confirmar.",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/loans/page.tsx",
+        "simbolo": "useToast",
+        "lineas": "45",
+        "explicacion": "useToast de @/hooks/use-toast ya importado; patrón de toast existente en la app para confirmación visible.",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/loans/page.tsx",
+        "simbolo": "selectedLoanId",
+        "lineas": "51-52",
+        "explicacion": "Estado local del préstamo seleccionado (no una ruta /loans/[id]); el detalle se maneja por estado — [NO VERIFICADO] si existe página de detalle propia.",
+        "confianza": 0.7
+      }
+    ],
+    "resumen": "Kredy es una app Next.js 14 (App Router, TypeScript) con tRPC v11 + Prisma + Clerk + Tailwind/Radix. El flujo crear/preaprobar vive en app/dashboard/simulator/page.tsx (mutations create y createPreApproved que cierran el dialog sin toast ni redirect) y la confirmación de preaprobados en components/loans/loans-table-view.tsx vía confirmPreApproved que solo invalida queries. La app ya tiene los patrones listos (useToast, useRouter, invalidación de queries) para implementar confirmación visible y redirect; los riesgos principales son que el feedback actual es inline dentro de dialogs que se cierran al instante y que no se confirmó la existencia de una ruta de detalle de préstamo a la cual redirigir."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: Kredy — confirmación visible y redirect después de crear o preaprobar un préstamo",
+    "archivos": [
+      "app/dashboard/simulator/page.tsx",
+      "app/dashboard/loans/page.tsx",
+      "app/dashboard/ap/page.tsx",
+      "server/routers/ap.ts",
+      "app/ap/page.tsx"
+    ],
+    "patrones": [
+      "useMutation con onSuccess que cierra el Dialog y resetea estado — hoy NO hay redirect ni toast; el onSuccess solo hace setCreateLoanOpen(false) y setBorrowerName('')",
+      "Mensaje de éxito inline dentro del Dialog controlado por createLoanMutation.isSuccess / preApproveMutation.isSuccess, y botón deshabilitado cuando isSuccess",
+      "Patrón de confirmación visible con toast en app/dashboard/ap/page.tsx (toast({ title: 'Pago confirmado', ... }))",
+      "Patrón de wizard por pasos con step 'confirm' → 'done' en app/ap/page.tsx (candidato a reusar para la confirmación visible + redirect)",
+      "Estados de confirmación por variable booleana (confirmDelete, confirmComplete, confirmUncollectible) en app/dashboard/loans/page.tsx"
+    ],
+    "dependencias": [
+      "trpc (client hooks trpc.loans.create / trpc.loans.createPreApproved / trpc.ap.approvePreApproval)",
+      "next/navigation (useRouter / router.push) — necesario para el redirect [NO VERIFICADO: no se confirmó su uso actual en el repo]",
+      "shadcn/ui components (Dialog, DialogContent, Button, Label, Input, Tabs)",
+      "toast/sonner — usado en app/dashboard/ap/page.tsx para confirmación visible [NO VERIFICADO: no se confirmó el import exacto]",
+      "server/routers/ap.ts: protectedProcedure, router, PrismaClient"
+    ],
+    "riesgos": [
+      "El flujo actual de create/createPreApproved cierra el Dialog sin redirigir: el usuario puede no percibir que el préstamo se creó (solo mensaje inline efímero)",
+      "El estado isSuccess persiste en la mutación tras cerrar el Dialog; al reabrir podría mostrar 'Creado' de un envío previo (el mensaje de éxito depende de isSuccess y no se resetea al abrir)",
+      "createPreApproved existe como endpoint tRPC (trpc.loans.createPreApproved) pero su definición en el router server no fue verificada — confirmar nombre exacto y payload antes de modificar",
+      "Los estados de préstamo usan labels vía LOAN_STATUS_LABEL/STATUS_LABEL; el redirect debe apuntar a app/dashboard/loans donde se confirma el preaprobado ('Cuando se transfiera el dinero, confirmalo desde la página de préstamos')",
+      "No se encontró uso previo de redirect programático en los flujos de loans; introducirlo requiere cuidar que el Dialog no cierre antes del redirect"
+    ],
+    "evidencia": [
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "createLoanMutation",
+        "lineas": "319-326",
+        "explicacion": "Mutation trpc.loans.create con onSuccess que solo cierra el Dialog y limpia borrowerName — punto exacto donde hoy falta la confirmación visible y el redirect",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "preApproveMutation",
+        "lineas": "328-334",
+        "explicacion": "Mutation trpc.loans.createPreApproved con onSuccess que cierra el Dialog y resetea isPreApprove — mismo punto donde falta redirect/confirmación para el flujo preaprobado",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "submitCreateLoan",
+        "lineas": "367-386",
+        "explicacion": "Handler del form que despacha preApproveMutation.mutate(payload) o createLoanMutation.mutate(payload) según isPreApprove; el payload es lo que se reutiliza para crear/preaprobar",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "handlePreApproveLoan",
+        "lineas": "347-365",
+        "explicacion": "Setea isPreApprove=true y arma createLoanDefaults desde la simulación — entrada del flujo de preaprobación desde el simulador",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/simulator/page.tsx",
+        "simbolo": "(createLoanMutation.isSuccess || preApproveMutation.isSuccess)",
+        "lineas": "928-933",
+        "explicacion": "Única confirmación visible actual: párrafo inline dentro del Dialog ('Préstamo preaprobado guardado' / 'Préstamo creado exitosamente'); se reemplazaría/complementaría con confirmación visible + redirect",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/ap/page.tsx",
+        "simbolo": "approveMut",
+        "lineas": "1400-1427",
+        "explicacion": "Patrón de confirmación visible con toast al aprobar ('Pago confirmado') y refetch; modelo a seguir para la confirmación visible de Kredy",
+        "confianza": 0.9
+      },
+      {
+        "path": "app/ap/page.tsx",
+        "simbolo": "Step",
+        "lineas": "86",
+        "explicacion": "type Step = 'amount' | 'cuil' | 'rate' | 'confirm' | 'done' — flujo por pasos con etapa 'confirm' y 'done'; patrón existente para confirmación visible + navegación de estado",
+        "confianza": 1
+      },
+      {
+        "path": "app/dashboard/loans/page.tsx",
+        "simbolo": "confirmComplete",
+        "lineas": "187-188, 921-979",
+        "explicacion": "Patrón de estados de confirmación booleanos (confirmDelete, confirmComplete, confirmUncollectible) en la página de préstamos — destino lógico del redirect tras crear/preaprobar",
+        "confianza": 0.9
+      },
+      {
+        "path": "server/routers/ap.ts",
+        "simbolo": "protectedProcedure",
+        "lineas": "10-60",
+        "explicacion": "Router AP server-side con procedures protegidos (incluye approvePreApproval referenciado desde el dashboard); modelo de cómo se definen los endpoints tRPC que el flujo Kredy debe reusar",
+        "confianza": 0.8
+      }
+    ],
+    "resumen": "El flujo de crear/preaprobar préstamos vive en app/dashboard/simulator/page.tsx: dos mutations tRPC (trpc.loans.create y trpc.loans.createPreApproved) cuyo onSuccess solo cierra el Dialog y muestra un mensaje inline efímero, sin redirect ni confirmación visible robusta. Para implementar la confirmación visible + redirect, el implementador debe modificar esos onSuccess (usar router.push a /dashboard/loans y un toast/estado de éxito), reutilizar los patrones existentes de toast en app/dashboard/ap/page.tsx y de estados de confirmación en app/dashboard/loans/page.tsx. La definición exacta de createPreApproved en el router server y el uso de next/navigation en el repo quedaron [NO VERIFICADO] por límite de turnos."
+  }
+]
