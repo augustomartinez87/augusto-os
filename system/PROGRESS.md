@@ -1471,3 +1471,24 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0058/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+
+---
+
+## 2026-09-21 — Fix cron fci-sync: 42P10 en upsert a fci_lots/fci_rescates [argos/caucion-sync]
+
+**Ejecutor:** Claude en Cowork (Supabase MCP para diagnóstico y fix de prod; Chrome MCP autenticado como Augusto para leer el run de GitHub Actions y volver a disparar el workflow).
+
+**Qué se hizo:**
+
+• Augusto reportó por mail de GitHub Actions que "FCI Sync" (`caucion-sync`, workflow `fci-sync.yml`) falló en su primera corrida programada (Run #1, disparado por el cron, commit `0365346`, 20/09 22:51 ART, 24s, exit code 1).
+
+• Diagnóstico contra el log del job: `Supabase upsert fci_lots 400: {"code":"42P10","message":"there is no unique or exclusion constraint matching the ON CONFLICT specification"}` — mismo error en `fci_rescates`. Gmail y el parseo de los PDFs habían funcionado bien (2 mails, 2 PDFs únicos); el fallo era solo en la escritura a Supabase.
+
+• Confirmado contra la DB (`wwzocpcolgdzkvcigchj`, vía `pg_constraint`/`pg_indexes`): `fci_lots`/`fci_rescates` tenían `idx_*_external_ref_unique`, un índice único parcial (`WHERE external_ref IS NOT NULL`, migración `035_fci_external_ref_dedupe` del 07/09 — a propósito, para no interferir con cargas manuales donde `external_ref` queda NULL). `fci_sync.py` (`upsert_lots`/`upsert_rescates`) llama a PostgREST con `on_conflict=external_ref`, que genera `ON CONFLICT (external_ref)` sin `WHERE` — Postgres no infiere un índice parcial desde un `ON CONFLICT` que no repite el mismo predicado → 42P10. Es la primera corrida real de este pipeline desde que existe `external_ref` (migración del 07/09), por eso el bug no se había visto antes.
+
+• Fix aplicado en prod, migración `047_fci_external_ref_unique_constraint`: se dropearon los 2 índices parciales y se agregó `UNIQUE (external_ref)` real en `fci_lots` y `fci_rescates`. Sin cambios de código: un `UNIQUE` normal en Postgres ya permite múltiples NULL (NULL nunca es igual a NULL), así que las cargas manuales quedan protegidas exactamente igual que antes, y ahora el índice sí es inferible por `ON CONFLICT (external_ref)`.
+
+• Verificación real (no mental): re-disparado el workflow a mano (`workflow_dispatch`, modo `daily`) — Run #2, success, 17s. Log: `Suscripciones: 2 | Rescates: 1`, `2/2 mails etiquetados como 'FCI Sync Processed'`, sin errores.
+
+**Notas:** Dos warnings no fatales del parser quedan sin tocar, avisados a Augusto aparte: "tipo mismatch en CL 2026007643" (Solicitud dice suscripción, Liquidación dice rescate — el parser lo saltea) y un comprobante duplicado con valores distintos visto en la corrida original (CL 2026007280 — no reapareció en Run #2 porque esa corrida falló antes de persistir nada). `BACKLOG.md` actualizado con `AR-039` (fila nueva, `Ejecutor=manual` — migración de prod).
