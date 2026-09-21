@@ -1738,3 +1738,74 @@ de codigo aplica desde la proxima corrida del cron; los 2 datos ya mal cargados 
 a mano via SQL (before/after verificado con SELECT antes y despues de cada UPDATE). Pendiente:
 que Augusto confirme en el dashboard real que Alycbur ya no aparece en cartera principal, y que
 revise la anomalia de suscripcion senalada arriba.
+
+## 2026-09-21 - AR-042: fci_sync nunca aplica nada directamente -- review manual obligatorio en Argos [argos]
+
+Augusto rechazo explicitamente el diseno de AR-041 (heuristico `resolve_tipo`, ADR-0181) en la
+misma sesion, con un mensaje claro: "es que esta mal lo que hace, no tiene que aplicar NADA
+directamente, me tiene que dar la opcion a mi ... y si no quiero aplicarlo no lo aplico". El
+motivo original que dio: fci-sync existe por si Alycbur le hace movimientos de FCI a Augusto sin
+que el se entere al momento (no revisa comprobantes a diario) -- pero necesita SIEMPRE la
+oportunidad de decir que no antes de que algo se aplique a su cartera en vivo.
+
+### Diseno (confirmado con Augusto via AskUserQuestion)
+- Mientras se construia el fix, `fci_sync.py` sigue corriendo en su horario pero solo encola
+  (no aplica) -- opcion elegida: "Que siga corriendo pero solo encole (recomendado)".
+- El aviso de pendientes tiene que aparecer en dos lugares -- respuesta libre de Augusto: "En
+  las notificaciones y en fondos".
+- El contexto carry/portfolio de cada movimiento lo elige Augusto en el momento de aplicar,
+  nunca se infiere -- opcion elegida: "Lo elijo yo en el momento de aplicar (recomendado)".
+
+### Alcance
+Las suscripciones detectadas por fci-sync se aplicaban directamente (`activo: true`) sin ningun
+paso de revision -- a diferencia de los rescates, que ya tenian un patron de "pendiente de
+revisar" construido en F-0053/F-0054/F-0056 (`fci_rescates` con `mutations: []`,
+`FciPendingRescates.jsx` en Portfolio > Fondos). Se reutilizo ese mismo patron para
+suscripciones en vez de construir uno nuevo, y de paso se corrigio el ultimo bug pendiente del
+lado de rescates: `applyPendingRescate` tenia `'portfolio'` hardcodeado como tipo al aplicar
+(bug latente que AR-041 no habia tocado).
+
+### Pasos
+- [x] Step 1 (Supabase): migracion `fci_lots_add_pendiente_flag` -- columna
+  `pendiente boolean not null default false`.
+- [x] Step 2 (`caucion-sync`, `fci_sync.py`): elimina `resolve_tipo()` (superado, ver
+  ADR-0183); la rama de suscripcion inserta `activo: false, pendiente: true` en vez de
+  `activo: true` con tipo resuelto -- nunca aplica nada, solo encola.
+- [x] Step 3 (`portfolio-tracker`, `fciService.js`): `getActiveLots()` excluye
+  `pendiente = true`; nuevo `getPendingLots(portfolioId)` / `applyPendingLot(lotId, tipo)`
+  -- `tipo` obligatorio y validado (`'carry'|'portfolio'`), sin default (ver ADR-0184).
+  `applyPendingRescate` gana el mismo requisito, reemplazando el `'portfolio'` hardcodeado.
+- [x] Step 4 (`useFciLotEngine.js`): expone `pendingLots` / `applyPendingLot`.
+- [x] Step 5 (UI): nuevo `FciPendingLots.jsx` (mismo patron visual que
+  `FciPendingRescates.jsx`, que gana el mismo toggle carry/portfolio obligatorio antes de
+  habilitar "Aplicar"); `FciPortfolio.jsx` renderiza ambas secciones en Portfolio > Fondos.
+- [x] Step 6 (Supabase): migracion `sync_fci_notifications_ar042_wording` -- titulos de
+  notificacion mas accionables ("Nueva suscripcion de FCI detectada -- revisala en
+  Portfolio > Fondos" / mismo para rescate). Confirmado antes que `fci_suscripcion` y
+  `fci_rescate` son los unicos tipos existentes en `notifications` (sin riesgo a otros
+  consumidores).
+- [x] Step 7: tests -- `caucion-sync`: 10/10 (`pytest`). `portfolio-tracker`: 368/368
+  (`vitest`, incluye `fciService.pendingLots.test.js` nuevo y
+  `fciService.pendingRescates.test.js` extendido con el tipo obligatorio); `tsc --noEmit`
+  limpio; `npm run build` exitoso.
+
+### Decisiones (ADR)
+- ADR-0183 -- fci_sync nunca aplica nada directamente; toda suscripcion/rescate queda
+  pendiente hasta revision manual en Argos [Instruccion de Augusto] -- supersede ADR-0181.
+- ADR-0184 -- El tipo (carry/portfolio) lo elige Augusto a mano al aplicar, nunca se infiere
+  [Instruccion de Augusto].
+- ADR-0185 -- Aviso de pendientes por notificaciones existentes + nueva seccion en
+  Portfolio > Fondos [Instruccion de Augusto].
+
+### Commits
+- `8613641` (`caucion-sync`, rama `main`) -- `fix(AR-042): fci_sync nunca auto-aplica, solo
+  encola para revision`, pusheado a `origin/main`.
+- `bafabcb` (`portfolio-tracker`, rama `main`) -- `fix(AR-042): suscripciones y rescates de
+  FCI requieren revision manual antes de aplicarse`, pusheado a `origin/main`.
+
+### QA
+`tsc --noEmit` limpio, `npx vitest run` 368/368, `npm run build` exitoso (incluye bundle
+`FciPortfolio`). Deploy de Vercel se dispara automaticamente al pushear a `main` (mismo patron
+que AR-040/AR-041), no verificado en vivo post-deploy. Pendiente: que Augusto confirme en Argos
+que ve la seccion nueva de pendientes en Portfolio > Fondos y que las notificaciones muestran el
+texto actualizado.

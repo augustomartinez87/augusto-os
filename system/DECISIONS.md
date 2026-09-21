@@ -57,6 +57,51 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0185 - 2026-09-21 - Aviso de movimientos pendientes: notificaciones existentes + nueva seccion en Portfolio > Fondos
+
+**Estado:** aceptada
+**Origen:** Instruccion de Augusto
+**Target:** argos
+
+**Decision:** El aviso de que hay una suscripcion o rescate pendiente de revisar usa dos canales dentro de Argos: (1) el mecanismo de notificaciones ya existente (`sync_fci_notifications`, RPC de Postgres que se dispara automaticamente al montar `NotificationsBell`) -- se actualizo el texto de las notificaciones `fci_suscripcion`/`fci_rescate` para que sean mas accionables ("Nueva suscripcion de FCI detectada -- revisala en Portfolio > Fondos" / equivalente para rescate); (2) una nueva seccion `FciPendingLots.jsx` en Portfolio > Fondos (mismo lugar donde ya vivia `FciPendingRescates.jsx`), visible solo cuando hay pendientes.
+**Contexto:** Via AskUserQuestion, frente a la pregunta de donde debia aparecer el aviso de pendientes, Augusto respondio con texto libre: "En las notificaciones y en fondos" -- ambos canales, no uno solo.
+**Alternativas descartadas:** Notificar solo por Telegram (ya era el canal existente del cron `fci-sync`) -- insuficiente por definicion, el motivo original de AR-042 es que Augusto no revisa Telegram/comprobantes a diario. Construir un sistema de notificacion nuevo -- innecesario, `sync_fci_notifications` ya cubria ambos tipos de fila (`fci_lots`/`fci_rescates`) con deduplicacion por `source_table`+`source_id`; solo hizo falta actualizar el texto, confirmado primero que `fci_suscripcion` y `fci_rescate` son los unicos dos tipos que existen en la tabla `notifications` (sin riesgo de romper otros consumidores).
+**Consecuencias / riesgo residual:** Ninguna logica nueva de generacion de notificaciones -- solo cambio de texto, riesgo minimo. Queda pendiente (no solicitado, no implementado) hacer que el click en la notificacion navegue directo a `/portfolio/fondos`.
+
+> Cowork - AR-042
+
+---
+
+## ADR-0184 - 2026-09-21 - El tipo (carry/portfolio) de cada movimiento lo elige Augusto a mano al aplicar, nunca se infiere
+
+**Estado:** aceptada
+**Origen:** Instruccion de Augusto
+**Target:** argos
+
+**Decision:** `fciService.applyPendingLot(lotId, tipo)` y `fciService.applyPendingRescate(rescateId, tipo, method)` exigen un `tipo` explicito (`'carry'|'portfolio'`) como argumento obligatorio -- ambos lanzan error si se omite o si el valor no es exactamente uno de los dos validos, sin ningun default ni fallback. La UI (`FciPendingLots.jsx`, `FciPendingRescates.jsx`) obliga a elegir uno de los dos con un toggle antes de habilitar el boton "Aplicar".
+**Contexto:** Via AskUserQuestion, frente a la pregunta de como debia resolverse el contexto carry/portfolio de cada movimiento, Augusto eligio explicitamente "Lo elijo yo en el momento de aplicar (recomendado)" -- rechazando cualquier auto-sugerencia o heuristica, incluida la que ya existia (`resolve_tipo()`, ADR-0181, superada por ADR-0183).
+**Alternativas descartadas:** Pre-rellenar el toggle con una sugerencia basada en el tipo del ultimo lote conocido del mismo fci_id (lo que hacia `resolve_tipo()`) -- descartado, Augusto podria aceptar una sugerencia por default sin pensarla, reintroduciendo el mismo riesgo que motivo AR-042. Dejar `tipo` opcional con default `'portfolio'` (comportamiento previo al bug) -- descartado, es el bug original de AR-041.
+**Consecuencias / riesgo residual:** Augusto tiene que elegir carry/portfolio en cada aplicacion, incluso para fondos que historicamente siempre usa del mismo modo -- mas friccion a cambio de cero riesgo de mal-clasificacion silenciosa. Si en el futuro Augusto pide volver a sugerir un default (sin auto-aplicarlo), se puede agregar como preseleccion visual del toggle sin tocar la validacion obligatoria de este ADR.
+
+> Cowork - AR-042
+
+---
+
+## ADR-0183 - 2026-09-21 - fci_sync.py nunca aplica nada directamente; toda suscripcion/rescate queda pendiente hasta revision manual en Argos
+
+**Estado:** aceptada -- supersede ADR-0181
+**Origen:** Instruccion de Augusto
+**Target:** argos
+
+**Decision:** fci_sync.py (`caucion-sync`) y la app (`portfolio-tracker`) nunca aplican un movimiento detectado a la cartera en vivo de Augusto por su cuenta. Toda suscripcion detectada se inserta en `fci_lots` con `activo=false, pendiente=true` (columna nueva); todo rescate sigue el patron ya existente de `fci_rescates` con `mutations=[]`. Ninguna fila `pendiente=true`/`mutations=[]` cuenta en ninguna posicion (portfolio ni carry) ni en ningun total hasta que Augusto la revisa y la aplica a mano desde Argos (Portfolio > Fondos).
+**Contexto:** Augusto rechazo explicitamente el diseno anterior (ADR-0181, `resolve_tipo()`: heuristico que copiaba el tipo del ultimo lote conocido del mismo fci_id y aplicaba la suscripcion de inmediato con ese tipo): "es que esta mal lo que hace, no tiene que aplicar NADA directamente, me tiene que dar la opcion a mi, esto lo trabaje unicamente por si en alycbur me hacian movimientos de fci, yo que no veo diariamente los comprobantes, en argos me salte un: che se hizo este movimiento por esta cantidad de cp, este importe, este vcp, este fci, queres aplicarlo? y si no quiero aplicarlo no lo aplico (siempre aplicaria todo idealmente, excepto lo que ya haya cargado todo yo". El motivo de fondo del fci-sync (que Augusto aclaro en este mismo mensaje) es cubrir movimientos que Alycbur le hace sin que el se entere al momento -- pero eso nunca justifica saltear su confirmacion antes de tocar la cartera real.
+**Alternativas descartadas:** Mantener `resolve_tipo()` (ADR-0181) con una heuristica mas conservadora (por ej. solo auto-aplicar cuando el ultimo lote del mismo fci_id tiene el mismo tipo con alta confianza) -- descartado de raiz: cualquier auto-aplicacion, con o sin heuristica, es exactamente lo que Augusto pidio eliminar. Notificar por Telegram y aplicar igual -- descartado, ya era el comportamiento previo (Augusto no revisa Telegram/comprobantes a diario, por eso pidio la review en Argos).
+**Consecuencias / riesgo residual:** La cola de pendientes puede crecer si Augusto no entra a revisar seguido -- mitigado por notificacion (ADR-0185). Mientras una fila esta pendiente no aparece en ningun lado de la cartera -- riesgo aceptado y buscado por Augusto (prefiere no ver el movimiento a verlo mal aplicado). Puede interactuar con `fci_sync.py --mode backfill`: si se re-corre sobre un rango ya sincronizado, el upsert por external_ref no reactiva una fila que Augusto ya aplico ni la vuelve a poner pendiente (fuera de alcance verificar este caso, no se toco backfill en este fix).
+
+> Cowork - AR-042
+
+---
+
 ## ADR-0182 - 2026-09-21 - Correccion de datos ya escritos se aplica via SQL directo, no reprocesando el sync
 
 **Estado:** aceptada
@@ -74,7 +119,7 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ## ADR-0181 - 2026-09-21 - resolve_tipo: heuristico de ultimo tipo conocido por fci_id, no deteccion desde el mail
 
-**Estado:** aceptada
+**Estado:** reemplazada-por-ADR-0183 (ver ADR-0183, AR-042)
 **Origen:** Supuesto del agente
 **Target:** argos
 
