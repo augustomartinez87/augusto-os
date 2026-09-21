@@ -27,6 +27,163 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0179 · 2026-09-21 · No se consolida el fetch de precios entre useFciLotEngine y FundingEngine
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se deja `useFciLotEngine` (precio actual + anterior de TODOS los fondos activos, portfolio+carry) y `FundingEngine.loadVcpHistory` (historial completo desde `minDate` de las cauciones, solo fondos carry) como dos fetches separados, en vez de unificarlos en una sola fuente compartida. Alcance de este fix (AR-040) limitado a: (1) acotar el fetch no-batcheado de `useFciLotEngine` por cantidad de filas en vez de bajar todo el historial, y (2) batchear el loop por-fondo de `FundingEngine`.
+**Contexto:** Ambos hooks piden precios de los mismos fondos (los tageados `carry`) cuando el usuario está en `/carry-trade/analisis-de-spread`, lo que en principio parece 100% redundante. Pero no lo es: `useFciLotEngine` solo necesita 2 puntos (el precio más reciente y el inmediatamente anterior) para TODOS los fondos activos del portfolio, y vive en `PortfolioContext` — se instancia en toda la app, no solo en la página de carry. `FundingEngine.loadVcpHistory` necesita el historial COMPLETO desde `minDate` (la caución más vieja) solo para los fondos carry, porque `calcularSpreadPorCaucion` reconstruye la valuación del basket en cada fecha intermedia, no solo hoy/ayer. Unificar ambos en una sola fuente (ej. un cache compartido en `fciService` con coalescing de requests) cruzaría el límite hooks-por-contexto vs. hooks-por-página que documenta CLAUDE.md ("Data flow: hooks → services → Supabase"), y es un cambio de arquitectura más grande y más riesgoso que lo que Augusto pidió explícitamente (arreglar por qué demora 20-30s).
+**Alternativas descartadas:** Cache compartido/request-coalescing en `fciService` (ej. un mapa en memoria `{fciId: {ultimaConsulta, promise}}`) para que ambos hooks reusen el mismo request cuando se solapan — descartado por alcance: es un cambio arquitectural transversal (toca el service layer completo, no solo estos 2 archivos) que amerita su propio diagnóstico y OK explícito de Augusto antes de tocarlo, no algo para meter dentro de un fix de performance puntual.
+**Consecuencias / riesgo residual:** En la página `/carry-trade/analisis-de-spread` sigue habiendo 1 request de `useFciLotEngine` (ahora acotado a ~30 filas por fondo, antes ilimitado) + 1 request batcheado de `FundingEngine` (antes N requests) por fondo carry — menos redundante que antes pero no cero. Si en el futuro se vuelve a reportar demora en esa página puntual, este solapamiento remanente es el primer lugar a mirar (posible ítem de backlog nuevo: cache compartido de precios FCI).
+
+> Cowork · investigación de performance del dashboard (20-30s de carga) · AR-040
+
+---
+
+## ADR-0178 · 2026-09-21 · getPricesBatch en FundingEngine cambia el aislamiento de fallas por-fondo a atómico
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** `FundingEngine.loadVcpHistory` pasa de N llamadas paralelas a `fciService.getPrices(fciId, minDate)` vía `Promise.allSettled` (cada fondo podía fallar independientemente, sin bloquear a los demás) a una sola llamada a `fciService.getPricesBatch(fciIds, minDate)` (una consulta `.in('fci_id', fciIds)`).
+**Contexto:** El loop por-fondo (uno de los cuellos de botella reportados por Augusto) además de lento, dejaba cada fondo fallar solo — si un fondo tenía un error de red puntual, el resto seguía mostrando su historial. `getPricesBatch` ya existía en `fciService.js` sin usar, pensado justo para este caso. Reemplazar el loop por el batch elimina el N-a-1 de round-trips pero como es una sola query, si esa query falla (red, timeout), fallan TODOS los fondos juntos en vez de solo uno.
+**Alternativas descartadas:** Mantener el loop per-fondo con `Promise.allSettled` pero agregando batching interno de todos modos — no tiene sentido, el punto de batchear es reducir a 1 round-trip. Reintentar el batch completo con retry/backoff antes de fallar — no implementado en este fix, posible mejora futura si el fallo atómico resulta un problema real en la práctica.
+**Consecuencias / riesgo residual:** Un fallo de red al cargar el historial VCP de cauciones ahora deja sin datos a TODOS los fondos carry en vez de solo al que falló. Dado que es una sola query a la misma tabla (`fci_prices`) con el mismo `.in()`, la probabilidad de que falle para un fondo y no para otro en la práctica era baja (mismo request HTTP subyacente), así que el riesgo real es bajo, pero es un cambio de comportamiento real que vale la pena que Augusto conozca.
+
+> Cowork · investigación de performance del dashboard (20-30s de carga) · AR-040
+
+---
+
+## ADR-0177 · 2026-09-21 · getRecentPrices acotado por cantidad de filas (LIMIT), no por ventana de fechas
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El nuevo método `fciService.getRecentPrices(fciId, limit=30)` acota la consulta con `.order('fecha', {ascending:false}).limit(limit)` (cantidad de filas) en vez de con un `fromDate` (ventana de fechas), y revierte el resultado a ascendente antes de devolverlo.
+**Contexto:** `useFciLotEngine.loadLots()` bajaba TODO el historial de precios de cada fondo activo (`fciService.getPrices(id)` sin `fromDate`) solo para encontrar el precio del día anterior al más reciente — hasta 2.844 filas / 13 años para Alpha Renta Capital Pesos - Clase B, confirmado contra Supabase. El comentario original en el código decía explícitamente que bajar todo el historial era deliberado, "para hacer el código más robusto ante gaps de data (fines de semana largos, feriados)" — es decir, para no asumir que el precio de ayer está a una fecha fija de distancia. Acotar por cantidad de filas (no por fecha) preserva esa robustez de forma exacta: como el precio más reciente siempre es el último de las filas devueltas, el precio inmediatamente anterior (si existe) siempre está dentro del batch mientras haya al menos 2 filas de precio en total para ese fondo — sin importar cuántos días de gap haya entre ambas fechas. No es una aproximación: para el propósito puntual de "encontrar el precio anterior al más reciente", da el resultado idéntico al historial completo, con `limit=30` como margen de sobra.
+**Alternativas descartadas:** Acotar por `fromDate` (ej. últimos 60 días) — descartado porque reintroduce exactamente el bug que el comentario original quería evitar: un fondo con gap de precios mayor a la ventana (ej. un fondo que dejó de operarse temporalmente) volvería a no encontrar el precio anterior. `getPricesBatch` en vez de loop por-fondo — no aplica acá: `useFciLotEngine` no necesita historial completo por fondo, solo el top-2, así que el batch no ahorraría filas descargadas de forma significativa frente al enfoque por-fondo acotado.
+**Consecuencias / riesgo residual:** Ninguno identificado — la garantía de "siempre trae las 2 filas más recientes por fondo" se sostiene mientras `limit>=2`, y 30 deja margen amplio. Si en el futuro se necesitara más de 2 puntos históricos desde este mismo método (hoy no se usa así), habría que revisar si 30 sigue siendo suficiente para ese nuevo uso.
+
+> Cowork · investigación de performance del dashboard (20-30s de carga) · AR-040
+
+---
+
+## ADR-0176 · 2026-09-14 · Mock del flag via getter mutable en lugar de vi.resetModules
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se mockea `@/config/layoutFlags` con un getter (`get COMPACT_OVERVIEW_ENABLED() { return _compact; }`) que lee una variable de cierre mutable, en lugar de usar `vi.resetModules()` + `vi.doMock()` + imports dinámicos por cada test.
+**Contexto:** El test necesita llamar a `getInitialSidebarExpanded()` con `COMPACT_OVERVIEW_ENABLED = true` y `= false` en el mismo archivo. El patrón existente en el repo (KpiCard, AllocationPanel) mockea el flag a un solo valor y replica la lógica inline para el otro; no hay precedente de cambio de flag entre tests. Optar por el getter mutable permite importar la función normalmente (no dinámicamente) y mutarla desde cada test.
+**Alternativas descartadas:** `vi.resetModules()` + `vi.doMock()` + `await import(...)` dentro de cada describe — correcto pero verboso; dos archivos de test separados (uno por valor de flag) — duplica boilerplate.
+**Consecuencias / riesgo residual:** Si vitest cambia el comportamiento de live bindings en mocks ESM, los tests de caso (c)/(d) podrían no detectar que el flag realmente cambió — señal de alerta si algún test que debería diferir con el flag devuelve el mismo resultado por la razón incorrecta.
+
+> Generado por el loop · feature F-0063 · step 3
+
+---
+## ADR-0175 · 2026-09-14 · Fallback case 3 hardcodeado como `false`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El "cualquier otro caso" de `getInitialSidebarExpanded` retorna `false` directamente, equivalente al default actual (`localStorage.getItem(...) === 'true'` cuando no hay valor guardado = `null === 'true'` = `false`).
+**Contexto:** La instrucción dice "replicar el default actual" pero no especifica si ese default puede ser `true` en algún futuro paso del mismo feature. Si un step posterior cambia el default para escritorios no-compact a `true` (expanded), esta función necesitaría actualizarse.
+**Alternativas descartadas:** Exportar el default como constante para que steps futuros puedan modificarlo sin tocar la función; pero el spec dice "cambio mínimo necesario" y no lo requiere.
+**Consecuencias / riesgo residual:** Si el default para non-compact cambia a `true` en un step posterior, habrá que actualizar explícitamente el return del case 3. Queda como deuda de implementación consciente.
+
+> Generado por el loop · feature F-0063 · step 1
+
+---
+## ADR-0174 · 2026-09-14 · Lógica replicada inline en lugar de exportar helpers internos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** KpiCard / AllocationPanel (tests)
+
+**Decisión:** Los tests replican las funciones internas (`classifyType`, `classifyStrategy`, `computePieData`) y las expresiones de clase en lugar de exportarlas desde los archivos fuente.
+**Contexto:** El entorno de test es `node` sin DOM, así que no se puede renderizar React. KpiCard y AllocationPanel no exportan utilidades puras. El patrón vigente (GroupedPositionsTable) ya usa réplica inline para el caso `flag=true`. Agregar exports de testabilidad modificaría los archivos fuente, lo que supera el mínimo necesario.
+**Alternativas descartadas:** Agregar exports con prefijo `_` a los archivos fuente para que el test los importe directamente (como hace GroupedPositionsTable con `COLS`/`getSortValue`/`compactHiddenClass`).
+**Consecuencias / riesgo residual:** Si la lógica de `classifyType` o `classifyStrategy` cambia en el fuente, los tests seguirán pasando aunque estén desactualizados. Revisar la réplica manualmente ante cambios en AllocationPanel.jsx.
+
+> Generado por el loop · feature F-0061 · step 7
+
+---
+## ADR-0173 · 2026-09-14 · Exports de test utilities en GroupedPositionsTable.jsx
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se exportaron `COLS`, `getSortValue` y `compactHiddenClass` como named exports desde el componente de producción para hacerlos accesibles en el test. Se colocaron después de la definición de `getSortValue` (línea ~100) con un comentario explicativo.
+**Contexto:** El entorno de tests es `node` sin `jsdom` ni `@testing-library/react`. Los tres símbolos son privados del módulo, por lo que sin exponerlos no hay forma de testear la lógica pura sin re-implementarla en el test (lo que falsificaría la prueba). La alternativa de instalar `jsdom` + `@testing-library/react` requeriría cambios en `vite.config.ts` y nuevas dependencias.
+**Alternativas descartadas:** (1) Instalar `jsdom`/`@testing-library/react` y testear el DOM renderizado — descartado por mayor blast radius. (2) Copiar la lógica en el test (sin exportar) — descartado porque no prueba el código real. (3) Crear un módulo separado `columnsConfig.js` — descartado como refactor excesivo para el step.
+**Consecuencias / riesgo residual:** Los tres símbolos son ahora parte del API público del módulo. Si algún día se renombran o eliminan, los tests lo detectarán; no se genera dead code.
+
+> Generado por el loop · feature F-0062 · step 7
+
+---
+## ADR-0172 · 2026-09-14 · Min-width responsive de la tabla vía CSS vars en lugar de literales Tailwind
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El min-width compact/full del `<table>` se resuelve con clases Tailwind arbitrary que referencian CSS custom properties (`--tbl-min-w-full`/`--tbl-min-w-compact`) seteadas inline desde las constantes JS `MIN_W`/`MIN_W_COMPACT`, en vez de hardcodear los píxeles (`min-w-[995px]`/`compact:min-w-[825px]`).
+**Contexto:** Los dos intentos previos fallaron el review por el mismo motivo: `MIN_W_COMPACT` quedaba como dead code y los literales de las clases podían desincronizarse de `COLS` sin que tsc ni tests lo detectaran, porque el JIT de Tailwind no puede interpolar constantes JS en arbitrary values.
+**Alternativas descartadas:** (1) Eliminar `MIN_W_COMPACT` y comentar los literales atándolos a la suma de `COLS` — no elimina el drift, solo lo documenta. (2) Media query listener en JS para setear `minWidth` numérico — agrega estado/efecto y re-render innecesarios para algo puramente CSS.
+**Consecuencias / riesgo residual:** `COLS` queda como única fuente de verdad para ambos anchos; agregar/quitar columnas o cambiar `minW`/`priority` recalcula todo solo. Queda como convención: para anchos derivados de constantes JS en breakpoints, usar CSS vars inline + clase `var()`, nunca literales.
+
+> Generado por el loop · feature F-0062 · step 6
+
+---
+## ADR-0171 · 2026-09-14 · Aplicar compact:hidden también a <td>, no solo a <th>
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se aplicó `compactHiddenClass` a los `<td>` correspondientes a pprom y diapct en position rows, group header rows y tfoot, además de los `<th>` especificados en la tarea.
+**Contexto:** El step 4 menciona explícitamente solo los `<th>` del COLS.map, pero ocultar únicamente el header sin ocultar los `<td>` deja celdas de datos huérfanas y desalinea la grilla, haciendo la feature inútil.
+**Alternativas descartadas:** Ocultar solo `<th>` y dejar los `<td>` para un hipotético step 5; descartado porque produciría un layout roto intermedio.
+**Consecuencias / riesgo residual:** Si el orchestrador tiene un step 5 planeado para `<td>`, los cambios de `<td>` ya están hechos y el step 5 debería ser no-op o redirigirse a otro alcance.
+
+> Generado por el loop · feature F-0062 · step 4
+
+---
+## ADR-0170 · 2026-09-14 · `items-start` en el grid vs `self-start` en el hero
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agregó `items-start` al wrapper del grid (ambas columnas) en lugar de agregar `self-start` solo al hero (`<PortfolioHeroChart>`).
+**Contexto:** La SPEC menciona ambas opciones ("items-start al grid" o "self-start al hero") como equivalentes para romper el stretch. Agregar `self-start` al `<PortfolioHeroChart>` habría requerido pasar un prop de className o wrapearlo, añadiendo complejidad; modificar el `div` del grid es un cambio de una sola línea y produce el mismo resultado visual porque la columna derecha ya tiene `self-start` explícito.
+**Alternativas descartadas:** Agregar `self-start` solo al elemento `<PortfolioHeroChart>` (requería prop o wrapper extra). Descartado por innecesariamente más invasivo.
+**Consecuencias / riesgo residual:** Con `items-start` en el grid, si en el futuro se agrega una tercera columna al grid sin `self-start` explícito, también heredará `items-start`. Es el comportamiento deseable para el rediseño compact.
+
+> Generado por el loop · feature F-0060 · step 2
+
+---
+## ADR-0169 · 2026-09-14 · `screens` dentro de `theme.extend` con spread explícito de `defaultTheme.screens`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agregó `screens` dentro de `theme.extend` (no en `theme` raíz) usando `...defaultTheme.screens` para preservar los breakpoints default, en lugar de confiar en la extensión automática de Tailwind.
+**Contexto:** Tailwind solo fusiona automáticamente los screens cuando se usan dentro de `theme.extend` *sin* redefinir la clave; en cuanto se define `screens` en `extend`, ese objeto reemplaza los defaults a menos que se haga el spread explícito. La SPEC no especificaba si el spread era necesario o si Tailwind lo haría solo.
+**Alternativas descartadas:** Poner `compact` en `theme.screens` (raíz) junto a los defaults enumerados a mano — más explícito pero frágil si Tailwind agrega breakpoints futuros; o confiar en que `extend.screens` no hace override (incorrecto según docs de Tailwind).
+**Consecuencias / riesgo residual:** Si `defaultTheme.screens` cambia en una actualización de Tailwind, el spread lo recoge automáticamente. No hay deuda técnica adicional.
+
+> Generado por el loop · feature F-0059 · step 1
+
+---
 ## ADR-0168 · 2026-09-13 · Fase 0 y Fase 1 como steps secuenciales, no como un solo comando
 
 **Estado:** aceptada

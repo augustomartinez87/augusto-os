@@ -1471,3 +1471,170 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0058/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-14 — F-0059 completado
+
+## Feature F-0059
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En tailwind.config.js, agregar screens.compact = { raw: '(max-height: 820px)' } preservando explícitamente los breakpoints default de Tailwind (sm/md/lg/xl/2xl) mediante spread de defaultTheme.screens. Como el config es ESM (export default), usar import defaultTheme from 'tailwindcss/defaultTheme' en vez de require. Definir screens dentro de theme.extend para no pisar los defaults. (7100df22)
+- [x] Step 2: Crear src/config/layoutFlags.js exportando `export const COMPACT_OVERVIEW_ENABLED = true;`, sin dependencias de otros módulos para evitar ciclos de import y permitir importarlo desde cualquier componente de src/. (732f10a9)
+- [x] Step 3: Agregar temporalmente la clase de prueba `compact:bg-red-500` en el bloque desktop de DashboardOverview.jsx, verificar en DevTools emulando altura de viewport ≤820px que el breakpoint dispara solo por alto (no por ancho), y remover la clase de prueba antes de cerrar el paso. Correr npm run build para confirmar que compila sin errores. (732f10a9)
+
+### Decisiones (ADR)
+- ADR-0169 — `screens` dentro de `theme.extend` con spread explícito de `defaultTheme.screens` [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0059/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-14 — F-0060 completado
+
+## Feature F-0060
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/portfolio/components/DashboardOverview.jsx, importar `COMPACT_OVERVIEW_ENABLED` desde `@/config/layoutFlags` (agregar el import junto a los imports existentes, sin duplicar si ya estuviera). (79b56fc8)
+- [x] Step 2: En src/features/portfolio/components/DashboardOverview.jsx (grid `grid grid-cols-1 lg:grid-cols-[65fr_35fr]`, línea ~257/264), ramificar por flag con ternario: con `COMPACT_OVERVIEW_ENABLED=true` agregar `items-start` al className del grid (o `self-start` al hero) para que el hero deje de heredar el stretch; con el flag en `false` dejar el className exactamente como está hoy. No tocar la columna derecha ni la rama mobile. (68617579)
+- [x] Step 3: En src/features/portfolio/components/PortfolioHeroChart.jsx, importar `COMPACT_OVERVIEW_ENABLED` desde `@/config/layoutFlags` (agregar el import sin duplicar). (09e6349f)
+- [x] Step 4: En src/features/portfolio/components/PortfolioHeroChart.jsx, ramificar por flag el className del wrapper desktop `desktopEl` (línea ~291, `hidden md:flex ... flex-col`): con `COMPACT_OVERVIEW_ENABLED=true` agregar `md:h-[300px] compact:md:h-[220px]`; con el flag en `false` mantener el className original sin altura explícita. No modificar el área del chart (`flex-1 min-h-[90px]`), `renderChart`, `ResponsiveContainer` (width=100% height=100%), `isAnimationActive={false}`, ni la censura de saldos (MoneyValue/useBalanceVisibility/HIDDEN). (42c89556)
+- [x] Step 5: Ejecutar typecheck, lint y tests del repo y corregir cualquier error introducido por los cambios de className/imports en los dos archivos, sin alterar la lógica de ramificación por flag. (42c89556)
+
+### Decisiones (ADR)
+- ADR-0170 — `items-start` en el grid vs `self-start` en el hero [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0060/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-14 — F-0062 completado
+
+## Feature F-0062
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En tailwind.config.js, asegurar que exista el breakpoint `screens.compact` con `{ raw: '(max-height: 820px)' }`, preservando los defaults de screens (spread de `...defaultTheme.screens` o equivalente). Si ya existe, no duplicar. Es prerequisito para que la variante `compact:` de Tailwind compile las clases `compact:hidden`. (7778db91)
+- [x] Step 2: En src/features/portfolio/components/GroupedPositionsTable.jsx, agregar el campo `priority: 'low'` a las definiciones de columna `pprom` y `diapct` dentro del array COLS, sin tocar el resto de columnas ni el orden. No cambia el render todavía; solo marca metadata. (a1750cee)
+- [x] Step 3: En GroupedPositionsTable.jsx, importar COMPACT_OVERVIEW_ENABLED desde src/config/layoutFlags.js (si no está importado) y crear un helper puro, p.ej. `compactHiddenClass(col)`, que devuelva la string `'compact:hidden'` cuando `COMPACT_OVERVIEW_ENABLED === true && col.priority === 'low'`, y `''` en caso contrario. Con el flag en false debe devolver siempre string vacía. No aplicar el helper aún. (6c36143e)
+- [x] Step 4: En GroupedPositionsTable.jsx, aplicar `compactHiddenClass(col)` al className de los `<th>` generados por COLS.map en el header (combinando con las clases existentes TH_SORT / TH base, sin reemplazarlas). Verificar que las columnas pprom y diapct se ocultan en viewport compact solo con el flag activo. (5f3f1979)
+- [x] Step 5: En GroupedPositionsTable.jsx, aplicar la misma clase condicional a TODAS las celdas `<td>` de las columnas pprom y diapct en los tres lugares donde se escriben manualmente: filas de posición, filas de grupo (group headers) y el tfoot de totales. Mantener alineación header↔celdas idéntica; la censura de saldos (MoneyValue) en las columnas que quedan visibles no debe alterarse. (5f3f1979)
+- [x] Step 6: En GroupedPositionsTable.jsx, calcular `MIN_W_COMPACT` = suma de `minW` de las columnas cuyo `priority !== 'low'` (≈825px), y aplicar el min-width inline del `<table>` de forma que use MIN_W_COMPACT cuando `COMPACT_OVERVIEW_ENABLED === true` en viewport compact, y MIN_W (≈995px) en el resto de los casos. Como el min-width se fija en JS y no hay media query en JS, resolverlo con clases responsive (p.ej. min-width base full + override compact) o dejando el valor menor y complementando con clases, de modo que con el flag en false el ancho siempre sea MIN_W. (48489e21)
+- [x] Step 7: Agregar/actualizar un test unitario para GroupedPositionsTable que verifique: (a) con COMPACT_OVERVIEW_ENABLED=false las 10 columnas se renderizan siempre; (b) el ordenamiento por key (getSortValue/handleSort usando COLS.find por key) y la búsqueda siguen funcionando aunque pprom/diapct estén marcadas como low. Asegurar que typecheck y lint pasen. (72fd44e3)
+
+### Decisiones (ADR)
+- ADR-0171 — Aplicar compact:hidden también a <td>, no solo a <th> [Supuesto del agente] **⚠ REVISAR**
+- ADR-0172 — Min-width responsive de la tabla vía CSS vars en lugar de literales Tailwind [Supuesto del agente] **⚠ REVISAR**
+- ADR-0173 — Exports de test utilities en GroupedPositionsTable.jsx [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0062/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-14 — F-0061 completado
+
+## Feature F-0061
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/components/ui/KpiCard.jsx, importar COMPACT_OVERVIEW_ENABLED (mismo import/patrón que usa F-0060) para poder ramificar clases condicionalmente en el modo default. (e39d1dfd)
+- [x] Step 2: En src/components/ui/KpiCard.jsx (modo default, sin `status`), en el `Card` (~línea 128, `p-2.5`), agregar la clase `compact:p-2` únicamente cuando COMPACT_OVERVIEW_ENABLED === true, dejando `p-2.5` intacto cuando el flag está en false para mantener pixel-a-pixel el comportamiento actual. (0c43aecc)
+- [x] Step 3: En src/components/ui/KpiCard.jsx, en el bloque `sparklineData && ... <Sparkline .../>` (~línea 156), agregar `compact:hidden` al contenedor del sparkline solo cuando COMPACT_OVERVIEW_ENABLED === true, de modo que en viewport compact el sparkline quede oculto y en full desktop / flag=false se muestre igual que hoy. (e6d55402)
+- [x] Step 4: En src/features/portfolio/components/AllocationPanel.jsx, importar COMPACT_OVERVIEW_ENABLED y ramificar el padding del card (~línea 99, `padding: '10px 12px'`) a un valor más compacto (`8px 10px`) por tier compact solo cuando el flag está en true, sin tocar donut (100×100) ni leyenda. (6775e772)
+- [x] Step 5: En src/features/portfolio/components/AllocationPanel.jsx, ramificar el `paddingTop: 10` del bloque StatBar (~línea 179) a `~6` en tier compact solo cuando COMPACT_OVERVIEW_ENABLED === true, manteniendo intacta la censura de saldos (useBalanceVisibility / HIDDEN) y el valor original con flag=false. (24d3d863)
+- [x] Step 6: Verificar en AllocationPanel.jsx que el toggle Por tipo/Por estrategia sigue re-renderizando correctamente con los nuevos paddings en ambos tiers (compact y full), sin romper el layout de 2 columnas del KPI grid; ajustar solo si hace falta preservar el re-render. (24d3d863)
+- [x] Step 7: Agregar/actualizar tests unitarios que cubran KpiCard y AllocationPanel con COMPACT_OVERVIEW_ENABLED en true y false: presencia/ausencia de `compact:hidden` en el sparkline, clases/estilos de padding correctos por flag, y que el toggle tipo/estrategia funciona; correr typecheck y lint. (ee55b99e)
+
+### Decisiones (ADR)
+- ADR-0174 — Lógica replicada inline en lugar de exportar helpers internos [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0061/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-14 — F-0063 completado
+
+## Feature F-0063
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/hooks/useSidebarState.js`, extraer y exportar una función pura `getInitialSidebarExpanded()` que calcule el valor inicial del estado: si existe una preferencia guardada en localStorage (STORAGE_KEY 'sidebarExpanded') devolver ese valor booleano; si no hay preferencia y `COMPACT_OVERVIEW_ENABLED` es true y `window.matchMedia('(max-height: 820px)').matches`, devolver false (colapsado); en cualquier otro caso, replicar el default actual. Mantener el guard `typeof window === 'undefined'` para SSR/tests y envolver la lectura de matchMedia con guard defensivo por si no existe. (35013251)
+- [x] Step 2: En `src/hooks/useSidebarState.js`, usar `getInitialSidebarExpanded()` como inicializador lazy de `useState` (una sola lectura al montar, sin listener de resize) para que el estado inicial se resuelva en el primer render sin flicker, dejando intacta la lógica de toggle y de persistencia en localStorage. (35013251)
+- [x] Step 3: Crear `src/hooks/__tests__/useSidebarState.compact.test.js` (vitest) que cubra `getInitialSidebarExpanded()`: (a) flag true + viewport compact + sin preferencia guardada → colapsado (false); (b) preferencia guardada gana sobre el default compact; (c) viewport full desktop arranca como hoy con el flag en cualquier valor; (d) flag false → siempre el valor inicial de hoy sin importar el alto. Mockear `window.matchMedia` y `localStorage`. (4e1cdcb4)
+
+### Decisiones (ADR)
+- ADR-0175 — Fallback case 3 hardcodeado como `false` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0176 — Mock del flag via getter mutable en lugar de vi.resetModules [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0063/`
+
+> Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-21 — AR-040: Dashboard demora 20-30s en cargar tras login [argos]
+
+Investigación y fix de performance, pedido explícito de Augusto tras rechazar un fix cosmético
+(banner de aviso) y pedir diagnóstico real de la demora en la carga del dashboard.
+
+### Diagnóstico
+Confirmado contra Supabase (`wwzocpcolgdzkvcigchj`) y código real, no verificación mental:
+- Causa principal: `useFciLotEngine.loadLots()` bajaba el historial COMPLETO de precios de
+  cada fondo activo (`fciService.getPrices(id)` sin `fromDate`) solo para encontrar el precio
+  del día anterior — hasta 2.844 filas/13 años para un solo fondo (Alpha Renta Capital Pesos -
+  Clase B), confirmado por conteo real en Supabase.
+- Causa secundaria: `FundingEngine.jsx`'s `loadVcpHistory` pedía el historial VCP de cada fondo
+  carry en un loop por-fondo (N requests vía `Promise.allSettled`) en vez de usar
+  `fciService.getPricesBatch` (ya existía en el service, sin uso).
+- Se investigó y descartó por separado la consulta original de Augusto sobre "Ganancia FCI" y
+  Alpha Renta Capital Pesos - Clase B (variación negativa): confirmado correcto, el neteo de
+  variaciones negativas ya funciona bien — no requería fix.
+
+### Pasos
+- [x] Step 1: `fciService.js` — método nuevo `getRecentPrices(fciId, limit=30)`, acotado por
+  cantidad de filas (`.order('fecha',{ascending:false}).limit(limit)`, revertido a ascendente)
+  en vez de por fecha; da el mismo resultado exacto que el historial completo para "precio más
+  reciente + el anterior" (ver ADR-0177).
+- [x] Step 2: `useFciLotEngine.loadLots()` — usa `getRecentPrices` en vez de `getPrices` sin
+  filtro en el bloque que calcula `yesterdayPrices`.
+- [x] Step 3: `FundingEngine.jsx`'s `loadVcpHistory` — reemplaza el loop por-fondo por una sola
+  llamada a `fciService.getPricesBatch` (ver ADR-0178, cambia aislamiento de fallas de
+  por-fondo a atómico).
+- [x] Step 4: Evaluado y descartado por alcance (ver ADR-0179) unificar este fetch con el de
+  `FundingEngine` en una sola fuente compartida — cruza el límite hook-de-contexto vs.
+  hook-de-página del proyecto, más grande que lo pedido.
+- [x] Step 5: Verificación real antes de pushear (pedido explícito de Augusto: "no vamos a
+  revisar, pushea directamente" — se corrió igual la verificación automática, no la humana):
+  `npx tsc --noEmit` limpio, `npx vitest run` 361/361 tests verdes, `npm run build` OK.
+- [x] Step 6: Detectado un WIP no relacionado ya sin commitear en la misma carpeta
+  (`DashboardOverview.jsx`, paddings de AR-038/F-0064) — preservado con `git stash` puntual de
+  ese archivo, sin tocarlo ni perderlo, mientras se commiteaba/pusheaba solo lo de AR-040 desde
+  `main`.
+
+### Decisiones (ADR)
+- ADR-0177 — `getRecentPrices` acotado por cantidad de filas (LIMIT), no por ventana de fechas [Supuesto del agente] **⚠ REVISAR**
+- ADR-0178 — `getPricesBatch` en FundingEngine cambia el aislamiento de fallas por-fondo a atómico [Supuesto del agente] **⚠ REVISAR**
+- ADR-0179 — No se consolida el fetch de precios entre useFciLotEngine y FundingEngine [Supuesto del agente] **⚠ REVISAR**
+
+### Commits
+- `9d2418c8` (`portfolio-tracker-argos`, rama `main`) — `perf(fci): acotar fetch de precios en dashboard (AR-040)`, pusheado a `origin/main`, dispara auto-deploy de Vercel.
+
+### Nota operativa
+`device_bash` (shell dentro de la VM Linux de Cowork) sigue roto por el bug de Windows del 8/9
+(mismo bloqueo documentado en S-050), pero `Windows-MCP__PowerShell` (ejecución directa en
+Windows) sí funciona como canal alternativo — permitió correr git y el toolchain real
+(tsc/vitest/build) desde Cowork en esta sesión. Vale la pena revisar si otros ítems bloqueados
+por "consola no disponible" (como S-050) se pueden resolver por esta vía.
+
+### QA
+No se verificó en vivo post-deploy (Augusto pidió pushear directamente sin esperar revisión).
+Pendiente: confirmar en el dashboard real que la carga es más rápida y las cifras (Saldo FCI,
+Ganancia FCI, TNA ponderada) no cambiaron.
