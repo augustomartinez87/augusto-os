@@ -1658,3 +1658,83 @@ por "consola no disponible" (como S-050) se pueden resolver por esta vía.
 No se verificó en vivo post-deploy (Augusto pidió pushear directamente sin esperar revisión).
 Pendiente: confirmar en el dashboard real que la carga es más rápida y las cifras (Saldo FCI,
 Ganancia FCI, TNA ponderada) no cambiaron.
+
+## 2026-09-21 - AR-041: Rescate FCI cuotapartes/monto cruzados + tipo hardcodeado en fci-sync [argos]
+
+Reportado por Augusto en Cowork, en la misma sesion que AR-040, en dos mensajes: primero
+"los fondos en caucion los veo en mi cartera principal, estaba separado eso antes!", despues
+(con mas detalle) "el rescate esta mal, dice cp 3.9MM eso es plata no CP, la CP es lo que dice
+en MONTO" + "hay que arreglar que respete donde esta el fondo, si en carry o portfolio".
+
+### Diagnostico
+Primero se descarto que fuera una regresion del push de AR-040: se releyo el diff de
+`9d2418c8` contra `origin/main` linea por linea -- solo toca el fetch de precios
+(`getRecentPrices`/`getPricesBatch`), no toca `portfolioPositions`/`carryPositions` en
+`useFciLotEngine.js` (verificado que esa logica sigue intacta en `origin/main`).
+
+La causa real esta en un repo distinto, `caucion-sync` (el cron `fci-sync`, Python +
+GitHub Actions), no tocado por AR-040:
+- El cron `fci-sync` fallaba con Postgres 42P10 en TODAS sus corridas hasta que otra sesion
+  de Cowork lo arreglo mas temprano el mismo dia (AR-039). La corrida del 21/09 14:06 UTC fue
+  la PRIMERA que efectivamente escribio filas a `fci_lots`/`fci_rescates` -- de ahi que
+  Augusto notara recien ahora algo que, segun el, "estaba separado antes": literalmente nunca
+  se habia escrito nada.
+- Bug 1 (`fci_parser.py`): la linea de "Liquidacion" se parseaba asumiendo el mismo orden de
+  3 importes (cuotapartes, vcp, monto) para suscripcion Y rescate. Confirmado contra el
+  comprobante real CL 2026007643 (Alycbur FCI Abierto Pymes - Clase A) que el orden real en
+  una liquidacion de RESCATE es (monto, vcp, cuotapartes) -- invertido. vcp_salida
+  (14,059032) salio bien; cuotapartes (3.900.000, en realidad plata) y monto_rescatado
+  (277.401,74, en realidad cuotapartes) quedaron cruzados. Verificacion dimensional:
+  277.401,74 x 14,059032 ~= 3.900.000 (el monto real).
+- Bug 2 (`fci_sync.py`): toda suscripcion sincronizada se insertaba con `tipo: "portfolio"`
+  hardcodeado (linea 386), sin distinguir fondos que Augusto usa para caucion. Alycbur FCI
+  Abierto Pymes - Clase A tiene TODO su historial real en la cuenta como `tipo='carry'` desde
+  junio 2026 (confirmado por query a `fci_lots` agrupada por fci_id+tipo); el lote nuevo
+  (CL 2026007601, 1.128.000 cp) se inserto `tipo='portfolio'` por el hardcode, apareciendo en
+  la cartera principal de Argos via `fciPortfolioPositions`.
+
+### Pasos
+- [x] Step 1: `fci_parser.py` -- branch por `pending["tipo"]` al armar el dict de salida:
+  rescate usa `(montos[2], montos[0])` para `(cuotapartes, monto)` en vez de
+  `(montos[0], montos[2])` (ver ADR-0180).
+- [x] Step 2: `fci_sync.py` -- nueva funcion `resolve_tipo(fci_id, cache)` que copia el tipo
+  del lote mas reciente ya cargado para ese `fci_id` (query a `fci_lots`, `order=created_at.desc,limit=1`)
+  en vez de hardcodear `"portfolio"`; fallback a `"portfolio"` si el fondo nunca se vio (ver
+  ADR-0181).
+- [x] Step 3: `tests/conftest.py` -- `_RESCATE_TEXT` actualizado al orden real; fixture nuevo
+  `rescate_cruzado_real.pdf` calcado del comprobante real CL 2026007643.
+- [x] Step 4: `tests/test_fci_parser.py` -- nuevo test
+  `test_parse_rescate_no_cruza_cuotapartes_y_monto`, guard de regresion real. 10/10 tests
+  pasan (`pytest`).
+- [x] Step 5: Correccion de los datos ya escritos en Supabase con el bug activo (fuera del
+  commit de codigo, aplicada directo via SQL): `fci_rescates.id=2a9902c2` (CL 2026007643) --
+  cuotapartes 3.900.000 -> 277.401,74, monto_rescatado 277.401,74 -> 3.900.000;
+  `fci_lots.id=c7f6a63c` (CL 2026007601, Alycbur) -- tipo portfolio -> carry (ver ADR-0182).
+- [x] Step 6: Verificacion real antes de pushear (mismo patron que AR-040, "no vamos a
+  revisar, pushea directamente" ya establecido para esta sesion): `python -m py_compile` +
+  chequeo AST limpios, `pytest` 10/10 verdes.
+
+### Hallazgo pendiente de confirmar (NO corregido en este fix)
+Las 2 suscripciones sincronizadas el 21/09 (Adcap Ahorro Dolares CL 2026007527, Alycbur
+CL 2026007601) tienen `cuotapartes == capital_invertido` exactamente en la base, lo cual es
+dimensionalmente raro dado que `vcp_entrada != 1` en ambos casos (1,039 y 14,03 respectivamente
+-- si fueran correctos, `capital_invertido` deberia ser `cuotapartes x vcp_entrada`, no igual a
+`cuotapartes`). Posible bug adicional en el branch de suscripcion de `fci_parser.py`, o
+coincidencia real del comprobante -- no hay evidencia suficiente para tocar el codigo sin que
+Augusto confirme contra los comprobantes reales (ver ADR-0180, alternativas descartadas).
+Queda pendiente.
+
+### Decisiones (ADR)
+- ADR-0180 -- fci_parser.py: orden de importes en Liquidacion depende del tipo de movimiento [Instruccion de Augusto] **REVISAR** (alcance: solo rescate, suscripcion sin tocar)
+- ADR-0181 -- resolve_tipo: heuristico de ultimo tipo conocido por fci_id [Supuesto del agente] **REVISAR**
+- ADR-0182 -- Correccion de datos ya escritos via SQL directo, no reprocesando el sync [Supuesto del agente]
+
+### Commits
+- `f0b6453` (`caucion-sync`, rama `main`) -- `fix(fci-sync): cuotapartes/monto cruzados en rescate + tipo hardcodeado (AR-041)`, pusheado a `origin/main`.
+
+### QA
+No hay deploy/Vercel de por medio (este repo corre por GitHub Actions cron, no Vercel). El fix
+de codigo aplica desde la proxima corrida del cron; los 2 datos ya mal cargados se corrigieron
+a mano via SQL (before/after verificado con SELECT antes y despues de cada UPDATE). Pendiente:
+que Augusto confirme en el dashboard real que Alycbur ya no aparece en cartera principal, y que
+revise la anomalia de suscripcion senalada arriba.

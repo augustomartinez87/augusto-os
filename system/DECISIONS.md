@@ -57,6 +57,51 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0182 - 2026-09-21 - Correccion de datos ya escritos se aplica via SQL directo, no reprocesando el sync
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decision:** Las dos filas ya insertadas con datos incorrectos por los bugs de AR-041 (fci_rescates.id=2a9902c2 / CL 2026007643, fci_lots.id=c7f6a63c / CL 2026007601) se corrigen con UPDATE directo en Supabase, no volviendo a correr fci_sync.py con el codigo ya arreglado.
+**Contexto:** fci_sync.py hace upsert idempotente por external_ref (on_conflict=external_ref, resolution=merge-duplicates) -- en teoria una re-corrida con el codigo arreglado sobreescribiria esas mismas filas con los valores correctos sin duplicar. Pero requeriria volver a bajar y re-parsear los mismos mails desde Gmail (o correr en modo backfill), lo cual es mas lento y menos auditable que un UPDATE puntual con el before/after ya confirmado contra el comprobante real.
+**Alternativas descartadas:** Re-correr fci_sync.py --mode backfill y confiar en el upsert idempotente -- descartado por ser mas lento y por reprocesar mails ya etiquetados como procesados (requeriria ademas tocar el label de Gmail para forzar el reproceso).
+**Consecuencias / riesgo residual:** Los valores corregidos viven solo en la base, no en un mail/comprobante re-procesado -- si en el futuro se corre fci_sync.py --mode backfill sobre el mismo rango de fechas, el upsert por external_ref va a sobreescribir estas dos filas con el resultado del codigo ya arreglado (mismos valores esperados, sin riesgo de reintroducir el bug).
+
+> Cowork - AR-041
+
+---
+
+## ADR-0181 - 2026-09-21 - resolve_tipo: heuristico de ultimo tipo conocido por fci_id, no deteccion desde el mail
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decision:** fci_sync.py resuelve el tipo (carry/portfolio) de un lote NUEVO copiando el tipo del lote mas reciente ya cargado para ese mismo fci_id (query a fci_lots ordenada por created_at desc, limit 1), en vez de hardcodear tipo=portfolio. Si no hay ningun lote previo para ese fci_id, cae a portfolio por default (mismo comportamiento que antes para un fondo nunca visto).
+**Contexto:** El Informe Semanal de Alycbur que parsea fci_sync.py no distingue en ningun lado si una suscripcion es para cartera propia o para caucion/garantia -- esa distincion es una decision de Augusto sobre COMO usa el fondo, no un dato del comprobante. Sin esa senal en el mail, la unica fuente disponible es el historial ya cargado en la app: si Augusto viene usando un fondo exclusivamente para caucion, lo mas probable es que la proxima suscripcion de ese mismo fondo sea tambien para caucion.
+**Alternativas descartadas:** Tabla de mapeo manual fci_id -> tipo default, mantenida por Augusto -- mas robusta a futuro pero requiere que Augusto la puebla y mantenga; se descarta por ahora porque el heuristico de "ultimo lote conocido" ya resuelve el caso real (Alycbur, Adcap Ahorro Dolares) sin trabajo manual. Seguir hardcodeado a portfolio -- es exactamente el bug que se esta arreglando.
+**Consecuencias / riesgo residual:** Si Augusto empieza a usar el MISMO fci_id para ambos contextos (carry y portfolio) a traves de fci-sync -- ya pasa hoy con Adcap Balanceado III - Clase A, pero esas filas se cargan a mano en la app, nunca via fci_sync -- este heuristico dejaria de ser confiable. Si eso llega a pasar, hace falta una senal explicita (mapeo manual, o algo distinguible en el mail) -- fuera de alcance de este fix. **REVISAR si esto llega a pasar.**
+
+> Cowork - AR-041
+
+---
+
+## ADR-0180 - 2026-09-21 - fci_parser.py: orden de importes en Liquidacion depende del tipo de movimiento
+
+**Estado:** aceptada
+**Origen:** Instruccion de Augusto (diagnostico del bug con numeros reales; la implementacion del fix es del agente)
+**Target:** argos
+
+**Decision:** fci_parser.py ahora arma el dict de salida branchando por tipo de movimiento: para una Liquidacion de SUSCRIPCION el orden de importes en la linea sigue siendo (cuotapartes, vcp, monto); para una Liquidacion de RESCATE el orden real es (monto, vcp, cuotapartes) -- invertido en las posiciones 0 y 2, vcp queda igual en el medio.
+**Contexto:** Augusto (analista de liquidacion de titulos, ex-Alycbur) identifico el bug contra un comprobante real: CL 2026007643 (Alycbur FCI Abierto Pymes - Clase A) quedo en fci_rescates con cuotapartes=3.900.000 y monto_rescatado=277.401,74 -- cruzados. El vcp_salida (14,059032) esta correcto. Verificacion dimensional: 277.401,74 cuotapartes x 14,059032 = 3.900.003,6 ~= 3.900.000 (el monto real), confirmando que el valor en la posicion 0 de la linea es plata, no cuotapartes, para una liquidacion de rescate.
+**Alternativas descartadas:** Aplicar el mismo swap tambien a suscripcion -- descartado sin evidencia: los datos de las 2 suscripciones sincronizadas el 21/09 (Adcap Ahorro Dolares CL 2026007527, Alycbur CL 2026007601) muestran cuotapartes == capital_invertido exactamente, lo cual es dimensionalmente raro dado vcp_entrada != 1 en ambos casos (1,039 y 14,03) -- posible anomalia distinta, reportada a Augusto para que confirme contra los comprobantes reales antes de tocar el branch de suscripcion. **REVISAR.**
+**Consecuencias / riesgo residual:** Los valores de cuotapartes/capital_invertido de las suscripciones CL 2026007527 y CL 2026007601 (ya en la base) no fueron auditados ni corregidos en este fix -- solo el tipo de CL 2026007601 se corrigio (ADR-0182). Si Augusto confirma que tambien estan cruzados o mal, hace falta un fix y correccion de datos aparte.
+
+> Cowork - AR-041
+
+---
+
 ## ADR-0177 · 2026-09-21 · getRecentPrices acotado por cantidad de filas (LIMIT), no por ventana de fechas
 
 **Estado:** aceptada
