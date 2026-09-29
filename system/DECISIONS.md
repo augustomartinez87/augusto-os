@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0188 · 2026-09-29 · Test discriminante del invariante `attempt--` con MAX_RETRIES límites consecutivos
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** El test de "session-limit sin consumir attempt" usa MAX_RETRIES límites consecutivos seguidos de un éxito (esperando ok:true y execa llamado MAX_RETRIES+1 veces), en vez del escenario limit→ok. Se importa MAX_RETRIES desde executor.js para no fijar el número a mano.
+**Contexto:** Los dos intentos previos usaban limit→ok (2 llamadas), que con MAX_RETRIES=3 pasa exista o no el `attempt--` de executor.ts:233, dejando sin cubrir el invariante que el step debía proteger.
+**Alternativas descartadas:** Mantener limit→ok como test básico adicional (descartado: el reviewer lo marcó como test vacío, agrega ruido); hardcodear "3 límites" (descartado: se rompería si cambia MAX_RETRIES).
+**Consecuencias / riesgo residual:** Bajo la mutación que quita `attempt--` falla también el test "un fallo real" por un mockResolvedValueOnce no consumido que clearAllMocks no drena; es inocuo en el código correcto (todos los valores se consumen) y no afecta la corrida verde.
+
+> Generado por el loop · feature F-0065 · step 9
+
+---
 ## ADR-0187 · 2026-09-29 · Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8
 
 **Estado:** aceptada
