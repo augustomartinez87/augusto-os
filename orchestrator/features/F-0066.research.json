@@ -1,0 +1,206 @@
+[
+  {
+    "objetivo": "S-051 / F-0066: investigar qué existe hoy en el orquestador para implementar la exclusión de system/DECISIONS.md y system/PROGRESS.md del diff del reviewer, reordenar la escritura de ADRs antes de commitStep, persistir adrIds en STATE.json antes del commit, y comitear+pushear los documentos de sistema tras el release.",
+    "archivos": [
+      "orchestrator/features/F-0066.md",
+      "orchestrator/src/reviewer.ts",
+      "orchestrator/src/reviewer.test.ts",
+      "orchestrator/src/adr.ts",
+      "orchestrator/src/adr.test.ts",
+      "orchestrator/src/git.ts",
+      "orchestrator/src/backlog.ts",
+      "orchestrator/src/backlog.test.ts",
+      "orchestrator/src/index.ts",
+      "orchestrator/src/index.test.ts",
+      "orchestrator/src/progress.ts",
+      "orchestrator/src/state.ts",
+      "orchestrator/src/targets.ts"
+    ],
+    "patrones": [
+      "Tests con repo git real en tmpdir (mkdtempSync + git init + config user + commit inicial) e inyección de repoRoot/callClaude — reviewer.test.ts ya lo hace.",
+      "commitAndPush() en backlog.ts es el núcleo reutilizable: `git status --porcelain <path>` → no-op si vacío → chequeo de rama default vía getDefaultBranch() → `git add <path explícito>` (nunca -A) → commit → push origin branch, devolviendo BacklogPushResult.",
+      "Funciones de sistema envueltas en try/catch que loguea y NO bloquea el release (patrón S-047b en index.ts líneas ~357-386).",
+      "Idempotencia por chequeo previo en el contenido/estado: appendAdr calcula max+1 leyendo el archivo; appendProgress evita duplicados buscando '<featureId> completado'; `!(step.adrIds?.length)` idempotencia de ADR en index.ts.",
+      "Guard isDirectRun (ADR-0081) permite importar funciones de index.ts desde tests (acquireRunLock ya se exporta y testea así).",
+      "Patrones de git con execa(... , { reject: false }) para no crashear y leer exitCode/stderr."
+    ],
+    "dependencias": [
+      "execa (ejecución de git/claude)",
+      "vitest (tests)",
+      "zod (schema de state.ts)",
+      "node:fs / node:path (lectura/escritura de archivos y path de sistema)"
+    ],
+    "riesgos": [
+      "El pathspec de reviewer.ts debe incluir el pathspec positivo '.' junto con los excludes ':(exclude)system/...' o el exclude no funciona; debe tolerar repoRoot que no sea augusto-os (archivos inexistentes → sin error).",
+      "commitStep usa stageAll() = `git add -A` (git.ts): al reordenar ADR antes de commitStep, el ADR del step se barre al commit del step (comportamiento deseado para target sistema), pero con targets distintos de sistema appendAdr sigue escribiendo en augusto-os mientras commitStep commitea en el repo del target.",
+      "Reordenar ADR/idempotencia mal hecha puede duplicar ADRs en resume tras fallo de commit — de ahí el requisito de persistir adrIds en STATE.json antes de commitStep.",
+      "Los tests no pueden pushear a remoto real: requieren repo tmpdir con remoto bare como backlog.test.ts. [NO VERIFICADO] no leí el cuerpo exacto de backlog.test.ts (el grep devolvió resultados omitidos) para confirmar el helper de remoto bare.",
+      "Anomalía sin causa confirmada: ADR-0187 aparece 4 veces en adrIds de steps distintos; alcance solo instrumenta warning '[adr] ID duplicado', no corrige causa.",
+      "No tocar state.ts/targets.ts/autopilot.ts ni cambiar firmas públicas (appendAdr, runReviewer, commitAndPushBacklog, commitStep) — los tests actuales dependen de ellas."
+    ],
+    "evidencia": [
+      {
+        "path": "orchestrator/features/F-0066.md",
+        "simbolo": "commitStepWithAdrs",
+        "lineas": "1-75",
+        "explicacion": "Spec completa de S-051 con acceptance criteria: exclusión de system/DECISIONS.md y PROGRESS.md del diff, ADR antes de commitStep, adrIds en STATE.json antes del commit, commit+push de documentos de sistema tras release, warning de ID duplicado, y función testeable sugerida commitStepWithAdrs.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.ts",
+        "simbolo": "runReviewer",
+        "lineas": "22-100",
+        "explicacion": "Ejecuta `git diff HEAD` sobre opts.repoRoot ?? getRepoRoot() sin excluir archivos de sistema; acepta ReviewerOpts { callClaude?, repoRoot?, usageLimitOpts? } inyectables. Es el punto exacto a modificar con el pathspec de exclusión.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.ts",
+        "simbolo": "DIFF_MAX_CHARS",
+        "lineas": "19",
+        "explicacion": "Truncado a 8000 chars del diff; contexto de por qué los ADRs desplazan código real fuera de la vista del reviewer (no se debe tocar según fuera de alcance).",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.ts",
+        "simbolo": "ReviewerOpts",
+        "lineas": "13-17",
+        "explicacion": "Interfaz con repoRoot y callClaude inyectables — base para los tests de exclusión sin invocar el modelo.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/reviewer.test.ts",
+        "simbolo": "runReviewer",
+        "lineas": "73-135",
+        "explicacion": "Modelo de test: repo git real en tmpdir (git init + config + commit inicial), inyección de repoRoot y callClaude mock, casos de diff vacío con approved=true y stageFile().",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/adr.ts",
+        "simbolo": "appendAdr",
+        "lineas": "39-96",
+        "explicacion": "Calcula nextId = max+1 leyendo DECISIONS.md, acepta filePath opcional para tests, inserta newest-first antes de `\\n## ADR-\\d{4}` y devuelve number|null. Es la función central a instrumentar/testear.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/adr.ts",
+        "simbolo": "DECISIONS_PATH",
+        "lineas": "6",
+        "explicacion": "Path fijo a system/DECISIONS.md de augusto-os — explica por qué con targets no-sistema el ADR no se commitea en el momento.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "commitStep",
+        "lineas": "52-66",
+        "explicacion": "Llama stageAll() (git add -A) y commitea; es lo que hoy barre el ADR del step anterior. Debe preservarse su firma y comportamiento público.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "stageAll",
+        "lineas": "48-50",
+        "explicacion": "Implementa `git add -A` — la causa del barrido de ADRs/progress en commits equivocados; no se debe cambiar globalmente.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/git.ts",
+        "simbolo": "getDefaultBranch",
+        "lineas": "24-38",
+        "explicacion": "Detección de rama default con fallback; patrón reutilizado por commitAndPush del backlog y requerido por el nuevo commit+push de documentos de sistema.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/backlog.ts",
+        "simbolo": "commitAndPushBacklog",
+        "lineas": "110-123",
+        "explicacion": "Modelo exacto a replicar: commit+push de un archivo puntual de sistema en augusto-os con mensaje chore, no-op si no hay actualización, delegando en commitAndPush().",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/backlog.ts",
+        "simbolo": "commitAndPush",
+        "lineas": "70-108",
+        "explicacion": "Núcleo compartido: status --porcelain del path, no-op si vacío, chequeo de rama default, git add del path explícito (nunca -A), commit, push origin. Reutilizable o a generalizar para DECISIONS/PROGRESS.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/backlog.ts",
+        "simbolo": "AUGUSTO_OS_ROOT",
+        "lineas": "8",
+        "explicacion": "Raíz del repo augusto-os (path.join(__dirname,'..','..')) usada como default de repoRoot para los commits de sistema.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/backlog.ts",
+        "simbolo": "BacklogPushResult",
+        "lineas": "63-68",
+        "explicacion": "Tipo de retorno { committed, pushed, branch?, error? } que el nuevo commit+push de documentos de sistema probablemente reutilice para logging no bloqueante.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "commitStep",
+        "lineas": "571-584",
+        "explicacion": "Orden actual: commitStep(step.id, step.desc) ANTES de appendAdr(...) — el bug central. Aquí se debe extraer/reordenar (p.ej. commitStepWithAdrs) y persistir adrIds en STATE.json antes del commit.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "appendProgress",
+        "lineas": "311",
+        "explicacion": "appendProgress(path.join(SYSTEM_DIR,'PROGRESS.md'), ...) tras el merge, nunca comiteado — origen de PROGRESS.md sucio en cada release.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "SYSTEM_DIR",
+        "lineas": "31",
+        "explicacion": "path.join(__dirname,'..','..','system') — base para construir las rutas de DECISIONS.md/PROGRESS.md a comitear.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "commitAndPushBacklog",
+        "lineas": "374",
+        "explicacion": "Invocación del commit+push de BACKLOG.md en la fase de release dentro de try/catch que loguea sin bloquear — lugar/patrón donde insertar el push de DECISIONS/PROGRESS.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/index.ts",
+        "simbolo": "isDirectRun",
+        "lineas": "613-617",
+        "explicacion": "Guard ADR-0081 que permite importar funciones de index.ts (como acquireRunLock) desde tests sin disparar main() — requisito para testear commitStepWithAdrs.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/progress.ts",
+        "simbolo": "appendProgress",
+        "lineas": "4-18",
+        "explicacion": "Escribe system/PROGRESS.md con dedup por '<featureId> completado'; solo escribe a disco, nadie comitea — confirma el punto 5 del diagnóstico.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/state.ts",
+        "simbolo": "adrIds",
+        "lineas": "20",
+        "explicacion": "Step.adrIds = z.array(z.number()).default([]) — campo de STATE.json donde persistir los IDs antes del commit.",
+        "confianza": 1
+      },
+      {
+        "path": "orchestrator/src/adr.test.ts",
+        "simbolo": "appendAdr",
+        "lineas": "150-260",
+        "explicacion": "Tests existentes de appendAdr con FIXTURE de DECISIONS.md; base para el test de no-colisión (3 llamadas seguidas, IDs consecutivos y distintos, orden newest-first). [NO VERIFICADO] rango exacto de líneas.",
+        "confianza": 0.6
+      },
+      {
+        "path": "orchestrator/src/index.test.ts",
+        "simbolo": "acquireRunLock",
+        "lineas": "59-125",
+        "explicacion": "Demuestra el patrón de importar funciones desde index.ts en tests y usar tmpdir — modelo para los nuevos tests de index (commitStepWithAdrs).",
+        "confianza": 1
+      }
+    ],
+    "resumen": "El repo es el orquestador TypeScript de augusto-os. Existen todos los puntos a modificar: reviewer.ts (runReviewer ejecuta `git diff HEAD` sin excludes, con repoRoot/callClaude inyectables), index.ts (commitStep corre antes de appendAdr en ~571-584, y appendProgress deja PROGRESS.md sucio en ~311), adr.ts (appendAdr con filePath y cálculo max+1) y backlog.ts (commitAndPushBacklog/commitAndPush con push de archivo puntual, chequeo de rama default y no-op, más AUGUSTO_OS_ROOT). Los tests ya usan el patrón de repo git en tmpdir con inyección (reviewer.test.ts) y de importación de funciones de index.ts vía guard isDirectRun (index.test.ts). La implementación debe reutilizar el núcleo commitAndPush de backlog.ts para el commit+push de DECISIONS/PROGRESS, extraer commitStepWithAdrs de main, y agregar el warning '[adr] ID duplicado' sin cambiar firmas ni tocar state.ts/targets.ts/autopilot.ts."
+  }
+]
