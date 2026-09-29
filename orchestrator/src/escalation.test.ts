@@ -3,6 +3,9 @@ import { escalateStep, MAX_FIXER_ATTEMPTS, type FixerInvocationResult } from './
 import { setActiveTarget } from './targets.js'
 import type { OrchestratorState, Step } from './state.js'
 import type { VerifyResult } from './verifier.js'
+import type { ProbeOpts } from './limits.js'
+
+vi.mock('./state.js', () => ({ saveState: vi.fn() }))
 
 // buildFixerPrompt reads the active target (name + stack) — 'sistema' has dbModel:'none'
 // so it never needs devDatabaseUrl env expansion (unlike kredy/spensiv/argos).
@@ -132,5 +135,68 @@ describe('escalateStep', () => {
 
     expect(result.ok).toBe(true)
     expect(capturedPrompt).toContain('sin historial detallado')
+  })
+})
+
+describe('escalateStep — usage-limit handling', () => {
+  const limitResult = (): FixerInvocationResult => ({
+    ok: false, usageLimit: true, sessionId: null, output: 'usage limit reached', adrBlocks: [],
+  })
+
+  const fastProbeOpts = (): ProbeOpts => ({
+    probeFn: vi.fn().mockResolvedValue(true),
+    sleepMs: vi.fn().mockResolvedValue(undefined),
+  })
+
+  it('pausa ante límite de uso y reanuda sin consumir un intento (limit → ok)', async () => {
+    const invokeFixerFn = vi.fn()
+      .mockResolvedValueOnce(limitResult())
+      .mockResolvedValueOnce(fixerOk())
+    const runVerifierFn = vi.fn().mockResolvedValue(OK_VERIFY)
+    const state = { ...FAKE_STATE }
+
+    const result = await escalateStep(FAKE_STEP, state, FAKE_STEP.failureHistory, {
+      invokeFixerFn,
+      runVerifierFn,
+      usageLimitOpts: fastProbeOpts(),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(invokeFixerFn).toHaveBeenCalledTimes(2)
+    expect(runVerifierFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('pausa dos veces ante límite y reanuda sin consumir intentos (limit → limit → ok)', async () => {
+    const invokeFixerFn = vi.fn()
+      .mockResolvedValueOnce(limitResult())
+      .mockResolvedValueOnce(limitResult())
+      .mockResolvedValueOnce(fixerOk())
+    const runVerifierFn = vi.fn().mockResolvedValue(OK_VERIFY)
+    const state = { ...FAKE_STATE }
+
+    const result = await escalateStep(FAKE_STEP, state, FAKE_STEP.failureHistory, {
+      invokeFixerFn,
+      runVerifierFn,
+      usageLimitOpts: fastProbeOpts(),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(invokeFixerFn).toHaveBeenCalledTimes(3)
+    expect(runVerifierFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('un fallo real sí consume el intento — dos fallos agotan MAX_FIXER_ATTEMPTS (no regresión)', async () => {
+    const invokeFixerFn = vi.fn().mockResolvedValue(fixerFail())
+    const runVerifierFn = vi.fn()
+
+    const result = await escalateStep(FAKE_STEP, FAKE_STATE, FAKE_STEP.failureHistory, {
+      invokeFixerFn,
+      runVerifierFn,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.finalError).toContain('agotó')
+    expect(invokeFixerFn).toHaveBeenCalledTimes(MAX_FIXER_ATTEMPTS)
+    expect(runVerifierFn).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,150 @@
+[
+  {
+    "objetivo": "Investigar qué existe para implementar: Argos compact desktop — ocultar columnas de baja prioridad en la tabla de posiciones",
+    "archivos": [
+      "src/features/portfolio/components/GroupedPositionsTable.jsx",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/features/portfolio/components/MobilePositionsList.jsx",
+      "src/config/layoutFlags.js",
+      "SPEC-compact-desktop-overview-redesign.md",
+      "tailwind.config.js",
+      "HANDOFF-iconos-tabla.md"
+    ],
+    "patrones": [
+      "Definición declarativa de columnas vía array COLS con metadata por columna (key, label, minW, align, sortable, defaultDir) — el patrón natural para agregar priority: 'low' es extender cada objeto de COLS.",
+      "Render de headers/celdas por map/orden fijo sobre COLS y por filas de <td> escritas manualmente en el mismo orden que COLS — ocultar columnas exige tocar TANTO headers como cada <td> (position rows, group rows y footer).",
+      "Uso de clases Tailwind con variantes de breakpoint (md:, lg:) para responsive CSS-only; el patrón a seguir es agregar compact:hidden a los <th>/<td> de baja prioridad.",
+      "Uso del flag de reversibilidad COMPACT_OVERVIEW_ENABLED importado desde src/config/layoutFlags.js para ramificar className (no reemplazar) — requisito no-negociable de la spec.",
+      "Ancho mínimo de tabla fijado en JS vía style={{ minWidth: MIN_W }} donde MIN_W = suma de col.minW; para compact se requiere un MIN_W_COMPACT alternativo.",
+      "Guard de montaje/props con defaultTypeOf/defaultStrategyOf exportados y reusados por otros componentes — cambiar COLS no debe romper esos exports."
+    ],
+    "dependencias": [
+      "react (memo, useMemo, useState)",
+      "lucide-react (ChevronUp/ChevronDown/ChevronsUpDown/Search/Plus)",
+      "@/utils/formatters (formatARS, formatUSD, formatNumber)",
+      "@/components/ui (MoneyValue)",
+      "@/components/common/AssetLogo",
+      "@/features/portfolio/hooks/useBondPrices (isBonoPesos, isBonoHardDollar)",
+      "tailwindcss (breakpoints; se planea agregar screens.compact por max-height)",
+      "recharts (usado en el bloque desktop compartido, no en la tabla)"
+    ],
+    "riesgos": [
+      "Las filas de <td> están escritas manualmente en orden idéntico a COLS, incluidos group headers y tfoot (celdas vacías con [0,1,2].map). Ocultar columns solo en COLS sin tocar cada <td> desalinea header vs celdas.",
+      "MIN_W se usa como style minWidth inline en <table>; ocultar columnas por CSS deja el minWidth en ~995px y el scroll horizontal persiste — se necesita un MIN_W_COMPACT calculado en JS.",
+      "El sort usa getSortValue(pos, key) mapeado por string de key (no por índice), por lo que columnas ocultas no rompen el ordenamiento; pero handleSort hace COLS.find(c => c.key === key) → si se quitan entradas de COLS sí se rompería.",
+      "El componente se exporta por default como PositionsTable (naming histórico) aunque el archivo sea GroupedPositionsTable.jsx — no confundir con el PositionsTable legacy eliminado.",
+      "MobilePositionsList y componentes strategy (RebalanceAlerts, TargetAllocation) importan símbolos desde este archivo (defaultTypeOf/defaultStrategyOf y grupos); cualquier refactor debe preservar esos exports.",
+      "Debe respetarse la máscara de saldos (MoneyValue / useBalanceVisibility): P. Prom. usa MoneyValue, así que ocultarla por breakpoint no debe alterar el toggle de visibilidad en el tier full.",
+      "layoutFlags.js ya existe con COMPACT_OVERVIEW_ENABLED = true; el implementador debe ramificar sobre ese flag, no introducir otro mecanismo de toggle.",
+      "[NO VERIFICADO] No confirmé el contenido de tailwind.config.js ni si ya existe el breakpoint screens.compact en este checkout (la spec M1 lo describe como trabajo a hacer)."
+    ],
+    "evidencia": [
+      {
+        "path": "SPEC-compact-desktop-overview-redesign.md",
+        "simbolo": "M4",
+        "lineas": "128-142",
+        "explicacion": "Módulo de la spec que define exactamente esta tarea: marcar pprom y diapct como priority:'low' en COLS, aplicar compact:hidden a th/td, recalcular MIN_W_COMPACT y mantener detalle en PositionDetailSheet. Es el contrato de implementación.",
+        "confianza": 0.97
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "COLS",
+        "lineas": "78-88",
+        "explicacion": "Array con las 10 columnas (ticker, cant, pprom, pactual, valor, diapct, diastr, pnlstr, pnlpct, peso), cada una con minW/align/sortable. Es el único lugar donde agregar priority:'low' a pprom y diapct.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "MIN_W",
+        "lineas": "88",
+        "explicacion": "const MIN_W = COLS.reduce((s,c) => s + c.minW, 0) ≈ 995px. Se consume como minWidth inline en <table>; es lo que hay que suplementar con un MIN_W_COMPACT al ocultar columnas.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "NC",
+        "lineas": "87",
+        "explicacion": "NC = COLS.length usado en colSpan de loading/empty rows y en paddingRight del último th; si cambia el número de columnas visibles, revisar estos usos de índices.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "minWidth: MIN_W",
+        "lineas": "321-327",
+        "explicacion": "style={{ minWidth: MIN_W, width:'100%'... }} sobre <table>. Es donde debe entrar el valor compact para eliminar el scroll horizontal.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "getSortValue",
+        "lineas": "91-103",
+        "explicacion": "Mapea el ordenamiento por key string (case 'diapct'...), no por índice de columna → ocultar columnas por CSS no rompe el orden, aunque la columna esté oculta.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "handleSort",
+        "lineas": "168-176",
+        "explicacion": "Usa COLS.find(c => c.key === key) y defaultDir; si en vez de marcar priority se eliminan entradas de COLS se rompe el default de dirección de sort. Confirma que se debe marcar, no borrar.",
+        "confianza": 0.88
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "TH_SORT",
+        "lineas": "112-117",
+        "explicacion": "Clase base compartida de <th> con sticky top-0; el header se genera con COLS.map, por lo que aquí se combina compact:hidden para las columnas low. Además hay un TH sin sort.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "TD_R",
+        "lineas": "123-126",
+        "explicacion": "Clase base de celdas numéricas a la derecha (TD_R = TD_BASE + TD_PY + text-right). Las celdas de P. Prom. y Día % existen en 3 lugares (position rows, group header vacíos, tfoot vacíos) y todas deben recibir compact:hidden.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "PositionsTable",
+        "lineas": "144-596",
+        "explicacion": "Componente principal (memo). Export default cuando runtime, exporta defaultTypeOf/defaultStrategyOf/TYPE_GROUPS/STRATEGY_GROUPS reusados por MobilePositionsList y strategy/*; refactor debe preservarlos.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/config/layoutFlags.js",
+        "simbolo": "COMPACT_OVERVIEW_ENABLED",
+        "lineas": "1",
+        "explicacion": "Flag de reversibilidad ya creado (valor true). El componente debe importarlo y ramificar className en vez de reemplazar, según requisito no-negociable de la spec.",
+        "confianza": 0.96
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "GroupedPositionsTable",
+        "lineas": "7, 175, 289",
+        "explicacion": "Call-site desktop real de la tabla (import + usos). Aquí se pasa currency/onRowClick y se define el contenedor flex-1 min-h-0 de la tabla; es el contexto de layout donde debe verse el efecto compact.",
+        "confianza": 0.88
+      },
+      {
+        "path": "src/features/portfolio/components/MobilePositionsList.jsx",
+        "simbolo": "GroupedPositionsTable",
+        "lineas": "14, 131",
+        "explicacion": "Consumidor mobile que importa tipos/grupos desde el mismo archivo. Confirma por qué los cambios deben ser desktop-only (compact:*) y no romper exports compartidos.",
+        "confianza": 0.82
+      },
+      {
+        "path": "HANDOFF-iconos-tabla.md",
+        "simbolo": "GroupedPositionsTable.jsx",
+        "lineas": "24, 99",
+        "explicacion": "Nota histórica que documenta decisiones de la tabla (whitespace-nowrap, iconos) y su ruta; útil como contexto de por qué los números no deben partirse al reducir ancho.",
+        "confianza": 0.7
+      },
+      {
+        "path": "tailwind.config.js",
+        "simbolo": "screens",
+        "lineas": "[NO VERIFICADO]",
+        "explicacion": "[NO VERIFICADO] La spec (M1) indica agregar screens.compact = { raw: '(max-height: 820px)' } preservando defaults. No leí el archivo para confirmar el estado actual ni si el breakpoint compact ya existe en este checkout.",
+        "confianza": 0.3
+      }
+    ],
+    "resumen": "La implementación de 'ocultar columnas de baja prioridad en compact' está completamente especificada en SPEC-compact-desktop-overview-redesign.md (Módulo M4) y gira en torno a un único componente vivo: src/features/portfolio/components/GroupedPositionsTable.jsx. Allí el array COLS define las 10 columnas y MIN_W fija el ancho mínimo de la tabla, por lo que hay que marcar pprom y diapct como priority:'low', aplicar compact:hidden a cada <th>/<td> (incluidas las filas de grupo y el tfoot) y exponer un MIN_W alternativo. El flag de reversibilidad src/config/layoutFlags.js (COMPACT_OVERVIEW_ENABLED) ya existe y debe usarse para ramificar className; el ordenamiento funciona por key de columna (no por índice), así que ocultar columnas no lo rompe. Falta confirmar el estado de tailwind.config.js respecto del breakpoint screens.compact."
+  }
+]

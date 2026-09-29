@@ -1,0 +1,291 @@
+[
+  {
+    "objetivo": "Mapa del repo para el fix 'hero chart con alto propio' dentro del rediseño compact desktop del Overview: identificar estructura, archivos, patrones, dependencias y riesgos.",
+    "archivos": [
+      "SPEC-compact-desktop-overview-redesign.md",
+      "tailwind.config.js",
+      "src/config/layoutFlags.js",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/features/portfolio/components/PortfolioHeroChart.jsx",
+      "src/features/portfolio/components/GroupedPositionsTable.jsx",
+      "src/features/portfolio/components/AllocationPanel.jsx",
+      "src/features/portfolio/components/MobilePositionsList.jsx",
+      "src/components/ui/KpiCard.jsx",
+      "src/components/ui/index.js",
+      "src/hooks/useSidebarState.js",
+      "src/hooks/useBalanceVisibility.js"
+    ],
+    "patrones": [
+      "Layout responsive CSS-only con prefijos Tailwind `md:`/`lg:` (ver `hidden md:flex`, `md:hidden`); el rediseño agrega el prefijo de altura `compact:` (raw media query max-height:820px) combinado siempre como `compact:md:`/`compact:lg:`.",
+      "Reversibilidad por flag: cada componente tocado importa `COMPACT_OVERVIEW_ENABLED` desde `src/config/layoutFlags.js` y rama con ternario entre className original y el nuevo, en vez de reemplazar.",
+      "Alturas fijas de tier: hero con `md:h-[300px]` (full) y `compact:md:h-[220px]` (compact), en lugar de depender del stretch del grid.",
+      "Censura de saldos via `MoneyValue` + `useBalanceVisibility` + constante `HIDDEN = '••••••'` (invariante no negociable).",
+      "Tema oscuro con tokens CSS (`--surface-*`, `--border`, `--teal`, `--ink*`) y constantes JS de color (TEAL/CORAL/PERIWINKLE/SLATE) en vez de utilidades de color.",
+      "Gráficos recharts dentro de `ResponsiveContainer width=\"100%\" height=\"100%\"` con `isAnimationActive={false}` (invariante).",
+      "Componentes por feature en `src/features/<feature>/components`, hooks en `hooks/`, servicios en `services/`; alias de import `@/`."
+    ],
+    "dependencias": [
+      "react 18.2",
+      "react-dom",
+      "react-router-dom 6",
+      "recharts ^2.10 (ComposedChart, Area, Line, ResponsiveContainer)",
+      "tailwindcss ^3.3.2 (con `defaultTheme.screens` para preservar sm/md/lg/xl/2xl al agregar `compact`)",
+      "lucide-react (iconos)",
+      "@tanstack/react-query",
+      "vite ^5 / vitest (build y tests)",
+      "clsx o helper de clases (no verificado el nombre exacto) [NO VERIFICADO]"
+    ],
+    "riesgos": [
+      "La infraestructura (M1) ya está puesta: `tailwind.config.js` define `screens.compact` y `layoutFlags.js` exporta `COMPACT_OVERVIEW_ENABLED = true`, pero el grep de 'compact' sobre `src/**/*.{js,jsx}` devolvió 0 matches → ningún componente consume aún el flag ni usa clases `compact:`. El fix del hero (M2) NO está aplicado todavía.",
+      "El wrapper `desktopEl` de PortfolioHeroChart no tiene `self-start` ni altura propia: sigue heredando `align-items: stretch` del grid, por lo que el hero se estira al alto de la columna derecha (causa raíz del 'cuadro muy grande').",
+      "Riesgo de pisotear mobile/desktop-full: `compact:` debe usarse solo combinado con `md:`/`lg:`; nunca solo, para no afectar `md:hidden`.",
+      "Revert con flag exige ramas if/ternario (más código) en cada componente; una implementación directa de clases haría el revert no trivial.",
+      "Con `COMPACT_OVERVIEW_ENABLED = false` debe volver al comportamiento de stretch de hoy: caso a verificar explícitamente, no asumir.",
+      "El cálculo de columnas de la tabla (`COLS`/`MIN_W`) puede consumirse en JS, no solo CSS; ocultar columnas con `compact:hidden` podría no alcanzar y requerir un `MIN_W_COMPACT` paralelo. [NO VERIFICADO la forma exacta de consumo]",
+      "`useSidebarState` hoy deriva el estado inicial de `localStorage` ('sidebarExpanded'); M5 pide evaluar `matchMedia('(max-height: 820px)')` una sola vez al montar sin listener continuo.",
+      "No se introducen breakpoints de ancho nuevos ni hooks de `window.innerHeight` con resize listener: mantener CSS puro."
+    ],
+    "evidencia": [
+      {
+        "path": "SPEC-compact-desktop-overview-redesign.md",
+        "simbolo": "PortfolioHeroChart",
+        "lineas": "1-200",
+        "explicacion": "SPEC que documenta el diagnóstico y las decisiones; el punto clave es que el hero se estira por el align-items:stretch del grid y no por su contenido, y M2 pide darle alto propio (`md:h-[300px]` / `compact:md:h-[220px]`) más `items-start`/`self-start` en el grid.",
+        "confianza": 0.95
+      },
+      {
+        "path": "SPEC-compact-desktop-overview-redesign.md",
+        "simbolo": "COMPACT_OVERVIEW_ENABLED",
+        "lineas": "70-110",
+        "explicacion": "La SPEC define el flag de revert total y el patrón de rama ternaria en cada componente para poder apagar el rediseño sin cirugía de git.",
+        "confianza": 0.9
+      },
+      {
+        "path": "tailwind.config.js",
+        "simbolo": "compact",
+        "lineas": "150-160",
+        "explicacion": "Ya existe el screen custom `compact: { raw: '(max-height: 820px)' }` dentro de `theme.extend.screens`, con spread de `defaultTheme.screens` (importado al tope). M1 parece aplicado.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/config/layoutFlags.js",
+        "simbolo": "COMPACT_OVERVIEW_ENABLED",
+        "lineas": "1",
+        "explicacion": "Archivo nuevo con `export const COMPACT_OVERVIEW_ENABLED = true;` — la única definición del flag. Su presencia confirma que la infraestructura de revert está lista.",
+        "confianza": 0.98
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "desktopEl",
+        "lineas": "289-370",
+        "explicacion": "Wrapper desktop del hero: `hidden md:flex ... flex-col` sin clase de altura ni self-start. Es el nodo exacto a modificar (agregar `md:h-[300px]` / `compact:md:h-[220px]` y/o `self-start`).",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "min-h-[90px]",
+        "lineas": "356-360",
+        "explicacion": "El área del chart es `relative mt-2 px-2 flex-1 min-h-[90px]`; al fijar el alto del contenedor queda acotada por flex-1 sin tocar renderChart/ResponsiveContainer.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "renderChart",
+        "lineas": "357-362",
+        "explicacion": "Función que monta el chart ('heroFill-d') dentro de ResponsiveContainer; se invoca en el bloque de área para desktop. Punto de referencia del render del hero.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "HIDDEN",
+        "lineas": "44",
+        "explicacion": "Constante '••••••' usada por el tooltip desktop; parte de la censura de saldos que debe permanecer intacta.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "DashboardOverview",
+        "lineas": "68-110",
+        "explicacion": "Componente contenedor; importa PortfolioHeroChart, GroupedPositionsTable, AllocationPanel y KpiCard. Es donde vive el grid del bloque desktop a ajustar (`items-start`/`self-start`).",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "PortfolioHeroChart",
+        "lineas": "6",
+        "explicacion": "Import local del hero (`import PortfolioHeroChart from './PortfolioHeroChart';`), confirma el path relativo del componente.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/hooks/useSidebarState.js",
+        "simbolo": "useSidebarState",
+        "lineas": "5-12",
+        "explicacion": "El estado inicial de `sidebarExpanded` se deriva de localStorage; M5 propone además evaluar `matchMedia('(max-height: 820px)')` una sola vez al montar para arrancar colapsado en compact.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "COLS",
+        "lineas": "[NO VERIFICADO]",
+        "explicacion": "La SPEC indica que `COLS` define 10 columnas y `MIN_W` un ancho mínimo fijo (~995px); M4 agrega `priority:'low'` a `pprom` y `diapct` con `compact:hidden`. No pude confirmar las líneas exactas por resultados de grep omitidos.",
+        "confianza": 0.4
+      }
+    ],
+    "resumen": "El repo es una app React 18 + Vite + Tailwind 3 (portfolio tracker 'Argos') con features aisladas en src/features. El fix del 'cuadro muy grande' está especificado en SPEC-compact-desktop-overview-redesign.md y corresponde al módulo M2: darle alto propio al wrapper `desktopEl` de PortfolioHeroChart (`md:h-[300px]` full / `compact:md:h-[220px]` compact) y quitar el stretch del grid con `items-start`/`self-start`. La infraestructura ya existe en el repo (screen `compact` en tailwind.config.js y flag `COMPACT_OVERVIEW_ENABLED` en src/config/layoutFlags.js), pero un grep de 'compact' sobre src devolvió 0 matches: ningún componente aplica todavía las clases ni consume el flag, por lo que M2 está pendiente. Se debe preservar el patrón de revert por flag (rama ternaria), el uso de tokens CSS, la censura de saldos y el CSS-only (sin hooks de resize)."
+  },
+  {
+    "objetivo": "Investigar qué existe para implementar: Argos compact desktop — hero chart con alto propio (fix del \"cuadro muy grande\")",
+    "archivos": [
+      "SPEC-compact-desktop-overview-redesign.md",
+      "src/config/layoutFlags.js",
+      "tailwind.config.js",
+      "src/features/portfolio/components/PortfolioHeroChart.jsx",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/features/portfolio/components/GroupedPositionsTable.jsx",
+      "src/features/portfolio/components/AllocationPanel.jsx",
+      "src/components/ui/KpiCard.jsx",
+      "src/hooks/useSidebarState.js"
+    ],
+    "patrones": [
+      "Layout desktop separado por clases `hidden md:flex` / `md:hidden` para mobile — no tocar la rama mobile.",
+      "Breakpoint custom por altura de viewport: `screens.compact = { raw: '(max-height: 820px)' }` ya agregado en tailwind.config.js, combinado siempre como `compact:md:...`.",
+      "Flag de reversibilidad `COMPACT_OVERVIEW_ENABLED` en src/config/layoutFlags.js, con rama ternaria de className (no reemplazo directo) para poder apagar el rediseño sin tocar git.",
+      "Hero chart recibe alto propio en el wrapper `desktopEl` (hoy altura implícita) vía `md:h-[300px]` / `compact:md:h-[220px]`, dejando `flex-1 min-h-[90px]` en el área del chart para que ResponsiveContainer se adapte.",
+      "Grid hero+kpi pasa a `items-start` o `self-start` en el hero para que deje de heredar el stretch de la columna derecha (que ya tiene `self-start`).",
+      "Invariantes: `isAnimationActive={false}` en recharts, tokens CSS (--surface-*, --border), HIDDEN/MoneyValue/useBalanceVisibility intactos.",
+      "El ancho mínimo de tabla se consume como `style={{ minWidth: MIN_W }}` sobre el <table>, con cálculo JS `MIN_W = COLS.reduce((s,c)=>s+c.minW,0)` — para columnas ocultas en compact probablemente haga falta un valor JS alternativo, no solo CSS."
+    ],
+    "dependencias": [
+      "recharts (ComposedChart, Area, Line, ResponsiveContainer, Tooltip)",
+      "tailwindcss + tailwindcss/defaultTheme (spread de screens)",
+      "react (useMemo, useState)",
+      "lucide-react (iconos en KpiCard y tabla)",
+      "@/hooks/useBalanceVisibility",
+      "@/components/ui (MoneyValue, Card, Badge, Sparkline)"
+    ],
+    "riesgos": [
+      "tailwind.config.js YA tiene el breakpoint `compact` agregado (usa `import defaultTheme from 'tailwindcss/defaultTheme'` y luego `...defaultTheme.screens`); verificar que el merge no duplique la clave si se re-implementa M1.",
+      "src/config/layoutFlags.js YA existe con `COMPACT_OVERVIEW_ENABLED = true`, pero no encontré (grep `config/layoutFlags` en *.jsx devolvió 0 resultados) ningún componente que lo importe todavía — el flag existe pero las ramas por componente pueden no estar cableadas. [NO VERIFICADO si algún archivo lo importa con otra ruta]",
+      "Cambiar el hero a altura fija puede romper el caso full desktop si no se condiciona con `COMPACT_OVERVIEW_ENABLED`; el SPEC exige pixel-parity en viewport ≥820px y con flag en false.",
+      "GroupedPositionsTable usa `minWidth: MIN_W` inline sobre el <table>; ocultar columnas con `compact:hidden` sin recalcular MIN_W deja el min-width sobredimensionado y mantiene scroll horizontal (el SPEC lo marca explícitamente como punto a revisar).",
+      "Ordenamiento de la tabla depende de `sortKey`/`handleSort(col.key)` (no de índices), lo que reduce riesgo al ocultar columnas, pero las celdas deben seguir renderizándose ocultas para no romper el orden de columnas. [NO VERIFICADO el render de celdas/td en detalle]",
+      "useSidebarState persiste en localStorage (`sidebarExpanded`); el default por compact debe respetar el toggle manual del usuario y no un listener continuo de resize.",
+      "El `<th>` usa `paddingRight: i === NC - 1 ? 16` — si se ocultan columnas con CSS el índice NC sigue contando las 10, ok, pero cualquier lógica basada en índices visibles debe revisarse."
+    ],
+    "evidencia": [
+      {
+        "path": "SPEC-compact-desktop-overview-redesign.md",
+        "simbolo": "M2 — Hero chart: alto acotado, no heredado del sibling",
+        "lineas": "98-116",
+        "explicacion": "Módulo del SPEC que define exactamente el fix del hero: grid a items-start/self-start, wrapper desktopEl a md:h-[300px] y compact:md:h-[220px], área del chart flex-1 sin tocar renderChart/ResponsiveContainer.",
+        "confianza": 0.95
+      },
+      {
+        "path": "SPEC-compact-desktop-overview-redesign.md",
+        "simbolo": "COMPACT_OVERVIEW_ENABLED",
+        "lineas": "70-84",
+        "explicacion": "Define el flag de reversibilidad nivel 1 y el patrón de rama ternaria de className que cada componente tocado debe seguir.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "desktopEl",
+        "lineas": "289-296",
+        "explicacion": "Wrapper desktop del hero chart: `hidden md:flex relative overflow-hidden rounded-card bg-argos-surface flex-col` SIN altura propia ni self-start — es el nodo donde hay que agregar `md:h-[300px] compact:md:h-[220px]`.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/PortfolioHeroChart.jsx",
+        "simbolo": "relative mt-2 px-2 flex-1 min-h-[90px]",
+        "lineas": "357-359",
+        "explicacion": "Contenedor del área del chart (flex-1 min-h-[90px] + renderChart('heroFill-d')); se adapta solo al alto fijo del wrapper, no requiere cambios según el SPEC.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "grid grid-cols-1 lg:grid-cols-[65fr_35fr] gap-3",
+        "lineas": "264-290",
+        "explicacion": "Grid desktop hero(65%)+columna derecha(35%): el hero no tiene self-start y hereda el stretch del grid, causa del 'cuadro muy grande'. Aquí va items-start o self-start.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "flex flex-col gap-2 self-start",
+        "lineas": "281",
+        "explicacion": "Columna derecha (KPI grid + AllocationPanel) ya tiene self-start; es la que define el alto natural que estira al hero.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/DashboardOverview.jsx",
+        "simbolo": "hidden md:flex flex-col gap-2 px-6 lg:px-8 py-3 flex-1 min-h-0",
+        "lineas": "258",
+        "explicacion": "Raíz del layout desktop del Overview; padding/gaps a compactar en compact (M6) y contenedor de flex-1 de la tabla.",
+        "confianza": 0.85
+      },
+      {
+        "path": "tailwind.config.js",
+        "simbolo": "compact: { raw: '(max-height: 820px)' }",
+        "lineas": "100-103",
+        "explicacion": "Breakpoint por altura YA presente en screens (con ...defaultTheme.screens preservando sm/md/lg/xl/2xl) — la infraestructura de M1 está implementada.",
+        "confianza": 0.95
+      },
+      {
+        "path": "tailwind.config.js",
+        "simbolo": "import defaultTheme from 'tailwindcss/defaultTheme'",
+        "lineas": "1",
+        "explicacion": "Import ESM usado para el spread de screens; el SPEC original proponía require(...), la implementación real usa import.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/config/layoutFlags.js",
+        "simbolo": "COMPACT_OVERVIEW_ENABLED",
+        "lineas": "1",
+        "explicacion": "El flag de reversibilidad ya existe y está en true; los componentes deben ramar por él en vez de reemplazar clases.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "COLS",
+        "lineas": "63-75",
+        "explicacion": "Definición de las 10 columnas con minW por columna; M4 propone agregar priority:'low' a pprom y diapct y usar compact:hidden.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "MIN_W",
+        "lineas": "76-77",
+        "explicacion": "MIN_W = Σ minW (~995px) usado inline como minWidth del <table>; clave para el fix de scroll horizontal en compact.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/features/portfolio/components/GroupedPositionsTable.jsx",
+        "simbolo": "minWidth: MIN_W",
+        "lineas": "320-326",
+        "explicacion": "El <table> aplica minWidth: MIN_W; si se ocultan columnas por CSS, este valor JS sigue siendo 995px y el scroll horizontal persiste.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/components/ui/KpiCard.jsx",
+        "simbolo": "className=\"flex flex-col gap-1 p-2.5\"",
+        "lineas": "131",
+        "explicacion": "Card del modo default de KpiCard con p-2.5; M3 lo baja a compact:p-2 y oculta el Sparkline en compact.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/portfolio/components/AllocationPanel.jsx",
+        "simbolo": "paddingTop: 10",
+        "lineas": "178-187",
+        "explicacion": "StatBar de objetivo con borderTop y paddingTop 10; M3 lo reduce a 6 en compact, sin tocar donut (100x100) ni leyenda.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/hooks/useSidebarState.js",
+        "simbolo": "sidebarExpanded",
+        "lineas": "5-10",
+        "explicacion": "Estado inicial leído de localStorage (STORAGE_KEY 'sidebarExpanded'); M5 propone default colapsado vía matchMedia('(max-height: 820px)') una sola vez al montar.",
+        "confianza": 0.85
+      }
+    ],
+    "resumen": "El repo ya tiene la infraestructura del rediseño compact desktop: el breakpoint por altura `compact: { raw: '(max-height: 820px)' }` está en tailwind.config.js y el flag de reversibilidad `COMPACT_OVERVIEW_ENABLED` existe en src/config/layoutFlags.js (en true), aunque no detecté ningún componente que todavía lo importe. El fix puntual del 'cuadro muy grande' vive en dos nodos: el grid `lg:grid-cols-[65fr_35fr]` de DashboardOverview.jsx (donde el hero se estira por el stretch default) y el wrapper `desktopEl` de PortfolioHeroChart.jsx (línea ~291), que necesita alto propio `md:h-[300px]` + `compact:md:h-[220px]` en vez de heredarlo del sibling con `self-start`. El SPEC-compact-desktop-overview-redesign.md documenta M1-M6 con criterios de aceptación, invariantes y estrategia de revert por módulo, y los archivos secundarios (KpiCard, AllocationPanel, GroupedPositionsTable, useSidebarState) ya están identificados con las líneas exactas a tocar."
+  }
+]

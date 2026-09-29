@@ -45,6 +45,7 @@ export interface ClaudeJsonOutput {
   }
   duration_ms?: number
   is_error?: boolean
+  api_error_status?: number
 }
 
 export interface ParsedClaudeOutput {

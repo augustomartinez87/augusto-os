@@ -32,6 +32,91 @@ describe('isUsageLimitError', () => {
   })
 })
 
+// ── isUsageLimitError — F-0065 acceptance fixtures ────────────────────────────
+
+describe('isUsageLimitError — structured JSON (F-0065)', () => {
+  // FALSE: is_error:false siempre devuelve false sin importar qué haya en los campos
+  it('does NOT flag is_error:false with 0.429 in total_cost_usd', () => {
+    const output = '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.429,"result":"ok"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  it('does NOT flag is_error:false with 429 in duration_ms', () => {
+    const output = '{"type":"result","is_error":false,"duration_ms":429,"result":"All done"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  it('does NOT flag is_error:false even when result mentions rate limit', () => {
+    const output = '{"type":"result","is_error":false,"result":"Implemented rate limit checker for the API"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  // TRUE: is_error:true con api_error_status:429
+  it('flags is_error:true with api_error_status:429', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: '' })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: is_error:true con texto de session limit en result (sin api_error_status)
+  it('flags is_error:true with session limit text in result and no api_error_status', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: null, result: "You've hit your session limit · resets 4:40pm" })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: is_error:true con ambos api_error_status:429 y session limit text
+  it('flags is_error:true with both api_error_status:429 and session limit text', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: "You've hit your session limit" })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: JSON mezclado con basura de stderr (all:true en execa)
+  it('handles garbage before/after JSON — tolerant to all:true mixed output', () => {
+    const json = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: '' })
+    const output = `\nsome stderr line\nWarning: token budget\n${json}\nmore output after\n`
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: stderr crudo sin objeto result JSON — cae al fallback de texto y matchea
+  // 'HTTP 429'. Es el único acceptance de F-0065 que llega a `true` por la rama de
+  // texto (el resto del grupo lo hace vía JSON con is_error:true).
+  it('flags raw stderr with HTTP 429 when there is no result JSON to parse', () => {
+    const stderr = 'node:internal/process/promises\nError: request failed\n  status: HTTP 429 Too Many Requests\n    at ClaudeClient.send'
+    expect(isUsageLimitError(stderr)).toBe(true)
+  })
+
+  // FALSE: garbage before JSON pero is_error:false — nunca pausa
+  it('does NOT flag garbage + is_error:false JSON even if garbage mentions rate limit', () => {
+    const json = JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.429, result: 'ok' })
+    const output = `rate limit warning in stderr\n${json}`
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  // FALSE: llaves sueltas DENTRO del campo result no deben truncar el objeto.
+  // Regresión de los intentos 1 y 2: el escaneo de llaves no era string-aware,
+  // un `}` en result cortaba el candidato, el parse fallaba y el fallback de
+  // texto matcheaba "rate limit" → falso positivo con is_error:false.
+  it('does NOT flag is_error:false when result text contains stray braces + limit phrase', () => {
+    const json = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      result: 'agregué rate limit check, usá } para cerrar el bloque { así',
+    })
+    expect(isUsageLimitError(json)).toBe(false)
+  })
+
+  // TRUE: mismas llaves sueltas en result, pero is_error:true + api_error_status:429.
+  // Confirma que el escaneo string-aware tampoco rompe el camino positivo.
+  it('still flags is_error:true with api_error_status:429 when result has stray braces', () => {
+    const json = JSON.stringify({
+      type: 'result',
+      is_error: true,
+      api_error_status: 429,
+      result: 'límite alcanzado mientras escribía `if (x) { }`',
+    })
+    expect(isUsageLimitError(json)).toBe(true)
+  })
+})
+
 // ── isContextWindowError ───────────────────────────────────────────────────────
 
 describe('isContextWindowError', () => {
@@ -223,5 +308,98 @@ describe('parseResetTime', () => {
     // just over 4h (called near :59) to exactly 5h (called at :00).
     expect(diffHours).toBeGreaterThan(4)
     expect(diffHours).toBeLessThanOrEqual(5)
+  })
+})
+
+// ── parseResetTime — formatos 12h (F-0065 step 3) ──────────────────────────────
+
+describe('parseResetTime — 12h formats', () => {
+  it('parsea "resets 4:40pm" → 16:40', () => {
+    const result = parseResetTime("You've hit your session limit · resets 4:40pm")
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('parsea "resets at 4:40 PM" (case-insensitive, espacio antes de PM) → 16:40', () => {
+    const result = parseResetTime('Your session resets at 4:40 PM')
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('parsea "resets 12:05pm" → 12:05', () => {
+    const result = parseResetTime('resets 12:05pm')
+    expect(result.getHours()).toBe(12)
+    expect(result.getMinutes()).toBe(5)
+  })
+
+  it('parsea "resets 12am" → 00:00', () => {
+    const result = parseResetTime('resets 12am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('cruce de medianoche: "resets 12am" siempre da mañana en 00:00 (midnight de hoy ya pasó)', () => {
+    // 12am = 00:00. El momento actual siempre es > 00:00 del día de hoy,
+    // así que la regla "hora ya pasada → día siguiente" siempre aplica.
+    const result = parseResetTime('resets 12am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(0)
+    expect(result.getTime()).toBeGreaterThan(Date.now())
+  })
+
+  // Regresión del shadowing (intentos 1 y 2): hora 12h de DOS dígitos con "at" y
+  // meridiano NO debe matchear la regex 24h. Sin el negative lookahead, "resets at
+  // 11:00pm" devolvía 11:00 en vez de 23:00 (error de 12h). Los tests previos solo
+  // usaban hora de un dígito ("4:40"), que nunca matchea \d{2}:\d{2}, ocultando el bug.
+  it('regresión shadowing — "resets at 11:00pm" (12h, dos dígitos, con at) → 23:00', () => {
+    const result = parseResetTime("You've hit your session limit · resets at 11:00pm")
+    expect(result.getHours()).toBe(23)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('regresión shadowing — "resets at 04:40pm" (cero a la izquierda) → 16:40', () => {
+    const result = parseResetTime('resets at 04:40pm')
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('regresión shadowing — "resets at 12:30am" (dos dígitos, medianoche) → 00:30', () => {
+    const result = parseResetTime('resets at 12:30am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(30)
+  })
+
+  // Regresión: los formatos previos siguen funcionando
+
+  it('regresión — 24h "resets at 14:00" sigue parseándose correctamente', () => {
+    const result = parseResetTime('resets at 14:00')
+    expect(result.getHours()).toBe(14)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('regresión — retry-after en segundos sigue parseándose correctamente', () => {
+    const before = Date.now()
+    const result = parseResetTime('retry-after: 120')
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + 119_000)
+    expect(result.getTime()).toBeLessThanOrEqual(before + 121_000)
+  })
+})
+
+// ── handleUsageLimit — explicit-time path con formatos 12h ────────────────────
+
+describe('handleUsageLimit — explicit-time path con formatos 12h', () => {
+  it('toma el explicit-time path para "resets 4:40pm" (sleepUntilFn se llama)', async () => {
+    const state = makeState()
+    let sleptUntil: Date | null = null
+    const probeFn = async () => true
+    const sleepUntilFn = async (d: Date) => { sleptUntil = d }
+
+    await handleUsageLimit("You've hit your session limit · resets 4:40pm", state, { probeFn, sleepMs: noSleep, sleepUntilFn })
+
+    expect(sleptUntil).not.toBeNull()
+    const d = sleptUntil as unknown as Date
+    expect(d.getHours()).toBe(16)
+    expect(d.getMinutes()).toBe(40)
+    expect(state.pausedUntil).toBeNull()
   })
 })

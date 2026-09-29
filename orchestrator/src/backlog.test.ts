@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { execa } from 'execa'
@@ -149,7 +149,7 @@ describe('commitAndPushBacklog', () => {
 
   async function seedRepo() {
     const sysDir = path.join(repoPath, 'system')
-    await execa('mkdir', ['-p', sysDir])
+    mkdirSync(sysDir, { recursive: true })
     writeFileSync(path.join(sysDir, 'BACKLOG.md'), FIXTURE, 'utf-8')
     await execa('git', ['add', 'system/BACKLOG.md'], { cwd: repoPath })
     await execa('git', ['commit', '-m', 'initial backlog'], { cwd: repoPath })
@@ -225,7 +225,7 @@ describe('pushBacklogFile', () => {
     await execa('git', ['config', 'user.name', 'Test'], { cwd: repoPath })
 
     const sysDir = path.join(repoPath, 'system')
-    await execa('mkdir', ['-p', sysDir])
+    mkdirSync(sysDir, { recursive: true })
     writeFileSync(path.join(sysDir, 'BACKLOG.md'), FIXTURE, 'utf-8')
     await execa('git', ['add', 'system/BACKLOG.md'], { cwd: repoPath })
     await execa('git', ['commit', '-m', 'initial backlog'], { cwd: repoPath })
