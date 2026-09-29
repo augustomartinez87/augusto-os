@@ -76,6 +76,14 @@ describe('isUsageLimitError — structured JSON (F-0065)', () => {
     expect(isUsageLimitError(output)).toBe(true)
   })
 
+  // TRUE: stderr crudo sin objeto result JSON — cae al fallback de texto y matchea
+  // 'HTTP 429'. Es el único acceptance de F-0065 que llega a `true` por la rama de
+  // texto (el resto del grupo lo hace vía JSON con is_error:true).
+  it('flags raw stderr with HTTP 429 when there is no result JSON to parse', () => {
+    const stderr = 'node:internal/process/promises\nError: request failed\n  status: HTTP 429 Too Many Requests\n    at ClaudeClient.send'
+    expect(isUsageLimitError(stderr)).toBe(true)
+  })
+
   // FALSE: garbage before JSON pero is_error:false — nunca pausa
   it('does NOT flag garbage + is_error:false JSON even if garbage mentions rate limit', () => {
     const json = JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.429, result: 'ok' })
