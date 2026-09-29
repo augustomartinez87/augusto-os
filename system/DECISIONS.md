@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0187 · 2026-09-29 · Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** No se agregó código nuevo. Los tests solicitados por step 8 ya existían en el archivo desde el estado actual del branch (commit 725ba3d, step 7).
+**Contexto:** El spec de step 8 pedía agregar los tests de `callClaude` que lanza `UsageLimitError`, pero al leer `reviewer.test.ts` se encontró que ambos tests (líneas 195–235) ya estaban implementados, compilaban y pasaban.
+**Alternativas descartadas:** Podría haberse creado un commit vacío para marcar el step, pero sería ruido sin valor.
+**Consecuencias / riesgo residual:** El step 8 queda completo sin cambios al árbol de trabajo. Si el spec esperaba que los tests fueran un commit separado, debería revisarse el orden de los steps anteriores.
+
+> Generado por el loop · feature F-0065 · step 8
+
+---
 ## ADR-0186 · 2026-09-21 · gap-2/gap-3 del grid interior excluidos del step
 
 **Estado:** aceptada
