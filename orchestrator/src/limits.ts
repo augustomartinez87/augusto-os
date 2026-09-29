@@ -71,14 +71,41 @@ export function isContextWindowError(output: string): boolean {
   )
 }
 
+function to24h(h: number, m: number, period: string): [number, number] {
+  if (h === 12) return period.toLowerCase() === 'am' ? [0, m] : [12, m]
+  return period.toLowerCase() === 'am' ? [h, m] : [h + 12, m]
+}
+
 export function parseResetTime(output: string): Date {
   const retryAfter = output.match(/retry[- ]after[:\s]+(\d+)/i)
   if (retryAfter) {
     return new Date(Date.now() + parseInt(retryAfter[1]) * 1000)
   }
-  const resetAt = output.match(/reset(?:s)? at (\d{2}:\d{2})/i)
+  // 24h: "reset at 14:00" / "resets at 14:00". El negative lookahead `(?!\s*(?:am|pm))`
+  // es CRÍTICO: sin él, "resets at 11:00pm" / "resets at 04:40pm" (12h de dos dígitos con
+  // "at") matchean acá primero, descartan el meridiano y devuelven la hora errada por 12h.
+  // El lookahead fuerza que estos casos caigan a las ramas 12h de abajo.
+  const resetAt = output.match(/reset(?:s)? at (\d{2}:\d{2})(?!\s*(?:am|pm))/i)
   if (resetAt) {
     const [hh, mm] = resetAt[1].split(':').map(Number)
+    const d = new Date()
+    d.setHours(hh, mm, 0, 0)
+    if (d < new Date()) d.setDate(d.getDate() + 1)
+    return d
+  }
+  // 12h con minutos: "resets 4:40pm", "resets at 4:40 PM"
+  const reset12hMin = output.match(/reset(?:s)?(?:\s+at)?\s+(\d{1,2}):(\d{2})\s*(am|pm)/i)
+  if (reset12hMin) {
+    const [hh, mm] = to24h(parseInt(reset12hMin[1]), parseInt(reset12hMin[2]), reset12hMin[3])
+    const d = new Date()
+    d.setHours(hh, mm, 0, 0)
+    if (d < new Date()) d.setDate(d.getDate() + 1)
+    return d
+  }
+  // 12h sin minutos: "resets 12am", "resets 4pm"
+  const reset12h = output.match(/reset(?:s)?(?:\s+at)?\s+(\d{1,2})\s*(am|pm)/i)
+  if (reset12h) {
+    const [hh, mm] = to24h(parseInt(reset12h[1]), 0, reset12h[2])
     const d = new Date()
     d.setHours(hh, mm, 0, 0)
     if (d < new Date()) d.setDate(d.getDate() + 1)
@@ -97,7 +124,12 @@ export async function sleepUntil(until: Date): Promise<void> {
 }
 
 function hasExplicitResetTime(output: string): boolean {
-  return /retry[- ]after[:\s]+(\d+)/i.test(output) || /reset(?:s)? at (\d{2}:\d{2})/i.test(output)
+  return (
+    /retry[- ]after[:\s]+(\d+)/i.test(output) ||
+    /reset(?:s)? at (\d{2}:\d{2})(?!\s*(?:am|pm))/i.test(output) ||
+    /reset(?:s)?(?:\s+at)?\s+\d{1,2}:\d{2}\s*(?:am|pm)/i.test(output) ||
+    /reset(?:s)?(?:\s+at)?\s+\d{1,2}\s*(?:am|pm)/i.test(output)
+  )
 }
 
 export async function handleUsageLimit(output: string, state: OrchestratorState, opts?: ProbeOpts): Promise<void> {

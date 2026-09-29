@@ -310,3 +310,96 @@ describe('parseResetTime', () => {
     expect(diffHours).toBeLessThanOrEqual(5)
   })
 })
+
+// ── parseResetTime — formatos 12h (F-0065 step 3) ──────────────────────────────
+
+describe('parseResetTime — 12h formats', () => {
+  it('parsea "resets 4:40pm" → 16:40', () => {
+    const result = parseResetTime("You've hit your session limit · resets 4:40pm")
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('parsea "resets at 4:40 PM" (case-insensitive, espacio antes de PM) → 16:40', () => {
+    const result = parseResetTime('Your session resets at 4:40 PM')
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('parsea "resets 12:05pm" → 12:05', () => {
+    const result = parseResetTime('resets 12:05pm')
+    expect(result.getHours()).toBe(12)
+    expect(result.getMinutes()).toBe(5)
+  })
+
+  it('parsea "resets 12am" → 00:00', () => {
+    const result = parseResetTime('resets 12am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('cruce de medianoche: "resets 12am" siempre da mañana en 00:00 (midnight de hoy ya pasó)', () => {
+    // 12am = 00:00. El momento actual siempre es > 00:00 del día de hoy,
+    // así que la regla "hora ya pasada → día siguiente" siempre aplica.
+    const result = parseResetTime('resets 12am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(0)
+    expect(result.getTime()).toBeGreaterThan(Date.now())
+  })
+
+  // Regresión del shadowing (intentos 1 y 2): hora 12h de DOS dígitos con "at" y
+  // meridiano NO debe matchear la regex 24h. Sin el negative lookahead, "resets at
+  // 11:00pm" devolvía 11:00 en vez de 23:00 (error de 12h). Los tests previos solo
+  // usaban hora de un dígito ("4:40"), que nunca matchea \d{2}:\d{2}, ocultando el bug.
+  it('regresión shadowing — "resets at 11:00pm" (12h, dos dígitos, con at) → 23:00', () => {
+    const result = parseResetTime("You've hit your session limit · resets at 11:00pm")
+    expect(result.getHours()).toBe(23)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('regresión shadowing — "resets at 04:40pm" (cero a la izquierda) → 16:40', () => {
+    const result = parseResetTime('resets at 04:40pm')
+    expect(result.getHours()).toBe(16)
+    expect(result.getMinutes()).toBe(40)
+  })
+
+  it('regresión shadowing — "resets at 12:30am" (dos dígitos, medianoche) → 00:30', () => {
+    const result = parseResetTime('resets at 12:30am')
+    expect(result.getHours()).toBe(0)
+    expect(result.getMinutes()).toBe(30)
+  })
+
+  // Regresión: los formatos previos siguen funcionando
+
+  it('regresión — 24h "resets at 14:00" sigue parseándose correctamente', () => {
+    const result = parseResetTime('resets at 14:00')
+    expect(result.getHours()).toBe(14)
+    expect(result.getMinutes()).toBe(0)
+  })
+
+  it('regresión — retry-after en segundos sigue parseándose correctamente', () => {
+    const before = Date.now()
+    const result = parseResetTime('retry-after: 120')
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + 119_000)
+    expect(result.getTime()).toBeLessThanOrEqual(before + 121_000)
+  })
+})
+
+// ── handleUsageLimit — explicit-time path con formatos 12h ────────────────────
+
+describe('handleUsageLimit — explicit-time path con formatos 12h', () => {
+  it('toma el explicit-time path para "resets 4:40pm" (sleepUntilFn se llama)', async () => {
+    const state = makeState()
+    let sleptUntil: Date | null = null
+    const probeFn = async () => true
+    const sleepUntilFn = async (d: Date) => { sleptUntil = d }
+
+    await handleUsageLimit("You've hit your session limit · resets 4:40pm", state, { probeFn, sleepMs: noSleep, sleepUntilFn })
+
+    expect(sleptUntil).not.toBeNull()
+    const d = sleptUntil as unknown as Date
+    expect(d.getHours()).toBe(16)
+    expect(d.getMinutes()).toBe(40)
+    expect(state.pausedUntil).toBeNull()
+  })
+})
