@@ -15,6 +15,15 @@ export function log(msg: string): void {
   appendFileSync(LOG_PATH, line + '\n', 'utf-8')
 }
 
+export class UsageLimitError extends Error {
+  output: string
+  constructor(output: string) {
+    super('Usage limit reached')
+    this.name = 'UsageLimitError'
+    this.output = output
+  }
+}
+
 const LIMIT_RESULT_RE = /session limit|usage limit|rate limit|limit reached|too many requests|usage_limit_reached/i
 const LIMIT_TEXT_RE = /session limit|usage limit|rate limit|limit reached|too many requests|usage_limit_reached|"api_error_status"\s*:\s*429|HTTP\s+429|"?status"?(?:\s+code)?[:\s]+429/i
 
