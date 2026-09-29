@@ -5,6 +5,10 @@ import path from 'path'
 import { parseReviewOutput, runReviewer } from './reviewer.js'
 import { setActiveTarget } from './targets.js'
 import type { OrchestratorState, Step } from './state.js'
+import { UsageLimitError } from './limits.js'
+import type { ProbeOpts } from './limits.js'
+
+vi.mock('./state.js', () => ({ saveState: vi.fn() }))
 
 // ── parseReviewOutput ─────────────────────────────────────────────────────────
 
@@ -186,5 +190,47 @@ describe('runReviewer', () => {
     await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
 
     expect(capturedPrompt).toContain('diff truncado')
+  })
+
+  it('retries after UsageLimitError and returns the review result on the next call', async () => {
+    await stageFile('limit.ts', 'export const x = 1')
+
+    const usageLimitOpts: ProbeOpts = {
+      sleepMs: () => Promise.resolve(),
+      sleepUntilFn: () => Promise.resolve(),
+      probeFn: () => Promise.resolve(true),
+    }
+
+    let callCount = 0
+    const callClaude = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 1) throw new UsageLimitError('usage limit reached')
+      return 'REVIEW: APPROVED'
+    })
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude, usageLimitOpts })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).toBe('')
+    expect(callClaude).toHaveBeenCalledTimes(2)
+  })
+
+  it('never returns approved=false with limit text as feedback when UsageLimitError is thrown', async () => {
+    await stageFile('limit2.ts', 'export const y = 2')
+
+    const usageLimitOpts: ProbeOpts = {
+      sleepMs: () => Promise.resolve(),
+      sleepUntilFn: () => Promise.resolve(),
+      probeFn: () => Promise.resolve(true),
+    }
+
+    const callClaude = vi.fn()
+      .mockRejectedValueOnce(new UsageLimitError('session limit reached — resets 3am'))
+      .mockResolvedValue('REVIEW: APPROVED')
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude, usageLimitOpts })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).not.toContain('session limit')
   })
 })

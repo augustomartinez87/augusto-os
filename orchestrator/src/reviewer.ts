@@ -1,5 +1,5 @@
 import { execa } from 'execa'
-import { log } from './limits.js'
+import { log, UsageLimitError, isUsageLimitError, handleUsageLimit, type ProbeOpts } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot, getTargetConfig } from './targets.js'
 import { loadSpecSections, buildRestriccionesAbsolutas } from './executor.js'
@@ -14,6 +14,7 @@ export interface ReviewResult {
 export interface ReviewerOpts {
   callClaude?: (prompt: string) => Promise<string>
   repoRoot?: string
+  usageLimitOpts?: ProbeOpts
 }
 
 const DIFF_MAX_CHARS = 8000
@@ -83,8 +84,19 @@ REVIEW: CHANGES_REQUESTED
 - <issue 2>`
 
   const invoke = opts?.callClaude ?? ((p: string) => defaultCallClaude(p, root, state.featureId))
-  const raw = await invoke(prompt)
-  return parseReviewOutput(raw)
+  while (true) {
+    try {
+      const raw = await invoke(prompt)
+      return parseReviewOutput(raw)
+    } catch (err) {
+      if (err instanceof UsageLimitError) {
+        log(`[reviewer] Límite de uso alcanzado en step ${step.id} — esperando disponibilidad`)
+        await handleUsageLimit(err.output, state, opts?.usageLimitOpts)
+      } else {
+        throw err
+      }
+    }
+  }
 }
 
 export function parseReviewOutput(raw: string): ReviewResult {
@@ -146,6 +158,10 @@ async function defaultCallClaude(prompt: string, repoRoot: string, featureId: st
       exitCode: result.exitCode ?? 0,
     })
   } catch { /* métricas nunca tumban el pipeline */ }
+
+  if (isUsageLimitError(result.all ?? '') || result.exitCode === 429) {
+    throw new UsageLimitError(result.all ?? result.stderr ?? '')
+  }
 
   if (result.exitCode !== 0) {
     throw new Error(`Reviewer (Claude) falló con código ${result.exitCode}:\n${result.all ?? result.stderr}`)
