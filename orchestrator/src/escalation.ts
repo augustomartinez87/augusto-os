@@ -2,7 +2,7 @@ import { execa } from 'execa'
 import { mkdirSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { log } from './limits.js'
+import { log, isUsageLimitError, handleUsageLimit, type ProbeOpts } from './limits.js'
 import { type OrchestratorState, type Step } from './state.js'
 import { getRepoRoot, getActiveTargetName, getTargetConfig } from './targets.js'
 import { getDbEnvOverride } from './db-guard.js'
@@ -75,6 +75,7 @@ Escribí el ADR SIEMPRE en español. Si el fix fue mecánico y no ameritó ningu
 
 export interface FixerInvocationResult {
   ok: boolean
+  usageLimit?: boolean
   sessionId: string | null
   output: string
   adrBlocks: AdrDraft[]
@@ -85,6 +86,8 @@ export interface EscalationOpts {
   invokeFixerFn?: (prompt: string, step: Step, state: OrchestratorState, fixerSessionId: string | null) => Promise<FixerInvocationResult>
   /** Injectable for tests: replaces the verifier run after each fixer attempt. */
   runVerifierFn?: () => Promise<VerifyResult>
+  /** Opts forwarded to handleUsageLimit when the fixer hits a usage-limit error. */
+  usageLimitOpts?: ProbeOpts
 }
 
 async function invokeFixer(
@@ -142,8 +145,14 @@ async function invokeFixer(
     })
   } catch { /* métricas nunca tumban el pipeline */ }
 
-  if (result.exitCode !== 0) {
-    log(`[escalation] Fixer (Opus) salió con código ${result.exitCode} para step ${step.id}`)
+  const exitCode = result.exitCode ?? 0
+  if (isUsageLimitError(output) || exitCode === 429) {
+    log(`[escalation] Fixer (Opus) alcanzó límite de uso en step ${step.id}`)
+    return { ok: false, usageLimit: true, sessionId, output, adrBlocks: [] }
+  }
+
+  if (exitCode !== 0) {
+    log(`[escalation] Fixer (Opus) salió con código ${exitCode} para step ${step.id}`)
     return { ok: false, sessionId, output, adrBlocks: [] }
   }
 
@@ -175,6 +184,13 @@ export async function escalateStep(
     log(`[escalation] Step ${step.id}: intento ${attempt + 1}/${MAX_FIXER_ATTEMPTS} del fixer (Opus)`)
     const invoked = await invoke(prompt, step, state, fixerSessionId)
     fixerSessionId = invoked.sessionId
+
+    if (invoked.usageLimit) {
+      log(`[escalation] Fixer pausado por límite de uso en step ${step.id} — esperando disponibilidad`)
+      await handleUsageLimit(invoked.output, state, opts?.usageLimitOpts)
+      attempt--
+      continue
+    }
 
     if (!invoked.ok) {
       lastDetail = invoked.output.slice(-1000)
