@@ -32,6 +32,83 @@ describe('isUsageLimitError', () => {
   })
 })
 
+// ── isUsageLimitError — F-0065 acceptance fixtures ────────────────────────────
+
+describe('isUsageLimitError — structured JSON (F-0065)', () => {
+  // FALSE: is_error:false siempre devuelve false sin importar qué haya en los campos
+  it('does NOT flag is_error:false with 0.429 in total_cost_usd', () => {
+    const output = '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.429,"result":"ok"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  it('does NOT flag is_error:false with 429 in duration_ms', () => {
+    const output = '{"type":"result","is_error":false,"duration_ms":429,"result":"All done"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  it('does NOT flag is_error:false even when result mentions rate limit', () => {
+    const output = '{"type":"result","is_error":false,"result":"Implemented rate limit checker for the API"}'
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  // TRUE: is_error:true con api_error_status:429
+  it('flags is_error:true with api_error_status:429', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: '' })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: is_error:true con texto de session limit en result (sin api_error_status)
+  it('flags is_error:true with session limit text in result and no api_error_status', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: null, result: "You've hit your session limit · resets 4:40pm" })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: is_error:true con ambos api_error_status:429 y session limit text
+  it('flags is_error:true with both api_error_status:429 and session limit text', () => {
+    const output = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: "You've hit your session limit" })
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // TRUE: JSON mezclado con basura de stderr (all:true en execa)
+  it('handles garbage before/after JSON — tolerant to all:true mixed output', () => {
+    const json = JSON.stringify({ type: 'result', is_error: true, api_error_status: 429, result: '' })
+    const output = `\nsome stderr line\nWarning: token budget\n${json}\nmore output after\n`
+    expect(isUsageLimitError(output)).toBe(true)
+  })
+
+  // FALSE: garbage before JSON pero is_error:false — nunca pausa
+  it('does NOT flag garbage + is_error:false JSON even if garbage mentions rate limit', () => {
+    const json = JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.429, result: 'ok' })
+    const output = `rate limit warning in stderr\n${json}`
+    expect(isUsageLimitError(output)).toBe(false)
+  })
+
+  // FALSE: llaves sueltas DENTRO del campo result no deben truncar el objeto.
+  // Regresión de los intentos 1 y 2: el escaneo de llaves no era string-aware,
+  // un `}` en result cortaba el candidato, el parse fallaba y el fallback de
+  // texto matcheaba "rate limit" → falso positivo con is_error:false.
+  it('does NOT flag is_error:false when result text contains stray braces + limit phrase', () => {
+    const json = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      result: 'agregué rate limit check, usá } para cerrar el bloque { así',
+    })
+    expect(isUsageLimitError(json)).toBe(false)
+  })
+
+  // TRUE: mismas llaves sueltas en result, pero is_error:true + api_error_status:429.
+  // Confirma que el escaneo string-aware tampoco rompe el camino positivo.
+  it('still flags is_error:true with api_error_status:429 when result has stray braces', () => {
+    const json = JSON.stringify({
+      type: 'result',
+      is_error: true,
+      api_error_status: 429,
+      result: 'límite alcanzado mientras escribía `if (x) { }`',
+    })
+    expect(isUsageLimitError(json)).toBe(true)
+  })
+})
+
 // ── isContextWindowError ───────────────────────────────────────────────────────
 
 describe('isContextWindowError', () => {

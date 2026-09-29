@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { execa } from 'execa'
 import { saveState, type OrchestratorState } from './state.js'
 import { MODEL_INTAKE } from './models.js'
+import { parseClaudeJson, type ClaudeJsonOutput } from './metrics.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOG_PATH = path.join(__dirname, '..', 'orchestrator.log')
@@ -14,14 +15,52 @@ export function log(msg: string): void {
   appendFileSync(LOG_PATH, line + '\n', 'utf-8')
 }
 
+const LIMIT_RESULT_RE = /session limit|usage limit|rate limit|limit reached|too many requests|usage_limit_reached/i
+const LIMIT_TEXT_RE = /session limit|usage limit|rate limit|limit reached|too many requests|usage_limit_reached|"api_error_status"\s*:\s*429|HTTP\s+429|"?status"?(?:\s+code)?[:\s]+429/i
+
+// Extrae el primer objeto JSON `type:result` embebido en el output (tolerante a
+// basura antes/después por `all:true` en execa). El escaneo de llaves es
+// STRING-AWARE a propósito: un `{` o `}` suelto dentro del campo `result` (muy
+// común cuando el modelo explica o escribe código) NO debe cerrar el objeto
+// antes de tiempo. Contar llaves sin mirar strings truncaba el candidato, hacía
+// fallar el parse y caía al fallback de texto, produciendo un falso positivo con
+// `is_error:false` que dormía el loop horas (el bug que F-0028/S-036 evita).
+function extractResultJson(output: string): ClaudeJsonOutput | null {
+  let i = 0
+  while (i < output.length) {
+    const start = output.indexOf('{', i)
+    if (start === -1) break
+    let depth = 0
+    let inString = false
+    let escaped = false
+    let end = -1
+    for (let j = start; j < output.length; j++) {
+      const ch = output[j]
+      if (escaped) { escaped = false; continue }
+      if (ch === '\\') { escaped = true; continue }
+      if (ch === '"') { inString = !inString; continue }
+      if (inString) continue
+      if (ch === '{') depth++
+      else if (ch === '}') { depth--; if (depth === 0) { end = j; break } }
+    }
+    if (end === -1) break
+    const candidate = output.slice(start, end + 1)
+    if (/"type"\s*:\s*"result"/.test(candidate)) {
+      const { parsed } = parseClaudeJson(candidate)
+      if (parsed?.type === 'result') return parsed
+    }
+    i = start + 1
+  }
+  return null
+}
+
 export function isUsageLimitError(output: string): boolean {
-  return (
-    output.includes('rate limit') ||
-    output.includes('usage limit') ||
-    /\b429\b/.test(output) ||
-    output.includes('too many requests') ||
-    output.toLowerCase().includes('usage_limit_reached')
-  )
+  const parsed = extractResultJson(output)
+  if (parsed !== null) {
+    if (parsed.is_error !== true) return false
+    return parsed.api_error_status === 429 || LIMIT_RESULT_RE.test(parsed.result ?? '')
+  }
+  return LIMIT_TEXT_RE.test(output)
 }
 
 export function isContextWindowError(output: string): boolean {

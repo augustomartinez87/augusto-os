@@ -1809,3 +1809,22 @@ lado de rescates: `applyPendingRescate` tenia `'portfolio'` hardcodeado como tip
 que AR-040/AR-041), no verificado en vivo post-deploy. Pendiente: que Augusto confirme en Argos
 que ve la seccion nueva de pendientes en Portfolio > Fondos y que las notificaciones muestran el
 texto actualizado.
+
+## 2026-09-21 — F-0064 completado
+
+## Feature F-0064
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/DashboardOverview.jsx`, ramificar el className del contenedor raíz del bloque desktop (línea ~255, `hidden md:flex flex-col gap-2 px-6 lg:px-8 py-3 flex-1 min-h-0`) usando `COMPACT_OVERVIEW_ENABLED` (ya importado): cuando el flag está en `true` agregar `compact:md:px-4` (para `px-6 lg:px-8`) y `compact:md:py-2` (para `py-3`), y cuando está en `false` dejar el className original intacto. Combinar siempre las clases `compact:` con `md:`, nunca `compact:` sola. No tocar mobile ni la variante 'positions'. (0a9e1006)
+- [x] Step 2: En el mismo archivo, ramificar los gaps del grid hero+KPI en tier compact contra `COMPACT_OVERVIEW_ENABLED`: en el grid `flex-shrink-0 grid grid-cols-1 lg:grid-cols-[65fr_35fr] gap-3` (línea ~258) bajar a `compact:gap-2`, y en el grid `grid grid-cols-2 gap-3` de KpiCards (línea ~271-272) bajar a `compact:gap-2`, manteniendo el patrón ternario del flag y los valores originales cuando el flag está en `false`. No modificar la rama `items-start` ya existente salvo para sumar la clase de gap. (1de153d9)
+- [x] Step 3: Crear/actualizar test unitario Jest para M6 (p. ej. `src/features/portfolio/components/__tests__/DashboardOverview.compact.test.jsx`) siguiendo el patrón de `KpiCard.compact.test.js`/`GroupedPositionsTable.columns.test.js`: verificar que con `COMPACT_OVERVIEW_ENABLED=true` el className del contenedor desktop y de los grids incluye `compact:md:px-4`, `compact:md:py-2` y `compact:gap-2`, y que con el flag en `false` el className es exactamente el original de hoy (sin clases `compact:`). Correr build, lint y tests para confirmar que pasan sin errores. (8cec6c96)
+
+### Decisiones (ADR)
+- ADR-0186 — gap-2/gap-3 del grid interior excluidos del step [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0064/`
+
+> Revisar con Claude in Chrome para validación de UX.

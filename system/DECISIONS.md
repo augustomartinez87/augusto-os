@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0186 · 2026-09-21 · gap-2/gap-3 del grid interior excluidos del step
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Solo se ramifican `px-6 lg:px-8` y `py-3` del contenedor raíz (línea 255); los `gap-3`/`gap-2` del grid hero+KPI (líneas 258/272) no se tocan.
+**Contexto:** La instrucción del step especifica explícitamente solo `compact:md:px-4` y `compact:md:py-2` para el contenedor raíz. Los gaps aparecen en la investigación como "candidatos" de M6 pero no en el enunciado de la tarea.
+**Alternativas descartadas:** Incluir también los gaps en este mismo step; se descartó para ceñirse al alcance mínimo declarado.
+**Consecuencias / riesgo residual:** Si los gaps deben compactarse, requieren un step adicional antes del release.
+
+> Generado por el loop · feature F-0064 · step 1
+
+---
 ## ADR-0179 · 2026-09-21 · No se consolida el fetch de precios entre useFciLotEngine y FundingEngine
 
 **Estado:** aceptada
