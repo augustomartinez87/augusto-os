@@ -1828,3 +1828,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0064/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-29 — F-0065 completado
+
+## Feature F-0065
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `limits.ts`, refactorizar `isUsageLimitError(output: string): boolean` (mantener nombre y firma). Primero intentar extraer el primer objeto JSON con `"type":"result"` del output (tolerante a basura antes/después por `all:true`), reusando `parseClaudeJson` de `metrics.ts`. Si se parsea: es límite de uso solo si `is_error === true` Y (`api_error_status === 429` O `result` matchea case-insensitive `session limit|usage limit|rate limit|limit reached|too many requests|usage_limit_reached`); si `is_error === false`, NUNCA es límite. Si no se puede parsear JSON: fallback de texto case-insensitive con los mismos patrones más `"api_error_status"\s*:\s*429`, `HTTP 429` y `status(?: code)?[:\s]+429`; eliminar el `\b429\b` suelto. (bebe1826)
+- [x] Step 2: En `limits.ts`, agregar tests unitarios a `limits.test.ts` para el detector: fixtures de éxito (`is_error:false`) con `0.429` en `total_cost_usd`, con `duration_ms:429`, y con 'rate limit' en `result` NO clasifican como límite; fixtures de error con `api_error_status:429`, con `result` tipo "You've hit your session limit · resets 4:40pm" (con y sin `api_error_status`), y stderr crudo con 'HTTP 429' SÍ clasifican como límite. (7fd77616)
+- [x] Step 3: En `limits.ts`, extender `parseResetTime` y `hasExplicitResetTime` para aceptar `resets? (at )?H:MM(am|pm)` y `Ham|pm` (sin minutos), case-insensitive, con espacio opcional antes de am/pm, manteniendo el formato 24h actual y `retry-after`. Convertir 12h→24h (12am=00:00, 12pm=12:00) y aplicar la regla de hora ya pasada → día siguiente. Agregar tests: `resets 4:40pm`, `resets at 4:40 PM`, `resets 12am`, `resets 12:05pm`, cruce de medianoche, y regresión de formatos 24h y `retry-after`. (036a80db)
+- [x] Step 4: En `limits.ts`, exportar `class UsageLimitError extends Error { output: string }` para ser reusada por el reviewer. (97a11d11)
+- [x] Step 5: En `escalation.ts`, agregar `usageLimit?: boolean` a `FixerInvocationResult` y `usageLimitOpts?: ProbeOpts` a `EscalationOpts`. En `invokeFixer`, si `isUsageLimitError(output)` o `exitCode === 429`, devolver `{ ok:false, usageLimit:true, ... }`. En `escalateStep`, si `invoked.usageLimit`: `await handleUsageLimit(invoked.output, state, opts?.usageLimitOpts)` y repetir el mismo intento (`attempt--; continue`) sin tocar `lastDetail` ni consumir presupuesto. (44048e19)
+- [x] Step 6: En `escalation.test.ts`, agregar tests con `invokeFixerFn` inyectado y `usageLimitOpts` para no dormir: (a) limit → ok: el intento no se cuenta y devuelve `ok:true`; (b) limit → limit → ok; (c) fallo real → fallo real agota `MAX_FIXER_ATTEMPTS` como hoy (no regresión). (648fc89b)
+- [x] Step 7: En `reviewer.ts`, en `defaultCallClaude` chequear límite de uso (`isUsageLimitError` sobre `result.all` o `exitCode === 429`) ANTES del `exitCode !== 0` y de `parseReviewOutput`, lanzando `UsageLimitError` (importada de `limits.ts`) con `output`. En `runReviewer`, capturar `UsageLimitError` → `await handleUsageLimit(err.output, state)` → repetir la revisión en loop, garantizando que un límite NUNCA se devuelva como `{approved:false, feedback:<texto del límite>}`. (725ba3d5)
+- [x] Step 8: En `reviewer.test.ts`, agregar tests con `callClaude` inyectado que lanza `UsageLimitError` la primera vez y devuelve una revisión válida la segunda, verificando que se pausa/reintenta y no se emite `{approved:false}` con el texto del límite. (725ba3d5)
+- [x] Step 9: En `executor.test.ts`, agregar verificación cruzada del builder con el detector nuevo: casos de falso positivo (éxito con 'rate limit' en `result` y con `0.429` en costo) que NO pausan, y caso de session-limit-solo-texto que SÍ pausa sin consumir `attempt`; confirmar que `executeStep`/`executeStepWithRetry` no cambian de comportamiento. (e56f3d16)
+- [x] Step 10: Correr typecheck y `npm test` completos, verde en la suite existente más los tests nuevos. (8f0b00b4)
+
+### Decisiones (ADR)
+- ADR-0187 — Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0187 — Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0187 — Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0187 — Tests de UsageLimitError ya presentes en reviewer.test.ts antes del step 8 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0188 — Test discriminante del invariante `attempt--` con MAX_RETRIES límites consecutivos [Instrucción de Augusto]
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0065/`
+
+> Revisar con Claude in Chrome para validación de UX.
