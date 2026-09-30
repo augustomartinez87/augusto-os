@@ -7,6 +7,10 @@ import { recordInvocation } from '../metrics.js'
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance'
 const DEEPSEEK_MODEL = 'deepseek-v4-flash'
+// Máximo de salida documentado para deepseek-v4-flash: 393 216 tokens (384K).
+// Fuente: https://api-docs.deepseek.com/api/create-chat-completion/ (consultado 2026-09-30).
+// ADR-0194 en system/DECISIONS.md.
+const SCOUT_MAX_OUTPUT_TOKENS = 393_216
 const MAX_LOOP_TURNS = 15
 const MAX_INPUT_TOKENS = 200_000
 const DEEPSEEK_COST_PER_M_INPUT_USD = 0.14
@@ -219,7 +223,7 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
           messages,
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
-          max_tokens: 4096,
+          max_tokens: SCOUT_MAX_OUTPUT_TOKENS,
         }),
         signal,
       })
