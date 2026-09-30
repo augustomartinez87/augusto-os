@@ -1858,3 +1858,30 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0065/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-30 — F-0066 completado
+
+## Feature F-0066
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `reviewer.ts`, cambiar el comando del diff de `runReviewer` a `git diff HEAD -- . ':(exclude)system/DECISIONS.md' ':(exclude)system/PROGRESS.md'` (el pathspec positivo `.` es obligatorio para que los excludes funcionen), sin cambiar la firma pública de `runReviewer`. Debe tolerar `repoRoot` que no sea augusto-os (archivos inexistentes → sin error). (61d13acb)
+- [x] Step 2: En `reviewer.test.ts`, agregar tests con repo git real en tmpdir (`repoRoot`/`callClaude` inyectados): (a) único cambio sin commitear es `system/DECISIONS.md` → diff vacío → `{approved:true}` sin invocar `callClaude`; (b) cambio en un `.ts` MÁS cambio en `DECISIONS.md` → el prompt de `callClaude` contiene el `.ts` y NO `DECISIONS.md`; (c) repo donde esos archivos no existen → sin error. (8f317f38)
+- [x] Step 3: En `index.ts`, extraer de `main()` una función testeable `commitStepWithAdrs` que: escribe los ADRs pendientes con `appendAdr` (respetando la idempotencia `!(step.adrIds?.length)`), persiste los `adrIds` en `STATE.json` de inmediato, y recién entonces llama `commitStep` — reordenando para que el commit del step incluya `system/DECISIONS.md` cuando el target es sistema. Mantener el log `[adr] ADR-XXXX registrado` y exportarla vía el guard `isDirectRun`. (4c8f7d6f)
+- [x] Step 4: En `index.test.ts`, agregar tests de `commitStepWithAdrs` con repo git en tmpdir: (a) tras invocarla, `git status --porcelain` queda vacío y `DECISIONS.md` figura en el commit del step; (b) simular fallo de `commitStep` y re-ejecutar (resume) verificando que el ADR existe una sola vez y no se duplica; (c) step sin ADRs pendientes: comportamiento idéntico al actual. (f340e66f)
+- [x] Step 5: En `backlog.ts`, agregar una función análoga a `commitAndPushBacklog` que comitea y pushea SOLO `system/DECISIONS.md` y `system/PROGRESS.md` en augusto-os (mensaje `chore(system): DECISIONS/PROGRESS tras <featureId>`) por rutas explícitas (nunca `-A`), reutilizando el núcleo `commitAndPush` con el mismo chequeo de rama default y no-op silencioso si no hay cambios. No alterar el comportamiento de `commitAndPushBacklog`. (6105c91a)
+- [x] Step 6: En `index.ts`, invocar la nueva función de commit+push de documentos de sistema en la fase de release (junto a `updateBacklogStatus`/`commitAndPushBacklog`), envuelta en try/catch que loguea y NO bloquea el release. (2bc5113c)
+- [x] Step 7: En `backlog.test.ts` (o test dedicado), agregar tests de la nueva función contra repo git real en tmpdir con remoto bare: commit+push de los dos archivos, idempotencia (segunda llamada no-op), rechazo fuera de la rama default, y que otros archivos sucios NO se incluyan. Verificar que los tests existentes (`commitAndPushBacklog`, `updateBacklogStatus`) sigan verdes. (3f9b7de9)
+- [x] Step 8: En `index.ts`, tras `appendAdr`, si el ID devuelto ya figura en los `adrIds` de otro step de `state.steps`, loguear un warning `[adr] ID duplicado ADR-XXXX (step A y step B)`. Solo instrumentar, sin cambiar el comportamiento existente. (738057b4)
+- [x] Step 9: En `adr.test.ts`, agregar test de no-colisión: llamar `appendAdr` 3 veces seguidas contra un archivo en tmpdir (parámetro `filePath`, con la plantilla real de `DECISIONS.md` como fixture) y verificar que devuelve IDs consecutivos y distintos, que las 3 entradas quedan en el archivo y que el orden newest-first se mantiene. (d3633754)
+- [x] Step 10: Correr typecheck y `npm test` completos; dejar la suite existente y los tests nuevos en verde y sin errores de typecheck. (d3633754)
+
+### Decisiones (ADR)
+- ADR-0189 — commitStepWithAdrs devuelve el conjunto efectivo de adrIds, no solo los recién creados [Supuesto del agente] **⚠ REVISAR**
+- ADR-0190 — Generalizar commitAndPush para aceptar paths variables en lugar de duplicar la lógica [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0066/`
+
+> Revisar con Claude in Chrome para validación de UX.
