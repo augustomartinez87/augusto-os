@@ -476,6 +476,66 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     ).rejects.toBeInstanceOf(DeepSeekInsufficientBalanceError)
   })
 
+  it('retries once with a compact-JSON request when finish_reason is length, then returns valid report', async () => {
+    let callCount = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: '{"objetivo":"cortado' }, finish_reason: 'length' }],
+            usage: { prompt_tokens: 100, completion_tokens: 50 },
+          }),
+        }
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(VALID_REPORT) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 200, completion_tokens: 80 },
+        }),
+      }
+    }))
+
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    const report = await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+
+    expect(callCount).toBe(2)
+    expect(report.objetivo).toBe('Investigar el repo')
+  })
+
+  it('throws with finish_reason=length in message when second attempt is also truncated', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: '{"objetivo":"cortado' }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+      }),
+    }))
+
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    await expect(
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'riesgos' }, 'test-key', 'F-TEST')
+    ).rejects.toThrow('finish_reason=length')
+  })
+
+  it('throws a descriptive error with finish_reason and content length when JSON is invalid and finish_reason is not length', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: '{"objetivo":"broken json here!!!}' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 30 },
+      }),
+    }))
+
+    vi.resetModules()
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    await expect(
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    ).rejects.toThrow(/finish_reason=stop.*\d+ caracteres|JSON inválido.*finish_reason=stop/)
+  })
+
   it('does NOT classify a 402 by substring-matching response text (regression: same class of bug as the 429 false positive)', async () => {
     // A response that happens to mention "402" in its body but has a DIFFERENT real
     // status code must NOT be misclassified — only the actual HTTP status counts.
@@ -489,6 +549,48 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     await expect(
       runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
     ).rejects.not.toBeInstanceOf(DeepSeekInsufficientBalanceError)
+  })
+
+  it('sends SCOUT_MAX_OUTPUT_TOKENS as max_tokens in the request body', async () => {
+    let capturedMaxTokens: number | undefined
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
+      if (opts?.body) capturedMaxTokens = (JSON.parse(opts.body as string) as { max_tokens?: number }).max_tokens
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(VALID_REPORT) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      })
+    }))
+
+    const { runDeepSeekAgent, SCOUT_MAX_OUTPUT_TOKENS } = await import('./deepseek.js')
+    await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    expect(capturedMaxTokens).toBe(SCOUT_MAX_OUTPUT_TOKENS)
+  })
+
+  it('buildSystemPrompt includes the evidencia-count bound (máx 8 entradas) and the explicacion-chars bound (200 caracteres)', async () => {
+    let systemContent: string | undefined
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
+      if (opts?.body) {
+        const body = JSON.parse(opts.body as string) as { messages?: Array<{ role: string; content: string | null }> }
+        const sys = body.messages?.find(m => m.role === 'system')
+        systemContent = sys?.content ?? undefined
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(VALID_REPORT) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      })
+    }))
+
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    expect(systemContent).toBeDefined()
+    expect(systemContent).toMatch(/máx\s+8/)
+    expect(systemContent).toMatch(/200\s+caracteres/)
   })
 })
 

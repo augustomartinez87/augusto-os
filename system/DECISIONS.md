@@ -27,6 +27,38 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0195 · 2026-09-30 · SCOUT_MAX_OUTPUT_TOKENS = 393 216 para deepseek-v4-flash
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** sistema
+
+**Decisión:** La constante se fija en 393 216 (384 K tokens), máximo de salida documentado para deepseek-v4-flash según https://api-docs.deepseek.com/api/create-chat-completion/ consultado el 2026-09-30.
+**Contexto:** F-0069 exige reemplazar el literal 4096 por una constante y fijar el valor máximo documentado. La doc oficial confirma 393 216. No se eligió un valor intermedio (p. ej. 8 192) porque no tiene soporte documentado especial y la instrucción dice "valor máximo documentado".
+**Alternativas descartadas:** Mantener 4 096 (causa raíz del bug, descartado). Usar 8 192 (sin respaldo documental específico, descartado). Leer el valor desde env (fuera de alcance del step 2, podría considerarse en el futuro).
+**Consecuencias / riesgo residual:** Si DeepSeek cambia el límite del modelo habrá que actualizar la constante. La regex voraz /\{[\s\S]*\}/ sigue siendo frágil; con respuestas más largas el riesgo de match incorrecto persiste (fuera de alcance de F-0069).
+
+> Generado por el loop · feature f-0069 · step 2
+
+---
+## ADR-0194 · 2026-09-30 · SCOUT_MAX_OUTPUT_TOKENS = 393 216 para deepseek-v4-flash
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto (F-0069 step 2)
+**Target:** sistema
+
+**Decisión:** La constante `SCOUT_MAX_OUTPUT_TOKENS` se fija en `393_216` (384 K tokens), que es el máximo de salida documentado para `deepseek-v4-flash`.
+
+**Contexto:** F-0069 exige reemplazar el literal `max_tokens: 4096` en `scout/deepseek.ts` por una constante con nombre y fijar el valor máximo documentado del modelo. La documentación oficial de DeepSeek (https://api-docs.deepseek.com/api/create-chat-completion/, consultada 2026-09-30) indica un máximo de salida de 393 216 tokens (384 K) para deepseek-flash / deepseek-v4-flash. El valor anterior (4 096) era la causa directa de que el JSON del reporte se cortara y la investigación fallara (S-049).
+
+**Alternativas descartadas:** Mantener 4 096 (causa raíz del bug). Usar 8 192 como valor intermedio (no tiene soporte documentado especial; la doc oficial permite 393 216). `max_tokens` es un límite superior — el modelo solo genera los tokens que necesita, por lo que un valor alto no aumenta el costo en la práctica.
+
+**Consecuencias / riesgo residual:** Si en el futuro DeepSeek reduce el límite del modelo, habrá que actualizar la constante. La regex voraz `/\{[\s\S]*\}/` para extraer el JSON sigue siendo frágil (fuera de alcance de F-0069); con respuestas más largas el riesgo de match incorrecto es mayor, pero el reintento por `finish_reason=length` (step 3) mitiga el caso de corte.
+
+> origen: S-049 / feature F-0069 · step 2 · 2026-09-30
+
+---
+
 ## ADR-0193 · 2026-09-30 · Contar archivos nuevos via ls-files antes de git add -N, filtrado en código
 
 **Estado:** aceptada

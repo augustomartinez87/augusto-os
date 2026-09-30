@@ -7,6 +7,10 @@ import { recordInvocation } from '../metrics.js'
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance'
 const DEEPSEEK_MODEL = 'deepseek-v4-flash'
+// Máximo de salida documentado para deepseek-v4-flash: 393 216 tokens (384K).
+// Fuente: https://api-docs.deepseek.com/api/create-chat-completion/ (consultado 2026-09-30).
+// ADR-0194 en system/DECISIONS.md.
+export const SCOUT_MAX_OUTPUT_TOKENS = 393_216
 const MAX_LOOP_TURNS = 15
 const MAX_INPUT_TOKENS = 200_000
 const DEEPSEEK_COST_PER_M_INPUT_USD = 0.14
@@ -151,11 +155,11 @@ Cuando hayas terminado la investigación, devolvé un JSON con este schema exact
   "patrones": string[],      // patrones de código que el implementador debe seguir
   "dependencias": string[],  // librerías/módulos relevantes para la tarea
   "riesgos": string[],       // riesgos o restricciones encontrados
-  "evidencia": [{
+  "evidencia": [{            // máx 8 entradas; priorizá las más relevantes
     "path": string,          // ruta relativa al archivo
     "simbolo": string,       // UN identificador literal y copiable — el nombre exacto de una función, variable, tipo o clave, tal cual aparece en el archivo. Nunca una frase descriptiva ni varios identificadores unidos con "+" o "y". Si hay varios símbolos relevantes en el mismo lugar, generá una entrada de evidencia separada por cada uno.
     "lineas": string,        // número de líneas, ej: "42-58"
-    "explicacion": string,   // por qué es relevante
+    "explicacion": string,   // por qué es relevante — máx 200 caracteres
     "confianza": number      // 0.0-1.0
   }],
   "resumen": string          // resumen ejecutivo de 2-4 oraciones
@@ -191,6 +195,7 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
   let totalOutputTokens = 0
   let exitCode = 1
   const startedAt = Date.now()
+  let lengthRetryDone = false
 
   try {
     for (let turn = 0; turn < MAX_LOOP_TURNS; turn++) {
@@ -219,7 +224,7 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
           messages,
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
-          max_tokens: 4096,
+          max_tokens: SCOUT_MAX_OUTPUT_TOKENS,
         }),
         signal,
       })
@@ -267,12 +272,36 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
 
       // Model finished — extract JSON from the response
       const content = assistantMsg.content ?? ''
+      console.log(`[scout] ${task.focus}: respuesta final finish_reason=${choice.finish_reason}, ${content.length} caracteres`)
+
+      if (choice.finish_reason === 'length') {
+        if (lengthRetryDone) {
+          throw new Error(
+            `[deepseek] Respuesta cortada dos veces consecutivas por max_tokens (finish_reason=length); abortando sin tercer intento.`
+          )
+        }
+        lengthRetryDone = true
+        messages.push({
+          role: 'user',
+          content: 'Tu respuesta fue cortada (finish_reason=length). Respondé el mismo JSON pero compacto: sin espacios extras, máx 5 entradas en "evidencia", "explicacion" ≤ 100 caracteres cada una, "resumen" ≤ 2 oraciones. Solo el JSON puro sin markdown.',
+        })
+        continue
+      }
+
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
         throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
       }
 
-      const parsed = ScoutReportSchema.safeParse(JSON.parse(jsonMatch[0]))
+      let rawParsed: unknown
+      try {
+        rawParsed = JSON.parse(jsonMatch[0])
+      } catch (e) {
+        throw new Error(
+          `[deepseek] JSON inválido en respuesta final (finish_reason=${choice.finish_reason}, ${content.length} caracteres): ${(e as SyntaxError).message}`
+        )
+      }
+      const parsed = ScoutReportSchema.safeParse(rawParsed)
       if (!parsed.success) {
         throw new Error(`[deepseek] JSON del scout inválido: ${parsed.error.message}`)
       }
