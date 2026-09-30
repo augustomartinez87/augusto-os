@@ -7,7 +7,7 @@ import {
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
 } from './state.js'
 import { planFeature, loadFeatureSpec, parseResolvesField } from './planner.js'
-import { updateBacklogStatus, commitAndPushBacklog } from './backlog.js'
+import { updateBacklogStatus, commitAndPushBacklog, commitAndPushSystemDocs } from './backlog.js'
 import { executeStepWithRetry } from './executor.js'
 import { escalateStep } from './escalation.js'
 import { runScout } from './scout/index.js'
@@ -381,6 +381,21 @@ async function runLoop(state: OrchestratorState) {
         }
       } catch (e) {
         log(`[backlog] ⚠ No se pudo reconciliar BACKLOG.md para ${state.featureId}: ${(e as Error).message}`)
+      }
+
+      // F-0066: comitea y pushea system/DECISIONS.md y system/PROGRESS.md en augusto-os.
+      // No bloquea el release — el push del target ya pasó cuando esto corre.
+      try {
+        const docsPush = await commitAndPushSystemDocs(state.featureId)
+        if (docsPush.pushed) {
+          log(`[system] DECISIONS.md/PROGRESS.md comiteados y pusheados a augusto-os/${docsPush.branch}`)
+        } else if (docsPush.committed) {
+          log(`[system] ⚠ DECISIONS/PROGRESS comiteados localmente pero el push falló: ${docsPush.error}`)
+        } else if (docsPush.error) {
+          log(`[system] ⚠ No se comitearon DECISIONS/PROGRESS en augusto-os: ${docsPush.error}`)
+        }
+      } catch (e) {
+        log(`[system] ⚠ No se pudieron comitear DECISIONS/PROGRESS: ${(e as Error).message}`)
       }
 
       break

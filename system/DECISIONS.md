@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0190 · 2026-09-30 · Generalizar commitAndPush para aceptar paths variables en lugar de duplicar la lógica
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Se refactorizó la función privada `commitAndPush` para recibir `paths: string[]` en lugar de tener hardcodeado `system/BACKLOG.md`, y se actualizaron los callers existentes para pasar `['system/BACKLOG.md']`.
+**Contexto:** El spec pedía "reutilizando el núcleo commitAndPush" para implementar `commitAndPushSystemDocs`. La alternativa era copiar la función completa con distintos paths. Generalizar el parámetro evita duplicación y mantiene una sola fuente de verdad para las garantías de seguridad (sin -A, chequeo de rama default).
+**Alternativas descartadas:** Duplicar `commitAndPush` como `commitAndPushPaths` con la misma lógica pero paths distintos — descartado por duplicación innecesaria sin beneficio.
+**Consecuencias / riesgo residual:** Los callers existentes requirieron actualización mínima (agregar `['system/BACKLOG.md']` como argumento); comportamiento externo sin cambios.
+
+> Generado por el loop · feature F-0066 · step 5
+
+---
 ## ADR-0189 · 2026-09-30 · commitStepWithAdrs devuelve el conjunto efectivo de adrIds, no solo los recién creados
 
 **Estado:** aceptada
