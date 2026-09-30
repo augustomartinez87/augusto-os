@@ -550,6 +550,48 @@ describe('runDeepSeekAgent with mocked fetch', () => {
       runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
     ).rejects.not.toBeInstanceOf(DeepSeekInsufficientBalanceError)
   })
+
+  it('sends SCOUT_MAX_OUTPUT_TOKENS as max_tokens in the request body', async () => {
+    let capturedMaxTokens: number | undefined
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
+      if (opts?.body) capturedMaxTokens = (JSON.parse(opts.body as string) as { max_tokens?: number }).max_tokens
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(VALID_REPORT) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      })
+    }))
+
+    const { runDeepSeekAgent, SCOUT_MAX_OUTPUT_TOKENS } = await import('./deepseek.js')
+    await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    expect(capturedMaxTokens).toBe(SCOUT_MAX_OUTPUT_TOKENS)
+  })
+
+  it('buildSystemPrompt includes the evidencia-count bound (máx 8 entradas) and the explicacion-chars bound (200 caracteres)', async () => {
+    let systemContent: string | undefined
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, opts) => {
+      if (opts?.body) {
+        const body = JSON.parse(opts.body as string) as { messages?: Array<{ role: string; content: string | null }> }
+        const sys = body.messages?.find(m => m.role === 'system')
+        systemContent = sys?.content ?? undefined
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(VALID_REPORT) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      })
+    }))
+
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    await runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    expect(systemContent).toBeDefined()
+    expect(systemContent).toMatch(/máx\s+8/)
+    expect(systemContent).toMatch(/200\s+caracteres/)
+  })
 })
 
 // ── fetchDeepSeekBalance ────────────────────────────────────────────────────────

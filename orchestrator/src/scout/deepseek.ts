@@ -10,7 +10,7 @@ const DEEPSEEK_MODEL = 'deepseek-v4-flash'
 // Máximo de salida documentado para deepseek-v4-flash: 393 216 tokens (384K).
 // Fuente: https://api-docs.deepseek.com/api/create-chat-completion/ (consultado 2026-09-30).
 // ADR-0194 en system/DECISIONS.md.
-const SCOUT_MAX_OUTPUT_TOKENS = 393_216
+export const SCOUT_MAX_OUTPUT_TOKENS = 393_216
 const MAX_LOOP_TURNS = 15
 const MAX_INPUT_TOKENS = 200_000
 const DEEPSEEK_COST_PER_M_INPUT_USD = 0.14
