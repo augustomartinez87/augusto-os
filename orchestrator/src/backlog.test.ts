@@ -290,6 +290,36 @@ describe('commitAndPushSystemDocs', () => {
     const status = await execa('git', ['status', '--porcelain', 'system/DECISIONS.md'], { cwd: repoPath })
     expect(status.stdout.trim().length).toBeGreaterThan(0)
   })
+
+  it('is idempotent: second call after a successful commit is a no-op', async () => {
+    await seedSystemDocs()
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\nupdated\n', 'utf-8')
+
+    const first = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(first.committed).toBe(true)
+    expect(first.pushed).toBe(true)
+
+    const second = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(second).toEqual({ committed: false, pushed: false })
+  })
+
+  it('does not stage other dirty files in the working tree', async () => {
+    await seedSystemDocs()
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\nupdated\n', 'utf-8')
+    // unrelated file — must not appear in the commit
+    writeFileSync(path.join(repoPath, 'system', 'OTHER.txt'), 'unrelated change\n', 'utf-8')
+
+    const result = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(result.committed).toBe(true)
+
+    const showFiles = await execa('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repoPath })
+    const filesInCommit = showFiles.stdout.trim().split('\n').filter(Boolean)
+    expect(filesInCommit).not.toContain('system/OTHER.txt')
+
+    // the unrelated file must still appear as untracked
+    const status = await execa('git', ['status', '--porcelain', 'system/OTHER.txt'], { cwd: repoPath })
+    expect(status.stdout.trim().length).toBeGreaterThan(0)
+  })
 })
 
 // pushBacklogFile comparte el núcleo de commitAndPushBacklog (mismo repo/garantías) pero con
