@@ -520,6 +520,22 @@ describe('runDeepSeekAgent with mocked fetch', () => {
     ).rejects.toThrow('finish_reason=length')
   })
 
+  it('throws a descriptive error with finish_reason and content length when JSON is invalid and finish_reason is not length', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: '{"objetivo":"broken json here!!!}' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 30 },
+      }),
+    }))
+
+    vi.resetModules()
+    const { runDeepSeekAgent } = await import('./deepseek.js')
+    await expect(
+      runDeepSeekAgent({ objetivo: 'Investigar', repoRoot: tmpDir, focus: 'mapa' }, 'test-key', 'F-TEST')
+    ).rejects.toThrow(/finish_reason=stop.*\d+ caracteres|JSON inválido.*finish_reason=stop/)
+  })
+
   it('does NOT classify a 402 by substring-matching response text (regression: same class of bug as the 429 false positive)', async () => {
     // A response that happens to mention "402" in its body but has a DIFFERENT real
     // status code must NOT be misclassified — only the actual HTTP status counts.

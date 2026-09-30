@@ -293,7 +293,15 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
         throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
       }
 
-      const parsed = ScoutReportSchema.safeParse(JSON.parse(jsonMatch[0]))
+      let rawParsed: unknown
+      try {
+        rawParsed = JSON.parse(jsonMatch[0])
+      } catch (e) {
+        throw new Error(
+          `[deepseek] JSON inválido en respuesta final (finish_reason=${choice.finish_reason}, ${content.length} caracteres): ${(e as SyntaxError).message}`
+        )
+      }
+      const parsed = ScoutReportSchema.safeParse(rawParsed)
       if (!parsed.success) {
         throw new Error(`[deepseek] JSON del scout inválido: ${parsed.error.message}`)
       }
