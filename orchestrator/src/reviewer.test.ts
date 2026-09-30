@@ -251,6 +251,24 @@ describe('runReviewer', () => {
     expect(callClaude).not.toHaveBeenCalled()
   })
 
+  it('solo system/PROGRESS.md staged (modificado) → diff excluido → approved=true sin invocar callClaude', async () => {
+    const { execa } = await import('execa')
+    mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'system', 'PROGRESS.md'), '# Progress inicial\n')
+    await execa('git', ['add', 'system/PROGRESS.md'], { cwd: gitRoot, reject: false })
+    await execa('git', ['commit', '-m', 'add progress'], { cwd: gitRoot, reject: false })
+    writeFileSync(path.join(gitRoot, 'system', 'PROGRESS.md'), '# Progress actualizado\n')
+    await execa('git', ['add', 'system/PROGRESS.md'], { cwd: gitRoot, reject: false })
+
+    const callClaude = vi.fn()
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).toBe('')
+    expect(callClaude).not.toHaveBeenCalled()
+  })
+
   it('cambio en .ts + system/DECISIONS.md → prompt incluye el .ts y excluye DECISIONS.md', async () => {
     const { execa } = await import('execa')
     mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
