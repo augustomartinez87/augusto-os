@@ -346,4 +346,47 @@ describe('appendAdr', () => {
     const id = appendAdr(baseDraft, 'F-0011', 2, tmpFile)
     expect(id).toBe(11)
   })
+
+  // ── no-collision: 3 llamadas consecutivas (S-051 / F-0066) ───────────────────
+
+  it('3 consecutive calls return distinct consecutive IDs and maintain newest-first order', () => {
+    const drafts: AdrDraft[] = [
+      { ...baseDraft, titulo: 'Primera decisión consecutiva', decision: 'Decisión A.' },
+      { ...baseDraft, titulo: 'Segunda decisión consecutiva', decision: 'Decisión B.' },
+      { ...baseDraft, titulo: 'Tercera decisión consecutiva', decision: 'Decisión C.' },
+    ]
+
+    const id1 = appendAdr(drafts[0], 'F-0066', 1, tmpFile)
+    const id2 = appendAdr(drafts[1], 'F-0066', 2, tmpFile)
+    const id3 = appendAdr(drafts[2], 'F-0066', 3, tmpFile)
+
+    // IDs consecutivos y distintos (fixture tiene max=0010 → 11, 12, 13)
+    expect(id1).toBe(11)
+    expect(id2).toBe(12)
+    expect(id3).toBe(13)
+    expect(new Set([id1, id2, id3]).size).toBe(3)
+
+    const content = readFileSync(tmpFile, 'utf-8')
+
+    // Las 3 entradas nuevas existen en el archivo
+    expect(content).toContain('## ADR-0011')
+    expect(content).toContain('## ADR-0012')
+    expect(content).toContain('## ADR-0013')
+
+    // Las entradas originales siguen intactas
+    expect(content).toContain('## ADR-0010')
+    expect(content).toContain('## ADR-0009')
+
+    // Orden newest-first: 0013 < 0012 < 0011 < 0010 < 0009 (posición en el texto)
+    const pos13 = content.indexOf('## ADR-0013')
+    const pos12 = content.indexOf('## ADR-0012')
+    const pos11 = content.indexOf('## ADR-0011')
+    const pos10 = content.indexOf('## ADR-0010')
+    const pos09 = content.indexOf('## ADR-0009')
+
+    expect(pos13).toBeLessThan(pos12)
+    expect(pos12).toBeLessThan(pos11)
+    expect(pos11).toBeLessThan(pos10)
+    expect(pos10).toBeLessThan(pos09)
+  })
 })

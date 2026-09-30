@@ -67,14 +67,12 @@ export interface BacklogPushResult {
   error?: string
 }
 
-// Núcleo compartido de commitAndPushBacklog() y pushBacklogFile() de abajo. Comitea y pushea
-// ÚNICAMENTE system/BACKLOG.md (git add explícito de ese path, nunca `-A` ni `.`) para no
-// arrastrar cambios ajenos que puedan estar sueltos en el working tree de augusto-os. No
-// pushea si el repo no está parado en su default branch — mismo criterio de seguridad que
-// pushMain() en git.ts — para no pushear en medio de otra operación en curso sobre este mismo
-// repo (p.ej. una feature de target "sistema" a mitad de merge).
-async function commitAndPush(repoRoot: string, message: string): Promise<BacklogPushResult> {
-  const status = await execa('git', ['status', '--porcelain', 'system/BACKLOG.md'], { cwd: repoRoot, reject: false })
+// Núcleo compartido de commitAndPushBacklog(), pushBacklogFile() y commitAndPushSystemDocs().
+// Comitea y pushea ÚNICAMENTE los paths recibidos (git add explícito, nunca `-A` ni `.`) para
+// no arrastrar cambios ajenos del working tree de augusto-os. No pushea si el repo no está
+// parado en su default branch — mismo criterio de seguridad que pushMain() en git.ts.
+async function commitAndPush(repoRoot: string, paths: string[], message: string): Promise<BacklogPushResult> {
+  const status = await execa('git', ['status', '--porcelain', ...paths], { cwd: repoRoot, reject: false })
   if (status.exitCode !== 0) return { committed: false, pushed: false, error: status.stderr }
   if (!status.stdout.trim()) return { committed: false, pushed: false } // ya estaba al día (idempotente)
 
@@ -89,7 +87,7 @@ async function commitAndPush(repoRoot: string, message: string): Promise<Backlog
     }
   }
 
-  const add = await execa('git', ['add', 'system/BACKLOG.md'], { cwd: repoRoot, reject: false })
+  const add = await execa('git', ['add', ...paths], { cwd: repoRoot, reject: false })
   if (add.exitCode !== 0) return { committed: false, pushed: false, branch, error: add.stderr }
 
   const commit = await execa('git', ['commit', '-m', message], { cwd: repoRoot, reject: false })
@@ -119,7 +117,7 @@ export async function commitAndPushBacklog(
 ): Promise<BacklogPushResult> {
   if (!updatedIds.length) return { committed: false, pushed: false }
   const msg = `chore(backlog): marcar ${updatedIds.join(', ')} done (${featureId})\n\n[orchestrator auto-commit]`
-  return commitAndPush(repoRoot, msg)
+  return commitAndPush(repoRoot, ['system/BACKLOG.md'], msg)
 }
 
 // Para reconciliación MANUAL (sesiones de Cowork/Claude Code fuera del loop, que suelen editar
@@ -134,5 +132,17 @@ export async function pushBacklogFile(
   repoRoot: string = AUGUSTO_OS_ROOT,
 ): Promise<BacklogPushResult> {
   const full = `${message}\n\n[reconciliación manual — Cowork/Claude Code]`
-  return commitAndPush(repoRoot, full)
+  return commitAndPush(repoRoot, ['system/BACKLOG.md'], full)
+}
+
+// Comitea y pushea SOLO system/DECISIONS.md y system/PROGRESS.md en augusto-os tras el release
+// de un feature. No-op silencioso si ninguno tiene cambios pendientes. No bloquea el release —
+// llamar dentro de try/catch en el caller (el push del target ya pasó cuando esto corre).
+export async function commitAndPushSystemDocs(
+  featureId: string,
+  repoRoot: string = AUGUSTO_OS_ROOT,
+): Promise<BacklogPushResult> {
+  const paths = ['system/DECISIONS.md', 'system/PROGRESS.md']
+  const msg = `chore(system): DECISIONS/PROGRESS tras ${featureId}\n\n[orchestrator auto-commit]`
+  return commitAndPush(repoRoot, paths, msg)
 }

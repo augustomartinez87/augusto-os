@@ -25,7 +25,7 @@ export async function runReviewer(
   opts?: ReviewerOpts,
 ): Promise<ReviewResult> {
   const root = opts?.repoRoot ?? getRepoRoot()
-  const diffResult = await execa('git', ['diff', 'HEAD'], {
+  const diffResult = await execa('git', ['diff', 'HEAD', '--', '.', ':(exclude)system/DECISIONS.md', ':(exclude)system/PROGRESS.md'], {
     cwd: root,
     reject: false,
     all: true,

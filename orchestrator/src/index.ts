@@ -7,7 +7,7 @@ import {
   getNextPendingStep, getBlockedStep, archiveState, type OrchestratorState, type Step,
 } from './state.js'
 import { planFeature, loadFeatureSpec, parseResolvesField } from './planner.js'
-import { updateBacklogStatus, commitAndPushBacklog } from './backlog.js'
+import { updateBacklogStatus, commitAndPushBacklog, commitAndPushSystemDocs } from './backlog.js'
 import { executeStepWithRetry } from './executor.js'
 import { escalateStep } from './escalation.js'
 import { runScout } from './scout/index.js'
@@ -383,6 +383,21 @@ async function runLoop(state: OrchestratorState) {
         log(`[backlog] ⚠ No se pudo reconciliar BACKLOG.md para ${state.featureId}: ${(e as Error).message}`)
       }
 
+      // F-0066: comitea y pushea system/DECISIONS.md y system/PROGRESS.md en augusto-os.
+      // No bloquea el release — el push del target ya pasó cuando esto corre.
+      try {
+        const docsPush = await commitAndPushSystemDocs(state.featureId)
+        if (docsPush.pushed) {
+          log(`[system] DECISIONS.md/PROGRESS.md comiteados y pusheados a augusto-os/${docsPush.branch}`)
+        } else if (docsPush.committed) {
+          log(`[system] ⚠ DECISIONS/PROGRESS comiteados localmente pero el push falló: ${docsPush.error}`)
+        } else if (docsPush.error) {
+          log(`[system] ⚠ No se comitearon DECISIONS/PROGRESS en augusto-os: ${docsPush.error}`)
+        }
+      } catch (e) {
+        log(`[system] ⚠ No se pudieron comitear DECISIONS/PROGRESS: ${(e as Error).message}`)
+      }
+
       break
     }
 
@@ -568,22 +583,59 @@ async function runLoop(state: OrchestratorState) {
     }
     log(`[reviewer] APPROVED step ${step.id}`)
 
-    const sha = await commitStep(step.id, step.desc)
-
-    // Write ADRs emitted by the executor (idempotent: skip if already saved in STATE)
-    const adrIds: number[] = []
-    if (pendingAdrBlocks.length && !(step.adrIds?.length)) {
-      for (const block of pendingAdrBlocks) {
-        const id = appendAdr(block, state.featureId, step.id)
-        if (id === null) continue
-        adrIds.push(id)
-        log(`[adr] ADR-${String(id).padStart(4, '0')} registrado (origen: ${block.origen})`)
-      }
-    }
-
+    const { sha, adrIds } = await commitStepWithAdrs(step, pendingAdrBlocks, state)
     markStepStatus(state, step.id, 'done', { commit: sha, sessionId, adrIds })
     log(`[main] Step ${step.id} completado y commiteado (${sha.slice(0, 8)})`)
   }
+}
+
+/**
+ * Escribe los ADRs pendientes, los persiste en STATE.json, y recién entonces
+ * llama commitStep — así stageAll barre DECISIONS.md en el mismo commit del step.
+ * El orden garantiza idempotencia ante resume: si adrIds ya está en STATE, se
+ * salta appendAdr y no se duplican entradas en DECISIONS.md.
+ */
+export async function commitStepWithAdrs(
+  step: Step,
+  pendingAdrBlocks: AdrDraft[],
+  state: OrchestratorState,
+  opts: {
+    decisionsPath?: string
+    statePath?: string
+    _commitStep?: (stepId: number, desc: string) => Promise<string>
+  } = {},
+): Promise<{ sha: string; adrIds: number[] }> {
+  const newAdrIds: number[] = []
+  if (pendingAdrBlocks.length && !(step.adrIds?.length)) {
+    for (const block of pendingAdrBlocks) {
+      const id = appendAdr(block, state.featureId, step.id, opts.decisionsPath)
+      if (id === null) continue
+      newAdrIds.push(id)
+      log(`[adr] ADR-${String(id).padStart(4, '0')} registrado (origen: ${block.origen})`)
+      const dupStep = state.steps.find(s => s.id !== step.id && (s.adrIds ?? []).includes(id))
+      if (dupStep) {
+        log(`[adr] WARN ID duplicado ADR-${String(id).padStart(4, '0')} (step ${dupStep.id} y step ${step.id})`)
+      }
+    }
+  }
+
+  // Persist adrIds before commit: a resume after a commitStep failure must not
+  // call appendAdr again (step.adrIds already set → idempotent guard skips it).
+  if (newAdrIds.length) {
+    markStepStatus(state, step.id, step.status, { adrIds: newAdrIds }, opts.statePath)
+  }
+
+  const doCommit = opts._commitStep ?? commitStep
+  const sha = await doCommit(step.id, step.desc)
+
+  // Devolver el conjunto EFECTIVO de adrIds del step, no solo los recién creados.
+  // En un resume tras fallo de commit el guard salta appendAdr (step.adrIds ya
+  // persistido), así que newAdrIds queda []. Si devolviéramos [], el caller haría
+  // markStepStatus(..., 'done', { adrIds: [] }) y —vía Object.assign— PISARÍA el
+  // step.adrIds persistido, dejando el ADR huérfano (fuera de buildPRBody). Como
+  // los ADRs nuevos solo se crean cuando step.adrIds estaba vacío, step.adrIds ya
+  // refleja siempre el conjunto completo tras esta función.
+  return { sha, adrIds: [...(step.adrIds ?? [])] }
 }
 
 function buildPRBody(state: OrchestratorState): string {
