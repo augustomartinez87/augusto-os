@@ -233,4 +233,53 @@ describe('runReviewer', () => {
     expect(result.approved).toBe(true)
     expect(result.feedback).not.toContain('session limit')
   })
+
+  // ── exclusión de archivos de sistema ─────────────────────────────────────────
+
+  it('solo system/DECISIONS.md staged → diff excluido → approved=true sin invocar callClaude', async () => {
+    const { execa } = await import('execa')
+    mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'system', 'DECISIONS.md'), '## ADR-0001\ndecision\n')
+    await execa('git', ['add', 'system/DECISIONS.md'], { cwd: gitRoot, reject: false })
+
+    const callClaude = vi.fn()
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).toBe('')
+    expect(callClaude).not.toHaveBeenCalled()
+  })
+
+  it('cambio en .ts + system/DECISIONS.md → prompt incluye el .ts y excluye DECISIONS.md', async () => {
+    const { execa } = await import('execa')
+    mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'feature.ts'), 'export const featureX = 42')
+    writeFileSync(path.join(gitRoot, 'system', 'DECISIONS.md'), '## ADR-0001\ndecision\n')
+    await execa('git', ['add', 'feature.ts', 'system/DECISIONS.md'], { cwd: gitRoot, reject: false })
+
+    let capturedPrompt = ''
+    const callClaude = vi.fn().mockImplementation(async (prompt: string) => {
+      capturedPrompt = prompt
+      return 'REVIEW: APPROVED'
+    })
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(callClaude).toHaveBeenCalledOnce()
+    expect(capturedPrompt).toContain('feature.ts')
+    expect(capturedPrompt).not.toContain('DECISIONS.md')
+  })
+
+  it('repo sin system/DECISIONS.md ni PROGRESS.md → sin error al revisar cambio normal', async () => {
+    await stageFile('plain.ts', 'export const plain = true')
+
+    const callClaude = vi.fn().mockResolvedValue('REVIEW: APPROVED')
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(callClaude).toHaveBeenCalledOnce()
+  })
 })
