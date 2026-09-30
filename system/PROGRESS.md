@@ -1929,3 +1929,26 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0068/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-30 — f-0069 completado
+
+## Feature f-0069
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En runDeepSeekAgent (orchestrator/src/scout/deepseek.ts): leer choice.finish_reason en la respuesta final y loguearlo con el formato `[scout] <focus>: respuesta final finish_reason=<x>, <n> caracteres`, antes de cualquier parseo. No cambiar la lógica de tool_calls ni MAX_LOOP_TURNS. (b85de4da)
+- [x] Step 2: Reemplazar el literal `max_tokens: 4096` del body del fetch a DeepSeek por una constante con nombre SCOUT_MAX_OUTPUT_TOKENS. Verificar en la documentación oficial de DeepSeek el máximo de salida de 'deepseek-v4-flash' y fijar el valor máximo documentado (si no se puede confirmar, dejar 8192 solo si está documentado; si no, mantener 4096). Dejar valor y fuente en un ADR. (fbe7e02d)
+- [x] Step 3: En buildSystemPrompt (deepseek.ts): agregar cotas explícitas para la respuesta final — máximo de entradas de `evidencia` (propuesta 8) y largo máximo de `explicacion` (propuesta 200 caracteres) — sin tocar ScoutReportSchema. (8b281da7)
+- [x] Step 4: En la rama de respuesta final de runDeepSeekAgent: detectar finish_reason==='length' y, en vez de parsear, agregar al historial un mensaje de usuario pidiendo la misma respuesta JSON en versión compacta y repetir el turno UNA sola vez. Si el segundo intento vuelve 'length', lanzar un error claro que mencione `finish_reason=length` sin hacer un tercer intento. Convivir con pruneToolHistory y no cambiar MAX_LOOP_TURNS ni SCOUT_TIMEOUT_MS. (9a5d6965)
+- [x] Step 5: Envolver el JSON.parse del jsonMatch en la rama de respuesta final para que, con finish_reason distinto de 'length' y JSON inválido, se lance un error descriptivo que incluya el finish_reason y el largo del contenido (en vez del SyntaxError crudo), manteniendo que la investigación se considera fallida. (a54aeaf4)
+- [x] Step 6: En scout.test.ts: agregar tests con fetch simulado (vi.stubGlobal) para: (a) 'length' + JSON truncado → no parsea y reintenta; (b) 'length' y luego válido → devuelve reporte; (c) 'length' dos veces → error con finish_reason=length sin tercer intento; (d) el body de la request usa SCOUT_MAX_OUTPUT_TOKENS; (e) buildSystemPrompt contiene ambas cotas; (f) 'stop' + JSON inválido → error con finish_reason y largo. Verificar que los tests existentes (incluido 402/S-034 y el de MAX_LOOP_TURNS) siguen verdes. (af96c462)
+- [x] Step 7: Correr typecheck y npm test completos; ajustar hasta que la suite existente más los tests nuevos pasen sin errores de tipos. (af96c462)
+
+### Decisiones (ADR)
+- ADR-0195 — SCOUT_MAX_OUTPUT_TOKENS = 393 216 para deepseek-v4-flash [Instrucción de Augusto]
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0069/`
+
+> Revisar con Claude in Chrome para validación de UX.
