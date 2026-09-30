@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { execa } from 'execa'
-import { updateBacklogStatus, commitAndPushBacklog, pushBacklogFile } from './backlog.js'
+import { updateBacklogStatus, commitAndPushBacklog, pushBacklogFile, commitAndPushSystemDocs } from './backlog.js'
 
 // Filas reales copiadas de system/BACKLOG.md (secciones Sistema y Kredy), tal cual el formato
 // de la fecha de este test — ID | P | Descripción | Estado | Ejecutor.
@@ -201,6 +201,93 @@ describe('commitAndPushBacklog', () => {
     expect(result.error).toContain("no en 'master'")
 
     const status = await execa('git', ['status', '--porcelain', 'system/BACKLOG.md'], { cwd: repoPath })
+    expect(status.stdout.trim().length).toBeGreaterThan(0)
+  })
+})
+
+describe('commitAndPushSystemDocs', () => {
+  let workDir: string
+  let originPath: string
+  let repoPath: string
+
+  beforeEach(async () => {
+    workDir = mkdtempSync(path.join(tmpdir(), 'system-docs-test-'))
+    originPath = path.join(workDir, 'origin.git')
+    repoPath = path.join(workDir, 'repo')
+
+    await execa('git', ['init', '--bare', originPath])
+    await execa('git', ['clone', originPath, repoPath])
+    await execa('git', ['config', 'user.email', 'test@example.com'], { cwd: repoPath })
+    await execa('git', ['config', 'user.name', 'Test'], { cwd: repoPath })
+  })
+
+  afterEach(() => {
+    rmSync(workDir, { recursive: true, force: true })
+  })
+
+  async function seedSystemDocs() {
+    const sysDir = path.join(repoPath, 'system')
+    mkdirSync(sysDir, { recursive: true })
+    writeFileSync(path.join(sysDir, 'DECISIONS.md'), '# Decisions\n', 'utf-8')
+    writeFileSync(path.join(sysDir, 'PROGRESS.md'), '# Progress\n', 'utf-8')
+    await execa('git', ['add', 'system/DECISIONS.md', 'system/PROGRESS.md'], { cwd: repoPath })
+    await execa('git', ['commit', '-m', 'initial system docs'], { cwd: repoPath })
+    await execa('git', ['branch', '-m', 'master'], { cwd: repoPath })
+    await execa('git', ['push', 'origin', 'master'], { cwd: repoPath })
+    await execa('git', ['remote', 'set-head', 'origin', 'master'], { cwd: repoPath })
+  }
+
+  it('commits and pushes both DECISIONS.md and PROGRESS.md, reflected in origin', async () => {
+    await seedSystemDocs()
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\n## ADR-0001\nTest.\n', 'utf-8')
+    writeFileSync(path.join(repoPath, 'system', 'PROGRESS.md'), '# Progress\n\n- F-0099 completado\n', 'utf-8')
+
+    const result = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(result.committed).toBe(true)
+    expect(result.pushed).toBe(true)
+    expect(result.branch).toBe('master')
+
+    const checkPath = path.join(workDir, 'fresh-check')
+    await execa('git', ['clone', originPath, checkPath])
+    expect(readFileSync(path.join(checkPath, 'system', 'DECISIONS.md'), 'utf-8')).toContain('ADR-0001')
+    expect(readFileSync(path.join(checkPath, 'system', 'PROGRESS.md'), 'utf-8')).toContain('F-0099 completado')
+  })
+
+  it('commit message includes chore(system): DECISIONS/PROGRESS tras <featureId>', async () => {
+    await seedSystemDocs()
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\nupdated\n', 'utf-8')
+
+    await commitAndPushSystemDocs('F-0042', repoPath)
+    const log = await execa('git', ['log', '-1', '--pretty=%B'], { cwd: repoPath })
+    expect(log.stdout).toContain('chore(system): DECISIONS/PROGRESS tras F-0042')
+  })
+
+  it('is a no-op when neither file has uncommitted changes', async () => {
+    await seedSystemDocs()
+    const result = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(result).toEqual({ committed: false, pushed: false })
+  })
+
+  it('commits when only DECISIONS.md has changes (PROGRESS.md unchanged)', async () => {
+    await seedSystemDocs()
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\nonly this changed\n', 'utf-8')
+
+    const result = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(result.committed).toBe(true)
+    expect(result.pushed).toBe(true)
+  })
+
+  it('refuses to commit/push when HEAD is not on the default branch', async () => {
+    await seedSystemDocs()
+    await execa('git', ['checkout', '-b', 'feature/other-work'], { cwd: repoPath })
+    writeFileSync(path.join(repoPath, 'system', 'DECISIONS.md'), '# Decisions\n\nchanged on branch\n', 'utf-8')
+
+    const result = await commitAndPushSystemDocs('F-0099', repoPath)
+    expect(result.committed).toBe(false)
+    expect(result.pushed).toBe(false)
+    expect(result.error).toContain("no en 'master'")
+
+    const status = await execa('git', ['status', '--porcelain', 'system/DECISIONS.md'], { cwd: repoPath })
     expect(status.stdout.trim().length).toBeGreaterThan(0)
   })
 })
