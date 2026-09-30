@@ -612,6 +612,10 @@ export async function commitStepWithAdrs(
       if (id === null) continue
       newAdrIds.push(id)
       log(`[adr] ADR-${String(id).padStart(4, '0')} registrado (origen: ${block.origen})`)
+      const dupStep = state.steps.find(s => s.id !== step.id && (s.adrIds ?? []).includes(id))
+      if (dupStep) {
+        log(`[adr] WARN ID duplicado ADR-${String(id).padStart(4, '0')} (step ${dupStep.id} y step ${step.id})`)
+      }
     }
   }
 
