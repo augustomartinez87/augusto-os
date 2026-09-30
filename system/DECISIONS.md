@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0189 · 2026-09-30 · commitStepWithAdrs devuelve el conjunto efectivo de adrIds, no solo los recién creados
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** `commitStepWithAdrs` devuelve `step.adrIds` (el set completo tras ejecutarse) en vez de únicamente los adrIds recién creados en esa corrida.
+**Contexto:** En un resume tras fallo de commit, el guard de idempotencia salta `appendAdr` y la lista local queda vacía; como el caller pisa `step.adrIds` vía `Object.assign` en `markStepStatus('done', {adrIds})`, devolver `[]` dejaba el ADR ya persistido huérfano y fuera del cuerpo del PR.
+**Alternativas descartadas:** Arreglar en el caller (no pasar adrIds cuando está vacío, o mergear) — descartado por localizar la corrección en la función testeable y ser cubierto por los tests de retorno existentes.
+**Consecuencias / riesgo residual:** Queda como seguimiento aparte la causa del ADR repetido en 4 steps (fuera de `appendAdr`, hipótesis no verificada) y la sospecha de que `git diff HEAD` no ve archivos nuevos sin trackear en el reviewer.
+
+> Generado por el loop · feature F-0066 · step 3
+
+---
 ## ADR-0188 · 2026-09-29 · Test discriminante del invariante `attempt--` con MAX_RETRIES límites consecutivos
 
 **Estado:** aceptada

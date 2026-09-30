@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
+import { execa } from 'execa'
 import { appendProgress } from './progress.js'
 import { acquireRunLock, commitStepWithAdrs } from './index.js'
 import { releaseLock } from './autopilot.js'
@@ -280,5 +281,92 @@ describe('commitStepWithAdrs', () => {
     const persisted = JSON.parse(readFileSync(statePath, 'utf-8'))
     expect(persisted.steps[0].adrIds).toEqual([2])
     expect(persisted.steps[0].status).toBe('done')
+  })
+})
+
+// ── commitStepWithAdrs — con repo git real (F-0066 step 4) ───────────────────
+
+describe('commitStepWithAdrs — con repo git real', () => {
+  let tmpDir: string
+  let decisionsPath: string
+  let statePath: string
+
+  function makeRealCommitStep(cwd: string) {
+    return async (stepId: number, desc: string): Promise<string> => {
+      await execa('git', ['add', '-A'], { cwd })
+      const porcelain = (await execa('git', ['status', '--porcelain'], { cwd })).stdout
+      if (!porcelain.trim()) {
+        return (await execa('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim()
+      }
+      await execa('git', ['commit', '-m', `feat: step ${stepId} — ${desc.slice(0, 60)}`], { cwd })
+      return (await execa('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim()
+    }
+  }
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'commit-step-git-'))
+    decisionsPath = path.join(tmpDir, 'DECISIONS.md')
+    statePath = path.join(tmpDir, 'STATE.json')
+    writeFileSync(decisionsPath, DECISIONS_FIXTURE, 'utf-8')
+    await execa('git', ['init'], { cwd: tmpDir })
+    await execa('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+    await execa('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+    await execa('git', ['add', '.'], { cwd: tmpDir })
+    await execa('git', ['commit', '-m', 'initial'], { cwd: tmpDir })
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true })
+  })
+
+  it('(a) con ADRs: git status --porcelain queda vacío y DECISIONS.md figura en el commit', async () => {
+    const state = makeState()
+    await commitStepWithAdrs(
+      state.steps[0], [ADR_DRAFT], state,
+      { decisionsPath, statePath, _commitStep: makeRealCommitStep(tmpDir) },
+    )
+    const porcelain = (await execa('git', ['status', '--porcelain'], { cwd: tmpDir })).stdout
+    expect(porcelain.trim()).toBe('')
+    const changed = (await execa('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: tmpDir })).stdout
+    expect(changed).toContain('DECISIONS.md')
+  })
+
+  it('(b) resume tras fallo de commit: el ADR existe exactamente una vez en DECISIONS.md', async () => {
+    const state = makeState()
+    writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8')
+
+    const failingCommit = async (_: number, __: string): Promise<string> => {
+      throw new Error('git commit simulado fallido')
+    }
+    await expect(
+      commitStepWithAdrs(state.steps[0], [ADR_DRAFT], state, {
+        decisionsPath, statePath, _commitStep: failingCommit,
+      })
+    ).rejects.toThrow()
+
+    // adrIds deben estar persistidos en STATE.json a pesar del fallo de commit
+    const persistedState: OrchestratorState = JSON.parse(readFileSync(statePath, 'utf-8'))
+    expect(persistedState.steps[0].adrIds).toEqual([2])
+
+    // Resume: el guard salta appendAdr porque adrIds ya está persistido
+    const { adrIds } = await commitStepWithAdrs(
+      persistedState.steps[0], [ADR_DRAFT], persistedState,
+      { decisionsPath, statePath, _commitStep: makeRealCommitStep(tmpDir) },
+    )
+    expect(adrIds).toEqual([2])
+    const count = (readFileSync(decisionsPath, 'utf-8').match(/## ADR-0002/g) ?? []).length
+    expect(count).toBe(1)
+  })
+
+  it('(c) sin ADRs pendientes: git status --porcelain queda vacío y DECISIONS.md no cambia', async () => {
+    const state = makeState()
+    const originalContent = readFileSync(decisionsPath, 'utf-8')
+    await commitStepWithAdrs(
+      state.steps[0], [], state,
+      { decisionsPath, statePath, _commitStep: makeRealCommitStep(tmpDir) },
+    )
+    const porcelain = (await execa('git', ['status', '--porcelain'], { cwd: tmpDir })).stdout
+    expect(porcelain.trim()).toBe('')
+    expect(readFileSync(decisionsPath, 'utf-8')).toBe(originalContent)
   })
 })
