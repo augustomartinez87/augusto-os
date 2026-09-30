@@ -25,6 +25,24 @@ export async function runReviewer(
   opts?: ReviewerOpts,
 ): Promise<ReviewResult> {
   const root = opts?.repoRoot ?? getRepoRoot()
+
+  // Register new untracked files with intent-to-add so `git diff HEAD` shows their content.
+  // Respects .gitignore via --exclude-standard; does not stage content.
+  const lsResult = await execa('git', ['ls-files', '--others', '--exclude-standard'], {
+    cwd: root,
+    reject: false,
+  })
+  const newFiles = (lsResult.stdout ?? '').split('\n')
+    .filter(f => f.trim().length > 0)
+    .filter(f => f !== 'system/DECISIONS.md' && f !== 'system/PROGRESS.md')
+  if (newFiles.length > 0) {
+    log(`[reviewer] ${newFiles.length} archivo(s) nuevo(s) incluidos en el diff`)
+    await execa('git', ['add', '-N', '--', '.', ':(exclude)system/DECISIONS.md', ':(exclude)system/PROGRESS.md'], {
+      cwd: root,
+      reject: false,
+    })
+  }
+
   const diffResult = await execa('git', ['diff', 'HEAD', '--', '.', ':(exclude)system/DECISIONS.md', ':(exclude)system/PROGRESS.md'], {
     cwd: root,
     reject: false,
