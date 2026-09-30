@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0193 · 2026-09-30 · Contar archivos nuevos via ls-files antes de git add -N, filtrado en código
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** sistema
+
+**Decisión:** Se ejecuta `git ls-files --others --exclude-standard` sin pathspecs y el filtro de `system/DECISIONS.md` / `system/PROGRESS.md` se aplica en JavaScript, en vez de pasarlos como pathspecs `:(exclude)` al propio ls-files.
+**Contexto:** `git ls-files` soporta pathspecs `:(exclude)` pero el spec no especificó si usar pathspecs allí; el filtraje en código es más portable (Windows, distintas versiones de git) y no requiere verificar compatibilidad de pathspecs en ls-files vs add-N.
+**Alternativas descartadas:** Pasar `:(exclude)system/DECISIONS.md` y `:(exclude)system/PROGRESS.md` directamente a `git ls-files` (como en git add -N). Descartado por ser redundante y añadir un vector de fallo adicional; el resultado observable es idéntico.
+**Consecuencias / riesgo residual:** Si en el futuro se agregan más exclusiones al diff, deben actualizarse tanto el array del filter en código como el comando git add -N. Riesgo menor: bajo acoplamiento explícito.
+
+> Generado por el loop · feature F-0068 · step 1
+
+---
 ## ADR-0192 · 2026-09-30 · Fixtures del caso (c) en describe anidado propio en lugar de ampliar los fixtures globales
 
 **Estado:** aceptada

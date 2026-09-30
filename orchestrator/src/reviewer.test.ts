@@ -282,4 +282,129 @@ describe('runReviewer', () => {
     expect(result.approved).toBe(true)
     expect(callClaude).toHaveBeenCalledOnce()
   })
+
+  // ── F-0068: archivos nuevos sin trackear ──────────────────────────────────────
+
+  it('(F-0068-a) solo archivo nuevo sin trackear → callClaude invocado con contenido del archivo', async () => {
+    mkdirSync(path.join(gitRoot, 'src'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'src', 'nuevo.ts'), 'export const x = 1')
+    // No git add — archivo queda sin trackear
+
+    let capturedPrompt = ''
+    const callClaude = vi.fn().mockImplementation(async (prompt: string) => {
+      capturedPrompt = prompt
+      return 'REVIEW: APPROVED'
+    })
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(callClaude).toHaveBeenCalledOnce()
+    expect(capturedPrompt).toContain('nuevo.ts')
+    expect(capturedPrompt).toContain('export const x = 1')
+    expect(result.approved).toBe(true)
+  })
+
+  it('(F-0068-b) archivo nuevo sin trackear + modificación trackeada → ambos en el prompt', async () => {
+    const { execa: exec } = await import('execa')
+    writeFileSync(path.join(gitRoot, 'existing.ts'), 'export const a = 1')
+    await exec('git', ['add', 'existing.ts'], { cwd: gitRoot, reject: false })
+    await exec('git', ['commit', '-m', 'add existing'], { cwd: gitRoot, reject: false })
+    writeFileSync(path.join(gitRoot, 'existing.ts'), 'export const a = 2')
+    writeFileSync(path.join(gitRoot, 'new.ts'), 'export const b = 3')
+
+    let capturedPrompt = ''
+    const callClaude = vi.fn().mockImplementation(async (prompt: string) => {
+      capturedPrompt = prompt
+      return 'REVIEW: APPROVED'
+    })
+
+    await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(callClaude).toHaveBeenCalledOnce()
+    expect(capturedPrompt).toContain('existing.ts')
+    expect(capturedPrompt).toContain('new.ts')
+  })
+
+  it('(F-0068-c) archivo ignorado por .gitignore → no aparece en el prompt', async () => {
+    const { execa: exec } = await import('execa')
+    writeFileSync(path.join(gitRoot, '.gitignore'), 'logs/\n')
+    await exec('git', ['add', '.gitignore'], { cwd: gitRoot, reject: false })
+    await exec('git', ['commit', '-m', 'add gitignore'], { cwd: gitRoot, reject: false })
+    mkdirSync(path.join(gitRoot, 'logs'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'logs', 'x.log'), 'some log')
+    writeFileSync(path.join(gitRoot, 'real.ts'), 'export const real = true')
+
+    let capturedPrompt = ''
+    const callClaude = vi.fn().mockImplementation(async (prompt: string) => {
+      capturedPrompt = prompt
+      return 'REVIEW: APPROVED'
+    })
+
+    await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(callClaude).toHaveBeenCalledOnce()
+    expect(capturedPrompt).toContain('real.ts')
+    expect(capturedPrompt).not.toContain('x.log')
+  })
+
+  it('(F-0068-d) system/DECISIONS.md y system/PROGRESS.md nuevos sin trackear → excluidos, diff vacío', async () => {
+    mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'system', 'DECISIONS.md'), '## ADR-001\n')
+    writeFileSync(path.join(gitRoot, 'system', 'PROGRESS.md'), '# Progress\n')
+
+    const callClaude = vi.fn()
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).toBe('')
+    expect(callClaude).not.toHaveBeenCalled()
+  })
+
+  it('(F-0068-d2) system/DECISIONS.md nuevo + feature.ts nuevo → prompt incluye feature.ts, excluye DECISIONS.md', async () => {
+    mkdirSync(path.join(gitRoot, 'system'), { recursive: true })
+    writeFileSync(path.join(gitRoot, 'system', 'DECISIONS.md'), '## ADR-001\n')
+    writeFileSync(path.join(gitRoot, 'feature.ts'), 'export const feature = 42')
+
+    let capturedPrompt = ''
+    const callClaude = vi.fn().mockImplementation(async (prompt: string) => {
+      capturedPrompt = prompt
+      return 'REVIEW: APPROVED'
+    })
+
+    await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(callClaude).toHaveBeenCalledOnce()
+    expect(capturedPrompt).toContain('feature.ts')
+    expect(capturedPrompt).not.toContain('DECISIONS.md')
+  })
+
+  it('(F-0068-e) repo sin cambios ni archivos nuevos → approved=true sin invocar modelo', async () => {
+    const callClaude = vi.fn()
+
+    const result = await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    expect(result.approved).toBe(true)
+    expect(result.feedback).toBe('')
+    expect(callClaude).not.toHaveBeenCalled()
+  })
+
+  it('(F-0068-f) tras runReviewer + git add -A + commit, git status --porcelain queda vacío y archivo nuevo figura en el commit', async () => {
+    const { execa: exec } = await import('execa')
+    writeFileSync(path.join(gitRoot, 'nuevo.ts'), 'export const nuevo = true')
+
+    const callClaude = vi.fn().mockResolvedValue('REVIEW: APPROVED')
+
+    await runReviewer(FAKE_STEP, FAKE_STATE, { repoRoot: gitRoot, callClaude })
+
+    // Simula commitStep: git add -A && git commit
+    await exec('git', ['add', '-A'], { cwd: gitRoot })
+    await exec('git', ['commit', '-m', 'test commit'], { cwd: gitRoot })
+
+    const porcelain = (await exec('git', ['status', '--porcelain'], { cwd: gitRoot })).stdout
+    expect(porcelain.trim()).toBe('')
+
+    const changed = (await exec('git', ['diff', '--name-only', 'HEAD~1', 'HEAD'], { cwd: gitRoot })).stdout
+    expect(changed).toContain('nuevo.ts')
+  })
 })

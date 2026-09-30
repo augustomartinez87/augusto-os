@@ -1,0 +1,305 @@
+[
+  {
+    "objetivo": "Mapa del repo para: Argos — La curva histórica del Overview cuenta lotes/rescates FCI descartados o pendientes (AR-043)",
+    "archivos": [
+      "src/features/portfolio/services/portfolioHistoryService.ts",
+      "src/lib/finance/fciValuationSeries.ts",
+      "src/features/portfolio/hooks/usePortfolioHistory.ts",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/features/fci/services/fciService.js",
+      "src/features/portfolio/utils/fciAdapter.js",
+      "src/features/portfolio/components/DashboardOverview.jsx",
+      "src/features/portfolio/components/charts/BenchmarkChart.jsx",
+      "src/features/portfolio/services/mepService.ts",
+      "src/features/fci/components/FciPendingLots.jsx",
+      "src/features/fci/components/FciPendingRescates.jsx",
+      "src/features/fci/services/__tests__/fciService.pendingLots.test.js",
+      "src/features/fci/services/__tests__/fciService.pendingRescates.test.js"
+    ],
+    "patrones": [
+      "Servicios async que cargan datos de Supabase con `(supabase as any)` y devuelven un objeto tipado aguas arriba.",
+      "Cálculo financiero con `decimal.js` (Decimal) para VCP, cuotapartes y montos; nunca floats crudos en el motor FCI.",
+      "Lookups O(1) con Map y avance de punteros por fecha (O(1) amortizado por fecha×fondo) en vez de recorrer historial completo.",
+      "Reversión de estado para historia: el saldo actual en DB se 'revierte' a original (cpOriginal = cpActual + Σ cp_consumidas) para reconstruir la curva.",
+      "Fallbacks en cascada de precios (data912 → daily_prices/EOD → market_prices) con console.warn cuando faltan fuentes.",
+      "Separación por capa: hooks (useFciLotEngine, usePortfolioHistory) consumen services; adapters (fciAdapter) solo re-mapean sin recalcular.",
+      "Flags de estado por listas separadas: activeLots / allLots / rescates / pendingRescates / pendingLots (AR-042) — el filtro de estado vive en la capa de service/loader, no en el motor.",
+      "Interface-based TS types exportados (FciLotInput, FciRescateInput, FciPriceEntry, FciDayValue) para inputs/outputs del motor."
+    ],
+    "dependencias": [
+      "decimal.js",
+      "@supabase/supabase-js",
+      "react (hooks: useState/useEffect/useMemo/useCallback)",
+      "librería de charts para la curva (React chart component) [NO VERIFICADO cuál exactamente]",
+      "data912 (wrapper propio en @/utils/data912)",
+      "servicios internos: mepService, eodHistoryService, splitAdjust, bondUtils, formatters"
+    ],
+    "riesgos": [
+      "El bug AR-043 vive en la selección de qué lotes/rescates entran al histórico: `loadFciPortfolioData` en portfolioHistoryService.ts arma `lots` desde `allLots` y los rescates desde `portfolioRescates`; si esas listas incluyen registros 'pendiente'/'descartado' (no solo activos/confirmados), la curva histórica los cuenta. [NO VERIFICADO el filtro exacto de estado aplicado]",
+      "`buildFciValuationSeries` NO filtra por estado: recibe `lots` y `rescates` ya filtrados por el caller; toda la responsabilidad de excluir descartados/pendientes recae en el loader, lo que hace fácil el bug.",
+      "El motor revierte cuotapartes usando mutations de rescates; un rescate pendiente/descartado con mutations contribuiría erróneamente a cpOriginal y a los eventos de capital neto.",
+      "Dos paths de datos FCI coexisten: el histórico del Overview (portfolioHistoryService.loadFciPortfolioData) y el motor en vivo (useFciLotEngine con getActiveLots/getLots/getPendingLots/getPendingRescates) — un fix debe alinear ambos criterios de estado o divergirán.",
+      "La curva es aditiva: se suma FCI sobre la valuación de acciones; un exceso de lotes FCI infla valuation/netInvested y por ende las métricas del Overview (YTD/TWR/benchmark).",
+      "Umbral de contexto limitado: no confirmé la firma ni el filtro exacto de getLots vs getActiveLots vs getPendingLots en fciService.js."
+    ],
+    "evidencia": [
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "buildPortfolioHistory",
+        "lineas": "400-540",
+        "explicacion": "Función que reconstruye la curva histórica del Overview; suma la contribución FCI (fciDay.ars/usd) a la valuación de acciones. Es el punto de entrada del histórico que reporta AR-043.",
+        "confianza": 0.95
+      },
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "loadFciPortfolioData",
+        "lineas": "350-395",
+        "explicacion": "Carga lots/rescates/precios FCI desde Supabase para el histórico. Arma `lots` desde `allLots` y rescates desde `portfolioRescates`; aquí probablemente está el filtro faltante de estado (descartado/pendiente) causante de AR-043.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "lots",
+        "lineas": "368-377",
+        "explicacion": "Mapeo de `allLots` a FciLotInput usando cuotapartes/capital_invertido/fecha_suscripcion; si `allLots` incluye lotes descartados el motor los cuenta.",
+        "confianza": 0.65
+      },
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "rescates",
+        "lineas": "378-385",
+        "explicacion": "Mapeo de `portfolioRescates` a FciRescateInput con mutations y monto_rescatado; si incluye rescates pendientes/descartados, se restan del capital neto y de cuotapartes en la curva.",
+        "confianza": 0.65
+      },
+      {
+        "path": "src/lib/finance/fciValuationSeries.ts",
+        "simbolo": "buildFciValuationSeries",
+        "lineas": "49-70",
+        "explicacion": "Motor que reconstruye la serie diaria FCI. No filtra por estado: confía en que lots/rescates ya vienen filtrados, por lo que todo el problema de AR-043 se origina aguas arriba.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/lib/finance/fciValuationSeries.ts",
+        "simbolo": "cpOriginal",
+        "lineas": "80-88",
+        "explicacion": "Revierte el saldo actual a original sumando cuotapartes consumidas por rescates; un rescate pendiente/descartado con mutations contamina este cálculo.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/lib/finance/fciValuationSeries.ts",
+        "simbolo": "netEvents",
+        "lineas": "113-160",
+        "explicacion": "Eventos de capital neto (suscripciones − rescates) en ARS/USD. Si entran lotes/rescates descartados, netInvestedArs/Usd quedan mal y afectan métricas derivadas del Overview.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "activeLots",
+        "lineas": "17-69",
+        "explicacion": "El motor en vivo sí separa lotes activos de todos y de pendientes (allLots, pendingLots, pendingRescates), demostrando que existe un criterio de estado que el path histórico del Overview debe replicar.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "getPendingLots",
+        "lineas": "40-46",
+        "explicacion": "Menciona AR-042 (suscripciones detectadas sin revisar) y separa pendingLots; evidencia de que 'pendiente' es un estado de primera clase que el histórico debe excluir para AR-043.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/hooks/useFciLotEngine.js",
+        "simbolo": "getPendingRescates",
+        "lineas": "40-46",
+        "explicacion": "Confirma que existen rescates pendientes como listado aparte; un histórico que usa getRescates total sin filtrar podría mezclarlos.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/portfolio/utils/fciAdapter.js",
+        "simbolo": "fciPositionToPosition",
+        "lineas": "17-60",
+        "explicacion": "Adapter que mapea posición FCI a Position sin recalcular; documenta que solo posiciones FCI de tipo 'portfolio' suman al portfolio bursátil, criterio que el histórico debería respetar.",
+        "confianza": 0.75
+      },
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "FciLotInput",
+        "lineas": "12-20",
+        "explicacion": "Tipo de entrada del motor FCI: id, fci_id, cuotapartes, fecha_suscripcion, capital_invertido. No incluye campo de estado → el filtrado debe ocurrir antes, en el loader.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/portfolio/services/portfolioHistoryService.ts",
+        "simbolo": "FciRescateInput",
+        "lineas": "21-28",
+        "explicacion": "Tipo de rescate con mutations y monto_rescatado; tampoco incluye estado, reforzando que la exclusión de descartados/pendientes debe hacerse en loadFciPortfolioData.",
+        "confianza": 0.7
+      },
+      {
+        "path": "src/features/portfolio/hooks/usePortfolioHistory.ts",
+        "simbolo": "usePortfolioHistory",
+        "lineas": "1-40",
+        "explicacion": "Hook que consume buildPortfolioHistory para el Overview; es el puente entre el cálculo histórico y la UI de la curva. [NO VERIFICADO su cuerpo exacto]",
+        "confianza": 0.5
+      }
+    ],
+    "resumen": "Argos es una app React/Vite+TS con Supabase como backend. La curva histórica del Overview se reconstruye con buildPortfolioHistory (src/features/portfolio/services/portfolioHistoryService.ts), que combina trades de acciones con la contribución FCI producida por buildFciValuationSeries (src/lib/finance/fciValuationSeries.ts). Este motor NO filtra por estado: recibe lots/rescates ya armados por loadFciPortfolioData, que los construye desde allLots y portfolioRescates; el bug AR-043 (contar lotes/rescates FCI descartados o pendientes) muy probablemente reside en ese loader, que debería excluir estados 'pendiente'/'descartado' igual que hace el motor en vivo useFciLotEngine (que separa activeLots/pendingLots/pendingRescates, ver AR-042). El fix debe aplicar el filtro de estado en loadFciPortfolioData (o en la query a fci_lots/fci_rescates) antes de pasarlos al motor, sin tocar buildFciValuationSeries. Varias firmas exactas de fciService.getLots/getActiveLots/getPendingLots y del hook quedaron [NO VERIFICADAS]."
+  },
+  {
+    "objetivo": "Investigar qué existe en el repo para implementar AR-043: la curva histórica del Overview cuenta lotes/rescates FCI descartados o pendientes, en el contexto del motor FCI/carry (Argos).",
+    "archivos": [
+      "src/utils/vcpHelpers.js",
+      "src/lib/finance/carryCalculations.ts",
+      "src/hooks/useCarryMetrics.js",
+      "src/features/carry/components/OperationsTab.jsx",
+      "src/features/carry/components/AnalysisTab.jsx",
+      "src/features/carry/components/DashboardTab.jsx",
+      "src/features/carry/components/RatesEvolutionChart.jsx",
+      "src/features/carry/components/SpreadRealizedChart.jsx",
+      "src/features/fci/hooks/useFciLotEngine.js",
+      "src/features/fci/services/fciService.js",
+      "src/features/fci/components/FciPendingRescates.jsx",
+      "src/features/fci/components/FciRescatesList.jsx",
+      "src/pages/FundingEngine.jsx",
+      "src/pages/Fci.jsx",
+      "src/pages/FciPortfolio.jsx",
+      "supabase/migrations/023_fci_rescates.sql",
+      ".claude/plans/rustling-splashing-moonbeam.md"
+    ],
+    "patrones": [
+      "Reconstrucción histórica de cuotapartes: cpAtDate = lot.cuotapartes + Σ(cp_consumidas de rescates con fecha_rescate > fechaInicio para ese lot_id). lot.cuotapartes ya tiene descontados TODOS los rescates, por eso se suman de vuelta los posteriores.",
+      "Pasar todos los lotes (activos e inactivos/agotados) al cálculo, no solo los activos, para no perder CP históricas.",
+      "Propagar un array `rescates` (registros de fci_rescates con mutations[{lot_id, cp_consumidas}]) a través de toda la cadena: hook → componentes carry → funciones de cálculo.",
+      "Filtrar/normalizar fechas con String(r.fecha_rescate).split('T')[0] antes de comparar con fechaInicio (YYYY-MM-DD).",
+      "Componentes carry reciben `rescates = []` como prop con default para no romper llamadas existentes."
+    ],
+    "dependencias": [
+      "decimal.js (usado en carryCalculations.ts)",
+      "@supabase (tablas fci_rescates, fci_master, portfolios; RLS por user_id)",
+      "src/utils/formatters (toDateString, formatDateAR)",
+      "src/lib/finance/arancelTNA"
+    ],
+    "riesgos": [
+      "AR-043 menciona 'descartados o pendientes': existe FciPendingRescates.jsx para rescates detectados automáticamente (F-0053) pendientes de aplicar, que probablemente NO entran en fci_rescates y por tanto podrían no contarse o contarse de más en la curva. [NO VERIFICADO] su integración exacta con rescates del motor.",
+      "Rescates viejos cargados SIN fecha corrompen la reconstrucción; el plan indica que el usuario debe re-ingresarlos manualmente.",
+      "Borrar lotes consumidos por rescates puede dejar saldos inconsistentes (ya advertido en window.confirm en Fci.jsx y FciPortfolio.jsx).",
+      "calcularPnlForPeriod y calcularSaldoFCIEnFecha deben compartir EXACTAMENTE la misma fórmula de reconstrucción para evitar divergencias entre curvas.",
+      "La curva del Overview (DashboardTab / RatesEvolutionChart / SpreadRealizedChart) debe recibir allLots y rescates; si solo recibe fciLots activos seguirá subestimando. [NO VERIFICADO] el nombre exacto de la variable que arma la curva en el Overview.",
+      "El plan original (rustling-splashing-moonbeam.md) ya propone cambios que podrían estar parcialmente implementados; verificar qué falta."
+    ],
+    "evidencia": [
+      {
+        "path": "src/utils/vcpHelpers.js",
+        "simbolo": "calculatePnlForPeriod",
+        "lineas": "56-97",
+        "explicacion": "Función central de PnL FCI por período. Ya acepta `rescates = []` como 5º parámetro y reconstruye CP históricas; es donde AR-043 debe garantizar que no se cuenten lotes/rescates descartados/pendientes.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/utils/vcpHelpers.js",
+        "simbolo": "cpRestored",
+        "lineas": "69-77",
+        "explicacion": "Cálculo del total de cuotapartes restauradas desde rescates posteriores a fechaInicio, filtrando por lot_id. Núcleo de la lógica de reconstrucción histórica.",
+        "confianza": 0.9
+      },
+      {
+        "path": "src/utils/vcpHelpers.js",
+        "simbolo": "cpAtDate",
+        "lineas": "79-80",
+        "explicacion": "CP del lote en la fecha objetivo; si <= 0 hace continue (excluye el lote). Punto donde se decide si un lote 'descartado' contribuye o no.",
+        "confianza": 0.88
+      },
+      {
+        "path": "src/lib/finance/carryCalculations.ts",
+        "simbolo": "RescateRecord",
+        "lineas": "31-34",
+        "explicacion": "Tipo que define el shape de un rescate: { fecha_rescate: string; mutations: { lot_id: string; cp_consumidas: number }[] }. Contrato que debe respetar el motor carry.",
+        "confianza": 0.92
+      },
+      {
+        "path": "src/lib/finance/carryCalculations.ts",
+        "simbolo": "calcularSaldoFCIEnFecha",
+        "lineas": "244-300",
+        "explicacion": "Función TS equivalente a calculatePnlForPeriod en el motor carry; recibe parametro `rescates` (usado en línea 470). Debe usar la misma fórmula de reconstrucción para la curva histórica.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/lib/finance/carryCalculations.ts",
+        "simbolo": "FciLotForBalance",
+        "lineas": "17-24",
+        "explicacion": "Interface de lote FCI con id, cuotapartes, fecha_suscripcion, activo, vcp_entrada. El campo `activo` es clave para decidir si lotes descartados/agotados entran en el cálculo.",
+        "confianza": 0.88
+      },
+      {
+        "path": "src/features/carry/components/OperationsTab.jsx",
+        "simbolo": "rescates",
+        "lineas": "17-100",
+        "explicacion": "OperationsTab recibe prop `rescates = []` y la pasa (línea 73) a calculatePnlForPeriod; useMemo depende de rescates. Es el punto donde la tabla de operaciones ya usa rescates históricos.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/carry/components/AnalysisTab.jsx",
+        "simbolo": "rescates",
+        "lineas": "22-137",
+        "explicacion": "Propaga rescates a calcularSpreadPorCaucion/carryLots (línea 44) y a los componentes hijos (línea 137). Confirma que la cadena de propagación ya existe.",
+        "confianza": 0.82
+      },
+      {
+        "path": "src/features/carry/components/DashboardTab.jsx",
+        "simbolo": "rescates",
+        "lineas": "225-333",
+        "explicacion": "Overview/dashboard: pasa rescates a useCarryHistoricalRates (línea 233) y a hijos (línea 333). Candidato directo para AR-043 (curva histórica del Overview).",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/carry/components/RatesEvolutionChart.jsx",
+        "simbolo": "rescates",
+        "lineas": "58-63",
+        "explicacion": "Gráfico de evolución de tasas; recibe rescates y lo pasa al hook de rates. La curva histórica del Overview probablemente viva aquí.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/features/carry/components/SpreadRealizedChart.jsx",
+        "simbolo": "rescates",
+        "lineas": "24-29",
+        "explicacion": "Chart de spread realizado; prop `rescates = []` propagado al cálculo. Otro consumidor de la curva histórica que depende de la correcta exclusión de lotes/rescates.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/pages/FundingEngine.jsx",
+        "simbolo": "rescates",
+        "lineas": "82-477",
+        "explicacion": "Leе fciLotEngine.rescates (línea 82), lo pasa a useCarryMetrics (314) y a tabs (448-477). Punto de orquestación donde se inyectan los rescates reales al motor carry.",
+        "confianza": 0.85
+      },
+      {
+        "path": "src/features/fci/components/FciPendingRescates.jsx",
+        "simbolo": "F-0053",
+        "lineas": "1-10",
+        "explicacion": "Componente de 'rescates detectados automáticamente (F-0053) pendientes de aplicar'. Directamente ligado a AR-043 ('pendientes'): verificar si estos rescates entran o no en la curva histórica.",
+        "confianza": 0.75
+      },
+      {
+        "path": "src/features/fci/components/FciRescatesList.jsx",
+        "simbolo": "rescates",
+        "lineas": "7-30",
+        "explicacion": "Lista el historial de rescates desde fciLotEngine.rescates. Confirma el shape esperado y que los rescates se persisten y listan.",
+        "confianza": 0.8
+      },
+      {
+        "path": "src/pages/Fci.jsx",
+        "simbolo": "AR-043",
+        "lineas": "63",
+        "explicacion": "Comentario explícito 'AR-043: mismas suscripciones/rescates pendientes que Portfolio > Fondos'. Ancla directa al ticket y a la noción de 'pendientes'.",
+        "confianza": 0.9
+      },
+      {
+        "path": ".claude/plans/rustling-splashing-moonbeam.md",
+        "simbolo": "023_fci_rescates.sql",
+        "lineas": "40-60",
+        "explicacion": "Plan maestro del feature: define la fórmula cpAtDate, el cambio a pasar allLots (no solo activos) y los 9 archivos a modificar. Guía directa para el implementador de AR-043.",
+        "confianza": 0.9
+      }
+    ],
+    "resumen": "El feature de rescates FCI con reconstrucción histórica ya está mayormente implementado: existe calculatePnlForPeriod (vcpHelpers.js) y calcularSaldoFCIEnFecha + RescateRecord (carryCalculations.ts) que reconstruyen cuotapartes históricas sumando rescates posteriores a fechaInicio, y un array `rescates` se propaga por OperationsTab, AnalysisTab, DashboardTab, RatesEvolutionChart, SpreadRealizedChart y FundingEngine. Para AR-043 el implementador debe verificar que la curva histórica del Overview reciba allLots (incluyendo lotes agotados/descartados) y los rescates reales, y decidir qué hacer con los rescates pendientes de FciPendingRescates (F-0053), que podrían no estar en fci_rescates. El patrón central es cpAtDate = lot.cuotapartes + Σ(cp_consumidas de rescates con fecha_rescate > fechaInicio para ese lot_id)."
+  }
+]
