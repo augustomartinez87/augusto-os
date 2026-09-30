@@ -155,11 +155,11 @@ Cuando hayas terminado la investigación, devolvé un JSON con este schema exact
   "patrones": string[],      // patrones de código que el implementador debe seguir
   "dependencias": string[],  // librerías/módulos relevantes para la tarea
   "riesgos": string[],       // riesgos o restricciones encontrados
-  "evidencia": [{
+  "evidencia": [{            // máx 8 entradas; priorizá las más relevantes
     "path": string,          // ruta relativa al archivo
     "simbolo": string,       // UN identificador literal y copiable — el nombre exacto de una función, variable, tipo o clave, tal cual aparece en el archivo. Nunca una frase descriptiva ni varios identificadores unidos con "+" o "y". Si hay varios símbolos relevantes en el mismo lugar, generá una entrada de evidencia separada por cada uno.
     "lineas": string,        // número de líneas, ej: "42-58"
-    "explicacion": string,   // por qué es relevante
+    "explicacion": string,   // por qué es relevante — máx 200 caracteres
     "confianza": number      // 0.0-1.0
   }],
   "resumen": string          // resumen ejecutivo de 2-4 oraciones
