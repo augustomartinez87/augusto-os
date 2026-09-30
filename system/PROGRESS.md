@@ -1907,3 +1907,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0067/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-30 — F-0068 completado
+
+## Feature F-0068
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En reviewer.ts: antes de calcular el diff en runReviewer, registrar los archivos nuevos sin trackear con `git add -N -- . ':(exclude)system/DECISIONS.md' ':(exclude)system/PROGRESS.md'` (intent-to-add) usando el repoRoot inyectado, de modo que `git diff HEAD` incluya el contenido de los archivos nuevos sin stagear su contenido; respetar .gitignore y no romper si los archivos de exclusión no existen. Mantener firma pública de runReviewer, ReviewResult y ReviewerOpts. (8e9dbe62)
+- [x] Step 2: En reviewer.ts: ajustar el logueo para contar los archivos nuevos incluidos y loguear `[reviewer] N archivo(s) nuevo(s) incluidos en el diff` cuando corresponda; reservar el mensaje `Diff vacío` (aprobar sin invocar callClaude) solo para el caso en que el diff resultante está realmente vacío. (8e9dbe62)
+- [x] Step 3: En reviewer.test.ts: agregar tests con repo git real en tmpdir para (a) solo archivo nuevo sin trackear src/nuevo.ts → aparece en el prompt de callClaude y no se devuelve {approved:true} por diff vacío; (b) archivo nuevo + archivo trackeado modificado → ambos en el prompt. (8e9dbe62)
+- [x] Step 4: En reviewer.test.ts: agregar tests para exclusiones — archivo ignorado por .gitignore (node_modules/x.js o logs/x.log) NO aparece en el diff; system/DECISIONS.md y system/PROGRESS.md excluidos tanto si están modificados como si son nuevos sin trackear; repo sin cambios sigue devolviendo {approved:true} sin invocar callClaude. (d33587f7)
+- [x] Step 5: En reviewer.test.ts: agregar test de integración con repo tmpdir que verifique que tras runReviewer + commitStep, el archivo nuevo queda comiteado y `git status --porcelain` queda vacío (la revisión con intent-to-add no altera lo que commitStep comitea ni deja efectos colaterales). (d33587f7)
+- [x] Step 6: Correr typecheck y `npm test` completos; asegurar que la suite existente de reviewer.test.ts sigue verde junto con los nuevos tests y que no hay errores de tipos ni lint. (d33587f7)
+
+### Decisiones (ADR)
+- ADR-0193 — Contar archivos nuevos via ls-files antes de git add -N, filtrado en código [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0068/`
+
+> Revisar con Claude in Chrome para validación de UX.
