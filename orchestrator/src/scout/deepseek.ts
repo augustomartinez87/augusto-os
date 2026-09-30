@@ -195,6 +195,7 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
   let totalOutputTokens = 0
   let exitCode = 1
   const startedAt = Date.now()
+  let lengthRetryDone = false
 
   try {
     for (let turn = 0; turn < MAX_LOOP_TURNS; turn++) {
@@ -272,6 +273,21 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
       // Model finished — extract JSON from the response
       const content = assistantMsg.content ?? ''
       console.log(`[scout] ${task.focus}: respuesta final finish_reason=${choice.finish_reason}, ${content.length} caracteres`)
+
+      if (choice.finish_reason === 'length') {
+        if (lengthRetryDone) {
+          throw new Error(
+            `[deepseek] Respuesta cortada dos veces consecutivas por max_tokens (finish_reason=length); abortando sin tercer intento.`
+          )
+        }
+        lengthRetryDone = true
+        messages.push({
+          role: 'user',
+          content: 'Tu respuesta fue cortada (finish_reason=length). Respondé el mismo JSON pero compacto: sin espacios extras, máx 5 entradas en "evidencia", "explicacion" ≤ 100 caracteres cada una, "resumen" ≤ 2 oraciones. Solo el JSON puro sin markdown.',
+        })
+        continue
+      }
+
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
         throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
