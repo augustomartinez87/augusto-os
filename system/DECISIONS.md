@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0192 · 2026-09-30 · Fixtures del caso (c) en describe anidado propio en lugar de ampliar los fixtures globales
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se añadió el caso (c) como `describe` anidado con `beforeEach` y fixtures propios, en vez de agregar `lot-agotado-1` al array global `LOT_FIXTURES`.
+**Contexto:** Los tests existentes afirman `toHaveLength(1)` para `lots` y `rescates`; agregar un fixture al array global hubiera roto esas aserciones sin un motivo semántico claro.
+**Alternativas descartadas:** Actualizar los tests globales de `toHaveLength(1)` a `.toContain` o `.toHaveLength(2)` y agregar los fixtures al array global; hubiera mezclado las intenciones de cobertura.
+**Consecuencias / riesgo residual:** Ninguna; el patrón de describe anidado con beforeEach local es convencional en Vitest y no introduce deuda técnica.
+
+> Generado por el loop · feature F-0067 · step 3
+
+---
+## ADR-0191 · 2026-09-30 · Builder con filtrado real en lugar de solo spy
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** `makeFilteringBuilder` aplica `eq()` e `in()` como filtros sobre las filas de fixture (mutar la closure `rows`), devolviendo `b` desde `mockImplementation`. Esto permite verificar los datos devueltos, no solo las llamadas realizadas.
+**Contexto:** El spec pide "verificar comportamiento y no solo la forma de la llamada". Los tests existentes usan `mockReturnThis()` en `eq` (spy puro). La única forma de verificar que `descartado=true` queda excluido *en el resultado* es que el builder aplique el filtro.
+**Alternativas descartadas:** (a) Spy puro + tests separados que lean el fixture directamente (verifica la query pero no el end-to-end). (b) Mock de Supabase que devuelva datos pre-filtrados fijos (no detectaría si la query omite un filtro).
+**Consecuencias / riesgo residual:** Si en el futuro `loadFciPortfolioData` mueve el filtro `pendiente=false` a JS en lugar de la query, el test del builder fallaría (esperaría que `lot-pendiente-1` desaparezca vía eq, pero ya no lo haría). Eso es intencionado: un cambio de capa en el filtrado rompería el contrato que el test verifica.
+
+> Generado por el loop · feature F-0067 · step 2
+
+---
 ## ADR-0190 · 2026-09-30 · Generalizar commitAndPush para aceptar paths variables en lugar de duplicar la lógica
 
 **Estado:** aceptada

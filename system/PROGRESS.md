@@ -1885,3 +1885,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0066/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-09-30 — F-0067 completado
+
+## Feature F-0067
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/services/portfolioHistoryService.ts`, dentro de `loadFciPortfolioData`: agregar `.eq('descartado', false)` y `.eq('pendiente', false)` a la consulta de `fci_lots`, y `.eq('descartado', false)` a la consulta de `fci_rescates`. NO filtrar por `activo`. Exportar `loadFciPortfolioData` (cambiar de privada a exportada) manteniendo firma, retorno y el comportamiento de devolver `null` cuando no hay lotes válidos. (d209f0ac)
+- [x] Step 2: Crear un helper de supabase falso en memoria para tests bajo `src/features/portfolio/services/__tests__/` (siguiendo el patrón de `src/features/fci/services/__tests__/mercadoService.getPricesBatch.test.js`) que implemente la cadena `from().select().eq().order().in()` aplicando los `.eq(...)` sobre filas reales de fixture con la forma `{ id, fci_id, cuotapartes, fecha_suscripcion, capital_invertido, tipo, activo, pendiente, descartado, fci_master(moneda) }`, para poder verificar comportamiento y no solo la forma de la llamada. (4e076263)
+- [x] Step 3: Escribir tests unitarios de `loadFciPortfolioData` usando el supabase falso: (a) lote `descartado=true` NO llega en `lots` ni aporta a `pricesByFci`/`monedaByFci`; (b) lote `pendiente=true` excluido; (c) lote `activo=false`, `descartado=false`, `pendiente=false` con `cuotapartes=0` y su rescate CON `mutations` que lo referencia SIGUEN incluidos; (d) rescate `descartado=true` excluido; (e) portfolio sin lotes válidos devuelve `null` como hoy. (0948fb11)
+- [x] Step 4: Agregar test de regresión del caso real: dataset con 4 lotes válidos más el lote descartado (1.128.000 cuotapartes, suscripción 2026-08-21, VCP ≈ 14,03) pasado por `loadFciPortfolioData` (con supabase falso) y luego por `buildFciValuationSeries` sobre fechas 2026-08-19 a 2026-08-25, afirmando que la serie NO tiene el escalón de ≈ +16 MM el 08-21 (la valuación del 08-21 difiere del 08-20 solo por movimiento de precio). (20bca4fb)
+- [x] Step 5: Correr typecheck y la suite completa (`vitest run`) verificando que pasan la suite existente más los tests nuevos, sin cambios en `calculateTotals`, `fciValuationSeries.ts`, `fciService.js` ni `usePortfolioHistory.ts`. (20bca4fb)
+
+### Decisiones (ADR)
+- ADR-0191 — Builder con filtrado real en lugar de solo spy [Supuesto del agente] **⚠ REVISAR**
+- ADR-0192 — Fixtures del caso (c) en describe anidado propio en lugar de ampliar los fixtures globales [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0067/`
+
+> Revisar con Claude in Chrome para validación de UX.
