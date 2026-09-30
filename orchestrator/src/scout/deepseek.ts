@@ -267,6 +267,7 @@ export async function runDeepSeekAgent(task: ScoutTask, apiKey: string, featureI
 
       // Model finished — extract JSON from the response
       const content = assistantMsg.content ?? ''
+      console.log(`[scout] ${task.focus}: respuesta final finish_reason=${choice.finish_reason}, ${content.length} caracteres`)
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
         throw new Error(`[deepseek] No se encontró JSON en la respuesta final:\n${content.slice(0, 500)}`)
