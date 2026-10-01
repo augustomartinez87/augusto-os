@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0218 · 2026-10-01 · hasVariacionOficial se aplica al objeto fondo (clase abierta), no a fondo.clases
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se llama `hasVariacionOficial(fondo)` —pasando el objeto raíz del fondo— para chequear si la clase actualmente visualizada tiene variación oficial, en lugar de iterar `fondo.clases`.
+**Contexto:** El spec dice "solo si la clase abierta tiene variación oficial". `fondo` es la clase representativa cargada por `getFondoFicha`; tiene `var_ytd_oficial` y `var_12m_oficial` propios. `fondo.clases` es la lista de clases hermanas. La nota CAFCI debajo de `PeriodosTable` aplica a los períodos del fondo actual, no a la tabla de clases (que es otra sección).
+**Alternativas descartadas:** Iterar `fondo.clases` con `Array.some(hasVariacionOficial)` para mostrar la nota si cualquier clase hermana tiene dato oficial; pero la nota está debajo de la tabla de rendimientos de la clase actual, no de la tabla de clases, así que la condición correcta es el fondo abierto.
+**Consecuencias / riesgo residual:** Si `fondo.var_ytd_oficial` y `fondo.var_12m_oficial` son ambos nulos pero alguna clase hermana en `fondo.clases` sí tiene dato oficial, la nota no aparece en la ficha de esa clase. Esto es el comportamiento correcto dado que la nota describe los datos de la clase en pantalla.
+
+> Generado por el loop · feature F-0074 · step 6
+
+---
+## ADR-0217 · 2026-10-01 · Frase de puesto incluye "por TNA 30D" siempre, aunque no haya categoría ni total
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La frase `por TNA 30D` se agrega incondicionalmente cuando `ranking.puesto` está presente, independientemente de si `clasificacion` o `total` están disponibles.
+**Contexto:** El spec da solo el ejemplo completo (`Puesto 5 de 222 en Renta Mixta (ARS) por TNA 30D`). No especifica qué hacer cuando `clasificacion` o `total` son nulos: podría omitirse todo el segmento o incluirse solo la parte disponible.
+**Alternativas descartadas:** Omitir "por TNA 30D" cuando no hay categoría; omitir la frase completa si faltan `total` o `clasificacion`; mostrar solo `Puesto N` sin métrica si el contexto es incompleto.
+**Consecuencias / riesgo residual:** Con un fondo sin `clasificacion` válida el texto mostraría `Puesto 5 de 222 por TNA 30D` (sin "en X"), lo cual es correcto semánticamente pero no coincide exactamente con el ejemplo del spec. Si el PO define que la frase solo debe mostrarse cuando hay categoría, habría que agregar esa condición.
+
+> Generado por el loop · feature F-0074 · step 4
+
+---
+## ADR-0216 · 2026-10-01 · Nombre de la función: `hasVariacionOficial` en lugar de `shouldShowNotaVariaciones`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se exporta `hasVariacionOficial(clase)` en vez del nombre alternativo `shouldShowNotaVariaciones`.
+**Contexto:** El spec propone ambos nombres como ejemplos. `hasVariacionOficial` es más preciso semánticamente (predica sobre los datos de la clase, no sobre la decisión de UI) y sigue el patrón `has*` que describe una propiedad del dato, dejando que el caller decida si mostrar o no la nota.
+**Alternativas descartadas:** `shouldShowNotaVariaciones` — más orientado a UI pero acopla la función a una decisión de render específica.
+**Consecuencias / riesgo residual:** El caller (FciFondoDetalle.jsx) puede usar `clases.some(hasVariacionOficial)` para decidir si renderiza la nota; si en el futuro la regla de visibilidad cambia (p.ej. exigir que TODAS las clases tengan dato), el nombre sigue siendo correcto.
+
+> Generado por el loop · feature F-0074 · step 3
+
+---
+## ADR-0215 · 2026-10-01 · Fallback c.vcp aplica también cuando pricesByClassId se pasa pero no tiene entrada para la clase
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El fallback a c.vcp se activa cuando pricesByClassId[c.id] no tiene precios, independientemente de si el argumento pricesByClassId fue pasado o no. La condición de activación es "sin precios para la clase", no "argumento omitido".
+**Contexto:** El spec dice "cuando no se pasa pricesByClassId", pero en uso real un batch parcial puede omitir clases individuales. Tratar la condición como "sin precios para esta clase" es más robusto y consistente.
+**Alternativas descartadas:** Chequear `pricesByClassId === {}` o detectar si el argumento fue omitido; descartado porque el default `{}` hace indistinguible "no pasado" de "pasado vacío", y el caso de batch parcial es válido y frecuente.
+**Consecuencias / riesgo residual:** Ninguna apertura nueva; el test de prioridad explícita del batch parcial documenta el comportamiento.
+
+> Generado por el loop · feature F-0074 · step 2
+
+---
+## ADR-0214 · 2026-10-01 · Deduplicación de fci_prices en JS con loop de primera aparición
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El VCP más reciente por clase se obtiene iterando el array (ya ordenado `fecha desc`) y tomando el primer elemento por `fci_id` con un objeto lookup; Supabase no expone `DISTINCT ON` directamente en el cliente JS.
+**Contexto:** La spec pide "la primera fila (vcp más reciente) por fci_id", pero el cliente supabase-js no tiene un operador equivalente a `DISTINCT ON (fci_id) ORDER BY fecha DESC`. Se podría usar una RPC/función SQL o filtrar en JS.
+**Alternativas descartadas:** Crear una función RPC en Supabase para hacer `DISTINCT ON`; descartar por requerir migración (fuera de alcance del step).
+**Consecuencias / riesgo residual:** Si la tabla `fci_prices` tiene muchas filas por fondo en la ventana de 15 días, el payload es mayor que con `DISTINCT ON` en SQL. Aceptable dado que la ventana es corta (15 días × n_clases, típicamente 2-4 clases).
+
+> Generado por el loop · feature F-0074 · step 1
+
+---
 ## ADR-0213 · 2026-10-01 · Escala de var_ytd_oficial asumida igual a rend_ytd (sin factor 100)
 
 **Estado:** aceptada

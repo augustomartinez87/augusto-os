@@ -2056,3 +2056,29 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0073/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0074 completado
+
+## Feature F-0074
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/fci/services/mercadoService.js`, en `getFondoFicha`, agregar dos consultas más a la tanda paralela (sin cambiar la firma pública ni el resto del shape): (a) `fci_master` con `.in('id', allClassIds)` seleccionando `id, var_ytd_oficial, var_12m_oficial, honorario_gerente_pct`; (b) `fci_prices` con `.in('fci_id', allClassIds)` filtrado a `fecha >= hoy-15 días`, orden `fecha` descendente, tomando la primera fila (vcp más reciente) por `fci_id`. Fusionar esos cuatro campos en cada elemento de `clases` (null si falta fila), manteniendo `ticker, tna, rend_30d, patrimonio, moneda` desde `fci_explorador`. Extender el test con supabase falso para verificar: (a) las clases traen los cuatro campos, (b) exactamente dos consultas nuevas (no N), (c) una clase sin precio reciente o sin fila en master queda con null sin romper a las demás. (9da77f10)
+- [x] Step 2: En `src/features/fci/utils/fichaFondo.js`, ajustar `buildClasesRows` para que `vcp` llegue calculado desde `c.vcp` (redondeado a 6 decimales) cuando no se pasa `pricesByClassId`, manteniendo prioridad de `pricesByClassId` si viene y conservando el resto de la salida actual. Agregar tests en `__tests__/fichaFondo.test.js`: un fondo de 3 clases (Adcap Balanceado III, con una clase sin datos → null/'—') y un fondo de una sola clase; verificar que los tests existentes siguen verdes. (a8f9f510)
+- [x] Step 3: En `src/features/fci/utils/fichaFondo.js`, agregar una función pura nueva (p. ej. `hasVariacionOficial(clase)` o `shouldShowNotaVariaciones(clase)`) que devuelva true solo si la clase tiene `var_ytd_oficial` o `var_12m_oficial` no nulos, sin tocar la firma ni salida de `formatNotaVariaciones`. Agregar tests con caso Parakeet (sin YTD/12M → false) y Adcap (con dato → true). (d64ce838)
+- [x] Step 4: En `src/features/fci/utils/fichaFondo.js`, agregar a `buildResumenFondo` un parámetro opcional de ranking (sin romper llamadas ni tests existentes) que, cuando está disponible, incluya la frase del puesto en la categoría (p. ej. `Puesto 5 de 222 en Renta Mixta (ARS) por TNA 30D.`); si no viene ranking, la frase se omite. Agregar tests con y sin ranking. (e54eb21d)
+- [x] Step 5: En `src/pages/FciFondoDetalle.jsx`, completar `ClasesSection` con las columnas: Clase, Ticker, Valor cuota (6 decimales), Patrimonio (`formatAumMoneda` según moneda de la clase), 30D, YTD, 12M, TNA 30D y Honorario gerente; quitar la columna `Moneda`; usar `pctCell`/`pctClass` para porcentajes y `—` por celda faltante; agregar `title="Variación oficial CAFCI"` a los encabezados YTD y 12M; mantener la clase abierta resaltada y las demás enlazadas a su ficha; envolver la tabla en `overflow-x-auto` para scroll horizontal, respetando tema oscuro y tokens `argos-*`. (168c522d)
+- [x] Step 6: En `src/pages/FciFondoDetalle.jsx`, cablear la lógica de datos: condicionar el render de la nota `Datos oficiales CAFCI...` usando la nueva función pura (solo si la clase abierta tiene variación oficial) y pasar el ranking disponible (de `useFondoFicha`/`RankingSection`) a `buildResumenFondo` para que el párrafo de resumen muestre el puesto en categoría cuando exista. (67f72f57)
+
+### Decisiones (ADR)
+- ADR-0214 — Deduplicación de fci_prices en JS con loop de primera aparición [Supuesto del agente] **⚠ REVISAR**
+- ADR-0215 — Fallback c.vcp aplica también cuando pricesByClassId se pasa pero no tiene entrada para la clase [Supuesto del agente] **⚠ REVISAR**
+- ADR-0216 — Nombre de la función: `hasVariacionOficial` en lugar de `shouldShowNotaVariaciones` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0217 — Frase de puesto incluye "por TNA 30D" siempre, aunque no haya categoría ni total [Supuesto del agente] **⚠ REVISAR**
+- ADR-0218 — hasVariacionOficial se aplica al objeto fondo (clase abierta), no a fondo.clases [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0074/`
+
+> Revisar con Claude in Chrome para validación de UX.
