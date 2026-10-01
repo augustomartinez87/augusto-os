@@ -1952,3 +1952,28 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/f-0069/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — f-0070 completado
+
+## Feature f-0070
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En scripts/cafci_sync.py, ampliar el mapa de columnas `C` con los índices 0-based del xlsx pb_get: horizonte=3, region=2, calificacion=19, var_1m=9, var_ytd=10, var_12m=11 y minimo_inversion=43. Agregar constantes con nombre para los límites de sanitización (MINIMO_INVERSION_MAX = 1e9, VARIACION_MAX_ABS = 1000). Sin otros cambios de comportamiento. (84f81191)
+- [x] Step 2: En scripts/cafci_sync.py, escribir la función pura `extraer_ficha(row)` (sin red ni Supabase) que devuelve un dict solo con los campos válidos de la fila: horizonte, region, calificacion, minimo_inversion, var_1m_oficial, var_ytd_oficial, var_12m_oficial. Sanitizar minimo_inversion (omitir si NaN, <=0 o >=1e9); sanitizar variaciones (omitir cada una si NaN o |valor|>1000, de forma independiente); sanitizar textos (calificacion omitida si NaN/vacío/'NA' case-insensitive, guardada recortada si no; horizonte/region recortados y omitidos si vacíos). (903dbdb9)
+- [x] Step 3: En scripts/cafci_sync.py, integrar la ficha dentro del loop existente de `daily()` (después de los filtros es_inactivo / MAX_DIAS_ATRAS / mapeo): armar la fila con id, nombre y los campos de extraer_ficha, agregar `variaciones_fecha` (= fecha_vcp de la fila) solo si hay al menos una variación válida, y omitir la fila si no quedó ningún campo de ficha. Antes de subir, agrupar las filas por frozenset idéntico de claves y upsertear cada grupo en lotes de BATCH_SIZE a fci_master con on_conflict='id'. No modificar los payloads existentes de fci_prices, patrimonio ni liquidez, y seguir invocando refresh_fci_rendimientos al final. (216a63e7)
+- [x] Step 4: En scripts/cafci_sync.py, agregar al log final de daily() y al del dry-run el conteo de fondos con ficha a upsertear (p. ej. 'Ficha (horizonte/mínimo/calificación/variaciones) a upsertear: N') con alguna línea de muestra. (944e7440)
+- [x] Step 5: Crear scripts/test_cafci_sync.py (pytest) con tests de la función pura extraer_ficha: la fila real de Adcap Balanceado III - Clase A (horizonte 'Cor', región 'Arg', mínimo 1.0, variaciones 3.394/30.256/52.338); test parametrizado de sanitización de minimo_inversion (omitir 0.0, NaN y 9999999999999998.0; conservar 1.0, 1000.0, 10000000.0); test parametrizado de variaciones (omitir >1000 como 144594.18, conservar 733.15, una var omitida no impide guardar las demás); test de calificacion/horizonte/region; y test de que variaciones_fecha se agrega solo con al menos una variación válida. DataFrames en memoria con columnas por índice entero. (58b29a01)
+- [x] Step 6: En scripts/test_cafci_sync.py, agregar un cliente Supabase falso en memoria que capture los payloads de upsert y exponga table().select().eq().not_.is_().execute(), table().upsert().execute() y rpc().execute(), reemplazando descargar_panel por un DataFrame fixture. Test de agrupado: dos fondos con conjuntos de claves distintos generan lotes de upsert separados y ningún payload mezcla conjuntos de claves distintos. Test de no regresión: con un DataFrame de 3 filas (una inactiva, una con fecha vieja, una válida), los payloads a fci_prices, patrimonio y liquidez/comisiones/plazo son idénticos a los previos y refresh_fci_rendimientos se invoca al final. (2c6e7dba)
+
+### Decisiones (ADR)
+- ADR-0196 — Orden de las claves nuevas dentro del dict C [Supuesto del agente] **⚠ REVISAR**
+- ADR-0197 — Agregar ficha_scraped_at al payload de ficha [Supuesto del agente] **⚠ REVISAR**
+- ADR-0198 — Tests de variaciones_fecha prueban la condición de daily(), no daily() directamente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0199 — FakeSupabase ignora todos los filtros de select (eq, gte, not_.is_) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0070/`
+
+> Revisar con Claude in Chrome para validación de UX.

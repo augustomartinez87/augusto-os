@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0199 · 2026-10-01 · FakeSupabase ignora todos los filtros de select (eq, gte, not_.is_)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_sync / test_cafci_sync
+
+**Decisión:** El cliente falso devuelve siempre todos los registros de `_select_data[table]`, sin aplicar los filtros encadenados. El `not_` retorna `self` en lugar de un objeto separado.
+**Contexto:** El spec pedía implementar `table().select().eq().not_.is_().execute()` y `table().upsert().execute()`. Para los tests de integración de `daily()`, los datos de prueba son pequeños y controlados, por lo que devolver todos los registros sin filtrar es equivalente a aplicar el filtro (el conjunto fixture ya contiene solo los registros relevantes). Implementar filtros reales habría añadido complejidad innecesaria sin valor para las assertions del step 6.
+**Alternativas descartadas:** Implementar filtros reales (eq/gte/not_.is_) en el builder, lo que permitiría verificar que `daily()` pasa los argumentos correctos; descartado por complejidad fuera del alcance del step.
+**Consecuencias / riesgo residual:** Si en el futuro un test necesita verificar que `daily()` pasa filtros correctos (ej: `eq("activo", True)`), habrá que extender `_Builder` con lógica de filtrado real.
+
+> Generado por el loop · feature f-0070 · step 6
+
+---
+## ADR-0198 · 2026-10-01 · Tests de variaciones_fecha prueban la condición de daily(), no daily() directamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** cafci_sync tests
+
+**Decisión:** Los tests de `variaciones_fecha` verifican que `extraer_ficha` devuelva (o no) claves de variación que activarían la lógica de `daily()`, en lugar de testear `daily()` con un cliente Supabase falso.
+**Contexto:** `variaciones_fecha` se agrega en `daily()`, no en `extraer_ficha`. El spec pide tests de la "función pura", pero también exige verificar el comportamiento de `variaciones_fecha`. La alternativa de mockear `daily()` viola la restricción de "sin red ni Supabase real" y agrega complejidad innecesaria.
+**Alternativas descartadas:** Testear `daily()` completo con un cliente Supabase mockeado (más acoplamiento, más superficie); mover la lógica de `variaciones_fecha` dentro de `extraer_ficha` (cambio de producción fuera de alcance).
+**Consecuencias / riesgo residual:** Si la condición en `daily()` (`ficha.keys() & _VARIACION_KEYS`) cambia de lugar, los tests siguen siendo válidos para `extraer_ficha` pero ya no cubren la integración con `daily()`. Anotado aquí para futura decisión.
+
+> Generado por el loop · feature f-0070 · step 5
+
+---
+## ADR-0197 · 2026-10-01 · Agregar ficha_scraped_at al payload de ficha
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / cafci_sync.py
+
+**Decisión:** Se agregó `ficha_scraped_at` (timestamp UTC de la corrida) al dict de ficha y a la migración 047, siguiendo el precedente explícito de `liquidez_scraped_at` en el bloque de liquidez.
+**Contexto:** El spec de step 3 lista exactamente: id, nombre, campos de extraer_ficha, variaciones_fecha. No menciona un timestamp de trazabilidad. Sin embargo, el bloque de liquidez establece ese patrón como convención del codebase para saber "cuándo fue la última corrida que tocó esta fila".
+**Alternativas descartadas:** Omitirlo y seguir el spec al pie de la letra. Podría agregarse después como step separado si se quiere.
+**Consecuencias / riesgo residual:** La migración 047 incluye la columna `ficha_scraped_at TIMESTAMPTZ`. Si se quiere remover, el ROLLBACK del .sql la contempla. La vista del Explorador (que hoy muestra YTD/1Y casi vacíos desde `fci_rendimientos`) no consume estas variaciones oficiales — conectarlas es un cambio aparte de valor claro, anotado en los COMMENTs de la migración como pendiente.
+
+> Generado por el loop · feature f-0070 · step 3
+
+---
+## ADR-0196 · 2026-10-01 · Orden de las claves nuevas dentro del dict C
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / cafci_sync.py
+
+**Decisión:** Las claves nuevas se intercalaron en orden de índice posicional (2, 3, 9, 10, 11, 19, 43) agrupadas por afinidad semántica (region/horizonte juntas; variaciones juntas; calificacion junto a codigo_cnv), en lugar de agregarlas todas al final del dict.
+**Contexto:** El spec solo indica los índices y nombres; no especifica la posición relativa dentro de C.
+**Alternativas descartadas:** Agregar todas al final, o respetar estrictamente el orden numérico del índice de columna.
+**Consecuencias / riesgo residual:** Si un futuro lector espera que el dict refleje el orden del xlsx (col 0, 2, 3, 4, 5…), el agrupado semántico puede confundir. Documentar si se vuelve a tocar el dict que el orden es intencional/semántico, no posicional.
+
+> Generado por el loop · feature f-0070 · step 1
+
+---
 ## ADR-0195 · 2026-09-30 · SCOUT_MAX_OUTPUT_TOKENS = 393 216 para deepseek-v4-flash
 
 **Estado:** aceptada
