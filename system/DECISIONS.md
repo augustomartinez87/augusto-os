@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0205 · 2026-10-01 · Tarjetas KPI propias en la ficha de fondo en vez de KpiCard
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La ficha del fondo renderiza sus KPIs con un `KpiTile` propio montado sobre el primitivo `Card`, que colorea el valor vía `pctClass` y no pasa por `useBalanceVisibility`; se descarta el `KpiCard` del design system para estas tarjetas.
+**Contexto:** `KpiCard` censura su value con `useBalanceVisibility` (dato público del fondo aparecía como ••••••) y su prop `color` solo tiñe el ícono, no el número, además de pintar de rojo el dato ausente (`undefined >= 0`). Tres intentos previos fallaron re-tuneando el ternario `color` sin atacar esto.
+**Alternativas descartadas:** Modificar `KpiCard` para aceptar un modo "público/no-censurable" y colorear el valor — descartado por riesgo de regresión en todos sus consumidores (dashboard, overview) y por exceder el alcance del step.
+**Consecuencias / riesgo residual:** Queda una tarjeta KPI duplicada a nivel conceptual (ficha vs. design system); si en el futuro otras vistas necesitan KPIs de dato público, conviene promover `KpiTile`/un modo no-censurable a `src/components/ui/`.
+
+> Generado por el loop · feature f-0071 · step 5
+
+---
+## ADR-0204 · 2026-10-01 · Fetch de historial completo en la ficha, ventana de gráfico derivada en cliente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El hook useFondoFicha hace un único fetch de precios con el rango 'MAX' (historial completo), independiente del rango seleccionado, y recorta la ventana del gráfico en cliente con normalizeBase100; periodos y availableRanges derivan del historial completo.
+**Contexto:** Los dos intentos previos acoplaban el fetch al rango del gráfico, lo que hacía que buildFichaPeriodos (90D/6M) y getAvailableChartRanges recibieran una serie recortada y reportaran "sin datos"/deshabilitaran rangos que el fondo sí tenía cuando el usuario estaba en un rango corto.
+**Alternativas descartadas:** Dos fetches separados (uno ventana-de-rango para el gráfico y otro de historial completo para periodos/ranges); se descartó por redundancia de red en cada cambio de rango y por duplicar estados de carga/error sin beneficio, dado que la serie de un solo fondo es de volumen trivial.
+**Consecuencias / riesgo residual:** La ficha carga el historial completo de un fondo aunque el usuario mire 1M (volumen trivial para una clase; no viola la restricción de "no traer miles de filas" que aplica al ranking). El campo `sortedPrices` expuesto por el hook ahora es historial completo, no la ventana del rango.
+
+> Generado por el loop · feature f-0071 · step 4
+
+---
+## ADR-0203 · 2026-10-01 · keyDates como parámetro opcional para inyección en tests
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos (fichaFondo.js)
+
+**Decisión:** `buildFichaPeriodos` y `getAvailableChartRanges` aceptan un tercer/segundo parámetro `keyDates`; si es `null`, llaman a `getKeyDates()` internamente.
+**Contexto:** Las funciones dependen de fechas relativas a "hoy". Sin inyección, los tests serían no-deterministas y no podrían verificar los casos de historial corto/largo con fechas fijas.
+**Alternativas descartadas:** Mockear `Date` globalmente con vi.useFakeTimers; pasar solo la fecha de hoy y recalcular internamente.
+**Consecuencias / riesgo residual:** Los consumidores React no necesitan pasar `keyDates` (uso normal omite el parámetro). El parámetro es de test únicamente y no forma parte de la API pública de la ficha.
+
+> Generado por el loop · feature f-0071 · step 3
+
+---
+## ADR-0202 · 2026-10-01 · Nombres de funciones no especificadas en el spec
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos (fichaFondo.js)
+
+**Decisión:** La función de "etiquetas" se nombró `buildFichaTecnicaRows` y el "helper de disponibilidad de rangos de gráfico" se nombró `getAvailableChartRanges`.
+**Contexto:** El spec describe ambas funciones por su comportamiento pero no les asigna nombre explícito; los otros tres sí tienen nombre en el enunciado.
+**Alternativas descartadas:** `buildEtiquetasFondo`/`buildFichaDetalleRows` para las etiquetas; `getRangesAvailability`/`chartRangesFromHistory` para el helper.
+**Consecuencias / riesgo residual:** Los pasos siguientes (componente React de la ficha) deberán importar con estos nombres. Si el equipo prefiere otro nombre, el cambio es trivial y localizado en un solo archivo.
+
+> Generado por el loop · feature f-0071 · step 3
+
+---
+## ADR-0201 · 2026-10-01 · getRankingCategoria siempre aplica el filtro stale (sin parámetro excludeStale)
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** argos / mercadoService
+
+**Decisión:** El método llama a `getLatestUniverseDate()` incondicionalmente y pasa `universeDate` a `applyFondosFilters`, sin exponer un parámetro `excludeStale`.
+**Contexto:** La spec pide "el mismo filtro de stale que usa el Explorador". El Explorador usa `EXCLUDE_STALE_DEFAULT = true` como default, pero sí expone el parámetro. Para el ranking la comparación tiene sentido solo dentro del universo visible; nunca querría comparar contra fondos "fantasma".
+**Alternativas descartadas:** Exponer `excludeStale` con default `EXCLUDE_STALE_DEFAULT = true` por consistencia con los demás métodos.
+**Consecuencias / riesgo residual:** Si en algún contexto futuro se necesita ranking sin filtro stale, habrá que agregar el parámetro o crear una variante.
+
+> Generado por el loop · feature f-0071 · step 2
+
+---
+## ADR-0200 · 2026-10-01 · Resolución de grupo secuencial (no paralela)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / mercadoService.getFondoFicha
+
+**Decisión:** Las dos queries a `fci_explorador_grupos` (por `id` directo y por `contains`) se ejecutan en secuencia: primero la de id directo; la segunda solo se dispara si la primera devuelve null.
+**Contexto:** El spec dice "fila cuyo id coincide o cuyo clases_hermanas contiene ese id". Un approach alternativo sería dispararlas en paralelo con `Promise.all` y tomar la que no sea null, lo que reduce latencia 1 RTT en el caso sibling a cambio de un query extra en el caso representativo (el más frecuente).
+**Alternativas descartadas:** Paralelo con `Promise.all([byId, byHermana])` — ahorra ~50 ms en el caso sibling pero siempre hace 2 queries incluso cuando el id es el representativo. Se descartó porque el caso representativo es el más común (la mayoría de los fondos tienen 1 clase) y la latencia de red de Supabase hace que 1 query innecesaria tenga costo real.
+**Consecuencias / riesgo residual:** En fondos con múltiples clases donde el usuario navega a la clase no-representativa, hay 2 RTTs a `fci_explorador_grupos`. Aceptable porque las otras 3 queries (master + rendimientos + explorador) corren en paralelo después.
+
+> Generado por el loop · feature f-0071 · step 1
+
+---
 ## ADR-0199 · 2026-10-01 · FakeSupabase ignora todos los filtros de select (eq, gte, not_.is_)
 
 **Estado:** aceptada

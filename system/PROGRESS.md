@@ -1977,3 +1977,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/f-0070/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — f-0071 completado
+
+## Feature f-0071
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/mercadoService.js agregar getFondoFicha(id): resuelve el grupo desde fci_explorador_grupos (fila cuyo id coincide o cuyo clases_hermanas contiene ese id vía jsonb contains), trae la fila de fci_master (nombre, ticker, moneda, sociedad_gerente, sociedad_depositaria, clasificacion_cod, horizonte, region, calificacion, minimo_inversion, var_1m_oficial, var_ytd_oficial, var_12m_oficial, variaciones_fecha, plazo_liquidacion_dias, honorario_gerente_pct, honorario_depositaria_pct, gastos_ordinarios_pct, comision_ingreso_pct, comision_egreso_pct, patrimonio), la fila de fci_rendimientos, y la lista de clases del grupo (incluida la actual) con sus mismos campos; normaliza con normalizeFondo; devuelve null sin lanzar si el id no existe. No cambiar firmas ni comportamiento de los métodos existentes. Agregar test con supabase falso al estilo de mercadoService.getFondosPage.test.js. (f76923ba)
+- [x] Step 2: En mercadoService.js agregar getRankingCategoria({ clasificacion_cod, moneda, tna }) que calcula { puesto, total } con consultas de conteo server-side (head: true) sobre fci_explorador_grupos: puesto = 1 + cantidad de fondos de la misma categoría y moneda con tna mayor, total = cantidad con tna no nulo, aplicando el mismo filtro de stale (STALE_DATE_FIELD / getLatestUniverseDate / patrón applyFondosFilters) que usa el Explorador; con tna nulo devuelve null. Si hace falta reutilizar applyFondosFilters, exportarlo o replicarlo sin cambiar su comportamiento. Agregar test que verifica los filtros enviados a las consultas. (c1c4e08b)
+- [x] Step 3: Crear src/features/fci/utils/fichaFondo.js con funciones puras y sus tests: buildFichaPeriodos (último día hábil, 7D, 30D y TNA desde fci_rendimientos; 90D y 6M desde la serie de fci_prices solo si el historial cubre la fecha base, nunca extrapolando; año en curso y 12M desde var_ytd_oficial/var_12m_oficial con rend_ytd/rend_1y como respaldo calculado solo si la oficial es nula; cada fila con su fuente 'oficial'|'calculado'), etiquetas de horizonte/region/plazo de rescate/mínimo de inversión según el mapeo de la spec (valores desconocidos omitidos o texto crudo según corresponda), buildResumenFondo (párrafo con solo datos presentes), buildClasesRows (una fila por clase), y un helper de disponibilidad de rangos de gráfico (1M/3M/6M/Máx) según historial. Tests para historial corto, oficial presente, oficial ausente con respaldo y todo nulo; 4 clases y clase única. (6ada2df9)
+- [x] Step 4: Crear src/features/fci/hooks/useFondoFicha.js: hook que, dado fondoId, carga de forma independiente la ficha (getFondoFicha), los precios del rango seleccionado (getPricesForFondo + fromDateForRange) y el ranking (getRankingCategoria), de modo que el fallo o ausencia de datos de un bloque no derribe los demás; expone estados de cargando/error/no encontrado y una acción de reintento. (6a7d882e)
+- [x] Step 5: Crear la página src/pages/FciFondoDetalle.jsx (default export, dentro de ErrorBoundary) usando useFondoFicha y los helpers de fichaFondo.js, con las secciones en orden: cabecera con migas de pan (Explorador › categoría › fondo), nombre (fondo_base si hay varias clases), chips de moneda/categoría/horizonte, botón Comparar que navega a /fci/comparador?fondos=<id>, botón de volver, y párrafo de resumen; tarjetas de KPI (30D, YTD, 12M, TNA 30D, patrimonio) marcando las oficiales CAFCI; gráfico de valor cuota con recharts (gridProps/axisProps de chartTheme) y selector de rango 1M/3M/6M/Máx (rangos sin historial deshabilitados); tabla de rendimiento por período mostrando la fuente de cada fila; ficha técnica que omite filas sin dato y muestra honorarios/comisiones como % incluido 0,00%; tabla de clases de cuotaparte (clase abierta resaltada, cada otra clase enlaza a su ficha); sección de ranking en la categoría. Estados de cargando, error con reintento y no encontrado con enlace al Explorador; cada bloque se degrada solo. Estética oscura de Argos y componentes reutilizados (PageHeader, Tooltip, chips/tarjetas). (9467b62c)
+- [x] Step 6: Registrar la ruta /fci/explorador/:fondoId en src/App.jsx con la misma envoltura que /fci/explorador (ProtectedRoute adminOnly + AppLayout + Suspense/LoadingFallback, página cargada con React.lazy apuntando a FciFondoDetalle.jsx), cuidando el orden frente a la ruta exacta /fci/explorador, los redirects legacy /mercado/* y el catch-all /portfolio/:tab?. (9467b62c)
+- [x] Step 7: En src/pages/FciExplorador.jsx convertir el nombre del fondo en un enlace a /fci/explorador/<id> tanto en la fila principal como en las filas de clases hermanas expandidas, sin romper el chevron de expandir, el botón de comparar ni el resto de la fila (que no deben navegar). Verificar typecheck, lint, npm test y npm run build. (e9dcbff5)
+
+### Decisiones (ADR)
+- ADR-0200 — Resolución de grupo secuencial (no paralela) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0201 — getRankingCategoria siempre aplica el filtro stale (sin parámetro excludeStale) [Instrucción de Augusto]
+- ADR-0202 — Nombres de funciones no especificadas en el spec [Supuesto del agente] **⚠ REVISAR**
+- ADR-0203 — keyDates como parámetro opcional para inyección en tests [Supuesto del agente] **⚠ REVISAR**
+- ADR-0204 — Fetch de historial completo en la ficha, ventana de gráfico derivada en cliente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0205 — Tarjetas KPI propias en la ficha de fondo en vez de KpiCard [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/f-0071/`
+
+> Revisar con Claude in Chrome para validación de UX.
