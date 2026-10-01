@@ -2082,3 +2082,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0074/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0075 completado
+
+## Feature F-0075
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear función pura exportada `toNumber(value)` en `src/features/financing/utils/` (archivo nuevo, p. ej. `toNumber.ts`) que convierta `Decimal` (decimal.js), `number`, `string` numérico, `null` y `undefined` a un `number` finito, devolviendo `0` para todo valor no finito o no convertible. Agregar tests en `__tests__/` cubriendo: `new Decimal('7885573267.72')` → `7885573267.72`, `'12.5'` → `12.5`, `null` → `0`, `undefined` → `0`, `NaN` → `0`, y un número normal sin cambios. Primero escribir el test que reproduce el defecto (Decimal convertido correctamente a number). (0ef6f1b2)
+- [x] Step 2: Crear función pura exportada `buildKpiData({ metrics, csvData, capyfi, sourceFilter })` en `src/features/financing/utils/` que contenga la lógica hoy inline en el `useMemo` de `FinancingKPIs.jsx` (`caucionData`, `capyfiData`, `kpiData`) y devuelva `{ capitalTotal, costoTotal, tnaPromedio, duracionPromedio, operaciones }` como `number`. Todo campo que venga de `metrics` (`capitalTotal`, `interesTotal`, `tnaPromedioPonderada`, `diasPromedio`, `totalOperaciones`) debe pasar por `toNumber` antes de cualquier operación aritmética; ninguna suma/resta/multiplicación debe mezclar `Decimal` con `number`. La ponderación de TNA y duración por capital se conserva igual que hoy. (c44e7726)
+- [x] Step 3: Agregar tests para `buildKpiData` en `__tests__/`: (a) `sourceFilter='todas'` con `metrics` construido con `Decimal` y `capyfi` numérico → `capitalTotal` suma numérica correcta, `costoTotal` suma de costos, `tnaPromedio` promedio ponderado ≠ 0 con capital, `duracionPromedio` promedio ponderado ≠ 0 con duración, `operaciones` suma; (b) `sourceFilter='caucion'` → solo valores de `metrics`; (c) `sourceFilter='capyfi'` → solo valores de `capyfi`; (d) `metrics=null` y `csvData=null` con `capyfi` vacío → todo en 0 sin lanzar; más un test que reproduce el defecto original (Decimal en `capitalTotal` + `capyfi.capitalTotal` con decimales) verificando que el resultado no es `NaN` ni string. (93c0bf32)
+- [x] Step 4: Conectar `FinancingKPIs.jsx` a `buildKpiData` reemplazando la lógica inline del `useMemo`, sin cambiar su API de props ni los formatters (`compactARS`, `formatARS`, `formatPercent`, `formatNumber`) ni el layout de 5 tarjetas `MetricCard`. Agregar en la tarjeta `Total Operaciones` (filtro `Todas`) un `tooltip` con el desglose real (`N cauciones + M eventos CapyFi`). (7c3c3967)
+- [x] Step 5: En `FinancingDashboard.jsx`, usar `toNumber` en el bloque `Resumen de Operaciones` (líneas con `metrics?.capitalTotal`, `metrics?.tnaPromedioPonderada`, `metrics?.diasPromedio`) en lugar de la coerción implícita de `Decimal`, conservando los textos que hoy se ven correctos. Cambiar el rótulo del Resumen de 'Total de operaciones' a 'Total de cauciones'. (76b1361e)
+
+### Decisiones (ADR)
+- ADR-0219 — CapyfiKpis tipado como number | null | undefined (no Decimal) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0220 — Tooltip de desglose vía dos llamadas a buildKpiData en lugar de exponer sub-shapes [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0075/`
+
+> Revisar con Claude in Chrome para validación de UX.

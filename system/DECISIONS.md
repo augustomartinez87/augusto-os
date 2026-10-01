@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0220 · 2026-10-01 · Tooltip de desglose vía dos llamadas a buildKpiData en lugar de exponer sub-shapes
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Para obtener `caucionOps` y `capyfiOps` individualmente, se llama `buildKpiData` dos veces con `sourceFilter: 'caucion'` y `sourceFilter: 'capyfi'` dentro del `useMemo` de `operacionesTooltip`, en lugar de refactorizar `buildKpiData` para que retorne también los sub-shapes o de mantener `caucionData`/`capyfiData` como `useMemo` separados.
+**Contexto:** El spec pide el desglose N+M en el tooltip de "Total Operaciones" pero no especifica si hay que exponer las partes desde `buildKpiData`. Mantener los tres `useMemo` originales habría conservado las sub-shapes pero sin usar `buildKpiData`; agregar sub-shapes al retorno de `buildKpiData` habría cambiado la interfaz `KpiShape` definida en step 2.
+**Alternativas descartadas:** Exponer `{ combined, caucion, capyfi }` desde `buildKpiData`; o conservar `caucionData`/`capyfiData` como useMemos separados.
+**Consecuencias / riesgo residual:** `buildKpiData` se ejecuta 3 veces cuando `sourceFilter === 'todas'`, lo cual es negligible al ser una función pura y barata. Si en el futuro se necesita más de un sub-shape el patrón debería revisarse.
+
+> Generado por el loop · feature F-0075 · step 4
+
+---
+## ADR-0219 · 2026-10-01 · CapyfiKpis tipado como number | null | undefined (no Decimal)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos — financing/buildKpiData
+
+**Decisión:** El interface `CapyfiKpis` declara todos sus campos como `number | null | undefined`, sin incluir `Decimal`.
+**Contexto:** El objeto `capyfi` se construye en `FinancingDashboard` con aritmética JS pura (`Number(e.amount)`, `*100`, etc.) y nunca toca decimal.js. Su tipo real no está declarado explícitamente en el repo (viene de `useDefiLoanEngine` no inspeccionado). Se eligió `number | null | undefined` porque es el tipo observado empíricamente; si el engine retornara un `Decimal`, `toNumber()` lo convertiría igual (acepta `Decimal` en su firma), pero el type check rechazaría la llamada sin el cast.
+**Alternativas descartadas:** Tipar como `Decimal | number | string | null | undefined` igual que la firma de `toNumber`, o como `unknown` con cast explícito. Se descartó porque agrega ruido innecesario para valores que son number.
+**Consecuencias / riesgo residual:** Si `useDefiLoanEngine` alguna vez devuelve un `Decimal` en alguno de estos campos, TypeScript lo detectará en el caller (FinancingDashboard) antes de que llegue acá, lo cual es el comportamiento deseado.
+
+> Generado por el loop · feature F-0075 · step 2
+
+---
 ## ADR-0218 · 2026-10-01 · hasVariacionOficial se aplica al objeto fondo (clase abierta), no a fondo.clases
 
 **Estado:** aceptada
