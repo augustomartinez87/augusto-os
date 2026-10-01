@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0222 · 2026-10-01 · Aliases de /portfolio/overview incluidos en el mapa exacto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se incluyeron `/portfolio`, `/portfolio/dashboard` y `/portfolio/resumen` como aliases directos en la tabla `EXACT`, mapeando a `'Overview'`.
+**Contexto:** El spec solo menciona que `/portfolio/:tab?` tiene una vista Overview, pero no especifica qué pathname exacto recibe la función para esa vista. `navigation.js` declara `match: ['/portfolio', '/portfolio/dashboard', '/portfolio/resumen']` para el ítem overview, lo que implica que esas rutas son válidas.
+**Alternativas descartadas:** Devolver `'Argos Capital'` para `/portfolio` bare y solo mapear `/portfolio/overview`; o agregar lógica de regex.
+**Consecuencias / riesgo residual:** Si en el futuro se agrega otro alias de overview que no esté en `EXACT`, el title fallará a `'Argos Capital'` hasta que se actualice el mapa.
+
+> Generado por el loop · feature F-0077 · step 4
+
+---
+## ADR-0221 · 2026-10-01 · No extraer lógica de filtrado a función pura — ya es genérica
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** argos / TradesTabContent
+
+**Decisión:** No se extrajo el filtrado de tipo a una función pura separada; se dejó inline en el `useMemo` existente.
+**Contexto:** El spec pedía extraer la lógica a una función pura con test si "era una extracción chica". Sin embargo, el filtro ya existía antes de este step (`filtered.filter(t => t.type === typeFilter)`) y es completamente genérico: funciona para cualquier string de tipo sin modificación. Agregar `split` al `<select>` no introdujo ninguna lógica nueva que testear.
+**Alternativas descartadas:** Extraer `filterByType(trades, typeFilter)` como función pura y agregar un test `.test.js`. Se descartó porque no habría habido lógica nueva que cubrir — el test habría sido sobre código preexistente, y extraerlo solo para cumplir la forma habría añadido indirección sin valor.
+**Consecuencias / riesgo residual:** Si en el futuro el filtro de tipo se vuelve más complejo (e.g., agrupar variantes de un mismo tipo), la extracción y el test se justificarán en ese momento.
+
+> Generado por el loop · feature F-0077 · step 3
+
+---
 ## ADR-0220 · 2026-10-01 · Tooltip de desglose vía dos llamadas a buildKpiData en lugar de exponer sub-shapes
 
 **Estado:** aceptada

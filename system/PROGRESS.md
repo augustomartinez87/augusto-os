@@ -2104,3 +2104,26 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0075/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0077 completado
+
+## Feature F-0077
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar `formatQuantity(value)` exportada en `src/utils/formatters.ts` (sin tocar `formatNumber`/`formatCuotapartes`): enteros sin decimales, fraccionarios con hasta 8 decimales sin ceros finales y coma decimal es-AR, `null`/`undefined`/`NaN` → `-`, `0` → `0`. Crear tests puros en `src/utils/__tests__/` cubriendo los casos del acceptance (560, 0.00834225, 0.00024893, 1.5, null, undefined, NaN, 0). (7e83717c)
+- [x] Step 2: Usar `formatQuantity` en la columna de cantidad de `src/features/portfolio/components/GroupedPositionsTable.jsx` (reemplazando `formatNumber(pos.totalQuantity)`), en la cantidad de cada fila de la tabla de Transacciones (`TradesTabContent.jsx`) y en la cantidad de lote/trade de `PositionDetailModal.jsx`. Hacer grep de los usos de cantidad antes de editar; NO tocar los componentes de cripto (`CryptoPositionsTable`, `CryptoPositionDetailModal`) ni los de FCI (`formatCuotapartes`). (f1805ba4)
+- [x] Step 3: Agregar la opción `Split` (valor `split`) al `<select>` Tipo de `src/features/portfolio/components/TradesTabContent.jsx`, junto a `Todos`/`Compra`/`Venta`, de modo que al elegirla la tabla filtre solo filas de tipo `split`. Si la lógica de filtrado es una extracción chica, extraerla a una función pura con test en `__tests__/`; si no, documentarlo en un ADR. (122097a3)
+- [x] Step 4: Crear función pura `getTitleForPath(pathname)` (en `src/utils/` o equivalente) que mapee cada ruta a su título (`Overview · Argos`, `Posiciones · Argos`, `Fondos · Argos`, `Transacciones · Argos`, `Gráficos · Argos`, `Estrategia · Argos`, `Análisis de Spread · Argos`, `Financiación · Argos`, `Fondos en Caución · Argos`, `Préstamos DeFi · Argos`, `Explorador · Argos`, `Ficha de fondo · Argos` para `/fci/explorador/:id`, `Comparador · Argos`, `Administración · Argos`) y cualquier otra ruta (incluidas públicas) → `Argos Capital`. Agregar tests puros cubriendo el mapa completo y el fallback. (8372a7a9)
+- [x] Step 5: Crear el hook `useDocumentTitle` que aplique `getTitleForPath(pathname)` a `document.title` al navegar, y conectarlo en `AppLayout.jsx` (o equivalente donde esté el layout común y acceso al pathname). (99879eff)
+- [x] Step 6: Corregir el plural en `src/features/crypto/.../DefiLoanReconciliation.jsx` (alrededor de la línea 89) para que muestre `1 observación cargada` y `N observaciones cargadas` en lugar de `observaciónes`. Agregar test o ADR según corresponda. (435f615b)
+
+### Decisiones (ADR)
+- ADR-0221 — No extraer lógica de filtrado a función pura — ya es genérica [Instrucción de Augusto]
+- ADR-0222 — Aliases de /portfolio/overview incluidos en el mapa exacto [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0077/`
+
+> Revisar con Claude in Chrome para validación de UX.
