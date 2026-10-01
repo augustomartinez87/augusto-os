@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0213 · 2026-10-01 · Escala de var_ytd_oficial asumida igual a rend_ytd (sin factor 100)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usa `m.var_ytd_oficial` y `m.var_12m_oficial` directamente en el COALESCE sin aplicar ningún factor de escala (÷100 ni ×100), asumiendo que el scraper ya guarda los valores en la misma escala que `rend_ytd` / `rend_1y` (float plano: 0.15 = +0.15%).
+**Contexto:** La investigación marcó "Escala de porcentajes NO VERIFICADA": `fci_rendimientos.rend_ytd` es `NUMERIC(10,6)` (float plano), mientras `fci_master.var_ytd_oficial` es `NUMERIC(12,4)` y podría almacenar 15.0 en lugar de 0.15. El spec del feature provee la fórmula literal sin factor corrector, lo que implica que el autor verificó la escala o decidió explícitamente no convertir.
+**Alternativas descartadas:** Dividir por 100 (`m.var_ytd_oficial / 100`) si el scraper guarda porcentaje directo (15.0 = 15%). El cast `::NUMERIC(10,6)` no resuelve la diferencia de escala, solo el tipo.
+**Consecuencias / riesgo residual:** Si `var_ytd_oficial` guarda 15.0 en lugar de 0.15, el Explorador mostraría "+1500%" en lugar de "+15%". Hay que verificar un valor conocido contra CAFCI antes de aplicar a prod.
+
+> Generado por el loop · feature F-0073 · step 1
+
+---
 ## ADR-0212 · 2026-10-01 · Guard de ClasesSection: n_clases > 1 en lugar de clases.length > 1
 
 **Estado:** aceptada

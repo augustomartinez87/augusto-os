@@ -2037,3 +2037,22 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0072/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0073 completado
+
+## Feature F-0073
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `supabase/migrations/048_fci_explorador_variaciones_oficiales.sql` con `CREATE OR REPLACE VIEW public.fci_explorador AS ...` manteniendo exactamente las 15 columnas originales (id, nombre, ticker, moneda, administradora, sociedad_gerente, clasificacion_cod, rend_1d, rend_7d, rend_30d, rend_ytd, rend_1y, tna, rend_updated_at, patrimonio) en el mismo orden y tipo, donde `rend_ytd = COALESCE(CASE WHEN m.variaciones_fecha >= CURRENT_DATE - 7 THEN m.var_ytd_oficial END, r.rend_ytd)::numeric(10,6)` y `rend_1y` el equivalente con `m.var_12m_oficial`; conservar `WHERE m.activo = true`, sin `DROP VIEW`, sin tocar `fci_explorador_grupos`, con comentario que explique la regla (oficial CAFCI vigente primero, cálculo propio de respaldo) y un bloque ROLLBACK comentado con la definición actual completa de la vista. (cd46437e)
+- [x] Step 2: Agregar un test vitest (en `src/**/__tests__`, leyendo el archivo con `node:fs`) que verifique que la migración `048_fci_explorador_variaciones_oficiales.sql` existe, contiene `CREATE OR REPLACE VIEW public.fci_explorador`, no contiene `DROP`, referencia `var_ytd_oficial`, `var_12m_oficial` y `variaciones_fecha`, aplica el cast `numeric(10,6)` a `rend_ytd` y `rend_1y`, y lista las 15 columnas originales en el orden original. (6eaee894)
+- [x] Step 3: En `src/pages/FciExplorador.jsx` agregar la prop `tooltip` al `SortHeader` de las columnas `YTD` y `1Y` con los textos que explican el origen del dato (YTD: «Variación oficial CAFCI del año en curso; si no hay dato oficial vigente, cálculo propio de Argos»; 1Y: «Variación oficial CAFCI a 12 meses (la fecha base la define CAFCI); si no hay dato oficial vigente, cálculo propio a 1 año»), sin cambiar las etiquetas `YTD`/`1Y`, las claves de orden ni `SORT_COL`. (9f9c024e)
+
+### Decisiones (ADR)
+- ADR-0213 — Escala de var_ytd_oficial asumida igual a rend_ytd (sin factor 100) [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0073/`
+
+> Revisar con Claude in Chrome para validación de UX.
