@@ -2127,3 +2127,26 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0077/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0076 completado
+
+## Feature F-0076
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar/crear el archivo de tests unitarios de `summarizeBenchmark` en `src/features/portfolio/services/__tests__/` (reusando setup de tests existentes de benchmarkService si los hay) con series sintéticas que cubran la aceptación (c): verificar que en ARS y USD con el mismo factor de conversión por fecha el `alpha` es idéntico y los retornos distintos. Los tests deben escribirse contra la nueva definición (base = netInvested) y pueden quedar en rojo hasta implementar el paso de cálculo. (ce3a2af7)
+- [x] Step 2: Agregar en el mismo archivo de tests los casos de la aceptación (a) aportes escalonados (día 1: aporta 100, vale 100; día 2: aporta 900, netInvested 1000, cartera 1100, phantom 1050 → retorno cartera 10%, benchmark 5%, alpha ≈ 4,76%), (b) reproducción del defecto (primer punto chico + aportes grandes: la base vieja daría miles de %, la nueva decenas), (d) netInvested final 0 o negativo → null, y (e) serie vacía → null. (823bcb8a)
+- [x] Step 3: Reescribir el cálculo de `portfolioReturn` y `benchmarkReturn` en `summarizeBenchmark` (`src/features/portfolio/services/benchmarkService.ts`) para usar como base el capital neto aportado del último punto (`netInvested`/`netInvestedUSD` según moneda): `retorno = (valor_final − netInvested_final) / netInvested_final × 100`. Dejar de usar `firstValid`/`portfolioBase`/`benchmarkBase`. Mantener `alpha` geométrico `((1 + rP) / (1 + rB) − 1) × 100` y conservar los `return null` por datos insuficientes (`totalInvested <= 0`, `portfolioCurrent <= 0`, `benchmarkCurrent <= 0`, guard de cobertura). No cambiar la firma pública de la función. (6f30eac9)
+- [x] Step 4: Actualizar el comentario de la interfaz `BenchmarkSummary` (que hoy dice `alpha: diferencia portfolioReturn - benchmarkReturn`) y el JSDoc de `summarizeBenchmark` en `benchmarkService.ts` para reflejar la nueva definición: alpha geométrico y base = capital neto aportado (`netInvested`). (fe376c88)
+- [x] Step 5: Ejecutar `npm test`, typecheck y `npm run build`; verificar que la suite de `summarizeBenchmark` pasa en verde y que no se introdujeron regresiones de tipos o build. Ajustar únicamente lo necesario para que los tres comandos pasen sin tocar `buildBenchmarkHistory`, `useBenchmark`, la serie/eje del gráfico ni el Overview. (fe376c88)
+
+### Decisiones (ADR)
+- ADR-0223 — Alpha invariante: test pasa con implementación actual Y nueva [Supuesto del agente] **⚠ REVISAR**
+- ADR-0224 — (d) y (e) no se duplicaron — ya cubiertos en Step 1 [Supuesto del agente] **⚠ REVISAR**
+- ADR-0225 — benchmarkReturn usa el mismo netInvested que portfolioReturn [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0076/`
+
+> Revisar con Claude in Chrome para validación de UX.

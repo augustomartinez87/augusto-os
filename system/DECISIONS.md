@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0225 · 2026-10-01 · benchmarkReturn usa el mismo netInvested que portfolioReturn
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Ambas series usan `totalInvested` (`last.netInvested`/`last.netInvestedUSD`) como denominador común en lugar de bases separadas por curva.
+**Contexto:** El spec especifica la fórmula para `portfolioReturn` pero no aclara explícitamente el denominador para `benchmarkReturn`. Se eligió el denominador compartido porque el comentario en `BenchmarkPoint` dice `// Capital neto aportado (común a ambos)` y porque el phantom benchmark modela "mismo capital, distinto activo" — usar bases distintas rompería la comparabilidad del alpha.
+**Alternativas descartadas:** Usar como base del benchmark el primer punto donde `benchmark > 0` (reproduciendo el comportamiento anterior para esa serie sola) — descartado porque es exactamente el defecto que AR-051 corrige.
+**Consecuencias / riesgo residual:** Si el phantom no tiene precio SPY para todos los trades, `benchmarkCurrent` puede quedar por debajo de `netInvested` incluso con SPY al alza, produciendo un `benchmarkReturn` artificialmente negativo. El guard de `coverageRatio` mitiga el caso extremo; los intermedios quedarán visibles como sesgo en el alpha.
+
+> Generado por el loop · feature F-0076 · step 3
+
+---
+## ADR-0224 · 2026-10-01 · (d) y (e) no se duplicaron — ya cubiertos en Step 1
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** No se agregaron tests redundantes para "netInvested<=0→null" ni "serie vacía→null" porque ya existen en el bloque "casos límite" del mismo archivo con aserciones idénticas.
+**Contexto:** El spec del Step 2 lista (d) y (e) como casos de aceptación, pero el archivo de tests creado en Step 1 ya los incluye con exactamente la misma semántica. Agregar duplicados aumenta el conteo sin valor y puede confundir al lector.
+**Alternativas descartadas:** Agregar los mismos tests con etiquetas explícitas "(d)" y "(e)" aunque fueran redundantes, para que el archivo sirva como documento de aceptación autosuficiente.
+**Consecuencias / riesgo residual:** Si alguien revisa el archivo buscando "criterio (d)" o "criterio (e)" por texto, no los encuentra en un `describe` propio. El comentario `// Criterios (d) y (e) de la aceptación del ticket.` agregado antes del `describe('casos límite', ...)` mitiga parcialmente esto.
+
+> Generado por el loop · feature F-0076 · step 2
+
+---
+## ADR-0223 · 2026-10-01 · Alpha invariante: test pasa con implementación actual Y nueva
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El test del criterio (c) "alpha_ARS == alpha_USD" queda en verde con ambas implementaciones (firstValid y netInvested), porque el alpha como cociente de cocientes cancela el MEP en ambos casos. El test complementario que sí distingue ambas implementaciones es la aserción del valor absoluto (25 vs 9.4).
+**Contexto:** La propiedad de invarianza del alpha respecto de moneda es una consecuencia algebraica del alpha geométrico (ratio de ratios), independiente de qué base se use. Para que el step de aceptación sea inequívoco, los tests de valor específico (50%, −25%, 25% de alpha) son los que marcan la diferencia entre old y new.
+**Alternativas descartadas:** Podría haberse diseñado un escenario donde firstValid coincide con netInvested para que el criterio (c) también sea RED con old code, pero eso haría el fixture menos legible y no verificaría la propiedad correcta.
+**Consecuencias / riesgo residual:** Cuando se implemente la corrección en `summarizeBenchmark`, los 6 tests en rojo pasarán a verde. El criterio (c) "alpha idéntico" permanecerá verde en ambos lados del cambio, lo cual es correcto: es una propiedad invariante que queremos preservar, no romper.
+
+> Generado por el loop · feature F-0076 · step 1
+
+---
 ## ADR-0222 · 2026-10-01 · Aliases de /portfolio/overview incluidos en el mapa exacto
 
 **Estado:** aceptada
