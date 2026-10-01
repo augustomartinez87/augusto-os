@@ -2005,3 +2005,35 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/f-0071/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-01 — F-0072 completado
+
+## Feature F-0072
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/features/fci/services/mercadoService.js, corregir getFondoFicha: pasar el filtro jsonb de clases hermanas como string JSON con JSON.stringify([{ id }]) en lugar del arreglo JS, y asegurar que cuando ni la consulta directa (.eq('id', id)) ni la de hermanas devuelven fila, retorne null (sin lanzar error). No cambiar la firma del método. (166951ff)
+- [x] Step 2: Agregar/actualizar tests en src/features/fci/services/__tests__/mercadoService.getFondoFicha.test.js con un supabase falso que registre el argumento de .contains y verifique que es un string que parsea a [{"id":"<id>"}]; cubrir que un id hermano devuelve la ficha del grupo con esa clase como actual y que un id inexistente devuelve null. (ea07b30b)
+- [x] Step 3: En src/features/fci/utils/fichaFondo.js, agregar funciones puras exportadas labelHorizonte (Cor→Corto plazo, Med→Mediano plazo, Lar→Largo plazo, Flex→Flexible, Sasig/desconocido→omitido) y labelRegion (Arg→Argentina, Glo→Global, Latam→Latinoamérica, Eeuu→EE.UU., Bra→Brasil, Eur→Europa, otro→texto crudo), con tests parametrizados en fichaFondo.test.js. (1a203dc4)
+- [x] Step 4: En getFondoFicha (mercadoService.js), exponer el patrimonio total del fondo desde fci_explorador_grupos.patrimonio (p. ej. como patrimonio_fondo) además del patrimonio de la clase, sin romper el shape existente de `fondo`; actualizar los tests de getFondoFicha para cubrir ambos campos. (0c34eace)
+- [x] Step 5: Agregar en src/utils/formatters.ts (o src/features/fci/utils/fichaFondo.js) una función pura de formato de importe que reciba la moneda del fondo y use prefijo US$/USD para USD y $ para ARS, reutilizando formatAum como base; tests para ARS y USD. (d09efdf4)
+- [x] Step 6: Ampliar buildClasesRows en fichaFondo.js para proyectar por clase: valor cuotaparte (VCP unitario más reciente de fci_prices, 6 decimales vía getPricesBatch), patrimonio de la clase, 30 días, YTD oficial, 12M oficial, TNA, honorario de gerente (variaciones oficiales y honorario leídos de fci_master por id) y ticker si existe; celdas faltantes muestran '—' solo en su celda. Tests con el fondo de 3 clases de Adcap Balanceado III y con uno de una sola clase. (35d26b09)
+- [x] Step 7: Extender buildFichaTecnicaRows en fichaFondo.js para incluir filas de sociedad gerente, sociedad depositaria, categoría, moneda y calificación (solo cuando existe), manteniendo las reglas actuales (filas sin dato omitidas, honorarios/comisiones incluso en 0,00%); test. (96c0971d)
+- [x] Step 8: Mejorar buildResumenFondo en fichaFondo.js: usar las etiquetas legibles de horizonte/región, evitar el punto duplicado tras la sociedad gerente, e incluir cuando haya dato categoría y moneda, rendimiento a 30 días, patrimonio total del fondo, cantidad de clases y puesto en la categoría; cada frase sin dato se omite. Tests con todos los datos, parciales y casi nada. (8dc70eb8)
+- [x] Step 9: Agregar en fichaFondo.js una función pura de formato de la nota de variaciones oficiales que, usando variaciones_fecha, produzca 'Datos oficiales CAFCI al DD/MM/AAAA' (y aclare que la fecha base de 12 meses la define CAFCI), sin alterar buildFichaPeriodos; test de la función de formato. (5f38ce87)
+- [x] Step 10: Actualizar la página src/pages/FciFondoDetalle.jsx para consumir todo lo anterior: chips de cabecera y ficha técnica con etiquetas legibles (no fondo.horizonte/fondo.region crudos), KPI Patrimonio mostrando el total del fondo con formato por moneda, tabla de clases completa (clase resaltada activa, resto enlazada a su ficha) y nota de variaciones oficiales; respetar tema oscuro y tokens argos-*. (61dca87d)
+
+### Decisiones (ADR)
+- ADR-0206 — patrimonio_fondo como campo de primer nivel, no anidado [Instrucción de Augusto]
+- ADR-0207 — formatAumMoneda delega en formatAum en lugar de reimplementar [Instrucción de Augusto]
+- ADR-0208 — buildClasesRows lee var_ytd_oficial/var_12m_oficial/honorario de c (fondo.clases[i]), no de un segundo parámetro ni de fci_master directo [Supuesto del agente] **⚠ REVISAR**
+- ADR-0209 — Orden de las filas nuevas en buildFichaTecnicaRows [Supuesto del agente] **⚠ REVISAR**
+- ADR-0210 — buildResumenFondo: Moneda como oración separada, no integrada al opening [Supuesto del agente] **⚠ REVISAR**
+- ADR-0211 — formatNotaVariaciones retorna objeto en lugar de string [Supuesto del agente] **⚠ REVISAR**
+- ADR-0212 — Guard de ClasesSection: n_clases > 1 en lugar de clases.length > 1 [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0072/`
+
+> Revisar con Claude in Chrome para validación de UX.

@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0212 · 2026-10-01 · Guard de ClasesSection: n_clases > 1 en lugar de clases.length > 1
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La tabla de clases se muestra cuando `fondo.n_clases > 1`, aunque `fci_explorador` solo devuelva 1 fila (porque las demás están stale). La condición anterior `clases.length <= 1` ocultaba la tabla entera en ese caso.
+**Contexto:** El spec pide "tabla de clases completa", pero no especifica qué hacer cuando hay clases hermanas declaradas en el grupo pero ausentes de fci_explorador por estar stale. Mostrar la tabla con las clases disponibles (aunque sean 1) es más informativo que ocultarla.
+**Alternativas descartadas:** Mantener `clases.length <= 1` (oculta la tabla si solo sobrevive 1 clase); mostrar un aviso de clases stale (mayor complejidad, fuera de alcance).
+**Consecuencias / riesgo residual:** Si `n_clases = 2` pero solo hay 1 fila en la tabla, el usuario ve la tabla activa sin posibilidad de navegar a la otra clase — pero al menos sabe que el fondo tiene más clases.
+
+> Generado por el loop · feature F-0072 · step 10
+
+---
+## ADR-0211 · 2026-10-01 · formatNotaVariaciones retorna objeto en lugar de string
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fichaFondo
+
+**Decisión:** La función retorna `{ label, nota12m }` en vez de un string único, separando la etiqueta de fecha de la aclaración sobre el período de 12M.
+**Contexto:** El spec pide "producir 'Datos oficiales CAFCI al DD/MM/AAAA'" Y "aclarar que la fecha base de 12 meses la define CAFCI". Esas son dos frases con semántica distinta (una es un badge de fecha, la otra es una nota explicativa) que la UI podría querer renderizar en posiciones distintas.
+**Alternativas descartadas:** Retornar un string único concatenado; retornar dos funciones separadas.
+**Consecuencias / riesgo residual:** El caller (UI) debe desestructurar `{ label, nota12m }` en lugar de usar la función como string directo. Si se prefiere un string simple, habría que cambiar la firma y los tests.
+
+> Generado por el loop · feature F-0072 · step 9
+
+---
+## ADR-0210 · 2026-10-01 · buildResumenFondo: Moneda como oración separada, no integrada al opening
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fichaFondo.js
+
+**Decisión:** Se agrega `Moneda: ${fondo.moneda}` como frase extra en la lista de extras, en lugar de integrarlo al opening como "fondo de Clasificacion en ARS".
+**Contexto:** La tarea dice "incluir categoría y moneda" pero no especifica si van en el opening (narrativo) o como extras. Integrar moneda al opening cambia la gramática del opening y requería actualizar tests existentes.
+**Alternativas descartadas:** Integrar al opening como "fondo de RF en ARS administrado por Gerente".
+**Consecuencias / riesgo residual:** El resumen queda como "...Moneda: ARS. Horizonte: ..." — estilo más uniforme con los demás extras, pero la moneda no queda integrada en la oración principal.
+
+> Generado por el loop · feature F-0072 · step 8
+
+---
+## ADR-0209 · 2026-10-01 · Orden de las filas nuevas en buildFichaTecnicaRows
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fichaFondo
+
+**Decisión:** Los campos nuevos se insertan al principio de la tabla (gerente → depositaria → categoría → moneda), antes de los 4 campos existentes (horizonte → region → plazo → minimo), con calificacion al final. El test de orden fija este contrato.
+**Contexto:** El spec listó los 5 campos nuevos pero no especificó el orden relativo entre ellos ni respecto a los existentes.
+**Alternativas descartadas:** Intercalar los nuevos con los existentes por temática (e.g., moneda junto a minimo_inversion); poner todos al final.
+**Consecuencias / riesgo residual:** Si la UI renderiza las filas en el orden del array, el layout mostrará primero la info administrativa y al final la calificación. Cambiar el orden sería un cambio de contrato visible; el test de orden lo previene.
+
+> Generado por el loop · feature F-0072 · step 7
+
+---
+## ADR-0208 · 2026-10-01 · buildClasesRows lee var_ytd_oficial/var_12m_oficial/honorario de c (fondo.clases[i]), no de un segundo parámetro ni de fci_master directo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Los campos de fci_master por clase (var_ytd_oficial, var_12m_oficial, honorario_gerente_pct) se leen de c directamente con ?? null; si el caller no los hidrata, la celda vale null y la UI muestra '—'. No se agrega un segundo parámetro masterByClassId ni se modifica getFondoFicha en este step.
+**Contexto:** fci_explorador (fuente de fondo.clases) no expone esos campos; la spec dice "leídos de fci_master por id" pero no dice que buildClasesRows los busque — la convención del repo es que las funciones puras reciben datos ya resueltos. El wiring (batch de fci_master para todas las clases) quedaría para el step de la capa de servicio/hook.
+**Alternativas descartadas:** Agregar masterByClassId como tercer parámetro, o modificar getFondoFicha para que fondo.clases ya incluya esos campos con una query batch a fci_master. Ambas opciones cambian más de un archivo en este step.
+**Consecuencias / riesgo residual:** Hasta que un step futuro wire fci_master batch en fondo.clases, las columnas var_ytd_oficial/12M/honorario mostrarán '—' en la UI aunque el test de buildClasesRows ya valida la proyección correcta cuando el dato está presente.
+
+> Generado por el loop · feature F-0072 · step 6
+
+---
+## ADR-0207 · 2026-10-01 · formatAumMoneda delega en formatAum en lugar de reimplementar
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** argos
+
+**Decisión:** `formatAumMoneda` llama a `formatAum` y solo reemplaza el prefijo `$`→`US$` para monedas USD, en vez de duplicar el cuerpo de formateo.
+**Contexto:** El step pedía "reutilizando formatAum como base"; dos intentos previos fallaron en review por copiar íntegro el cuerpo de `formatAum`, con riesgo de divergencia silenciosa si cambia el redondeo/signo/umbrales.
+**Alternativas descartadas:** Extraer un core privado con parámetro de prefijo del que ambas funciones dependan; se descartó por ser un cambio mayor que modifica `formatAum` (ya testeada) y aumenta el blast radius, frente a la delegación que la deja intacta.
+**Consecuencias / riesgo residual:** El swap depende de que el formato es-AR nunca emita `$` (hoy se cumple); queda documentado en comentario. Ninguna otra cuestión abierta.
+
+> Generado por el loop · feature F-0072 · step 5
+
+---
+## ADR-0206 · 2026-10-01 · patrimonio_fondo como campo de primer nivel, no anidado
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** argos — mercadoService.getFondoFicha
+
+**Decisión:** Se expone `patrimonio_fondo` directamente en el objeto raíz del resultado (al mismo nivel que `patrimonio`), fuera del spread de `normalizeFondo`.
+**Contexto:** El spec dice "sin romper el shape existente de fondo". Colocarlo dentro de `normalizeFondo` requeriría cambiar la firma de esa función o que `grupoData` le llegue como parámetro, lo que ampliaría el alcance. Como campo de primer nivel se agrega con zero-risk de colisión porque `normalizeFondo` nunca emite `patrimonio_fondo`.
+**Alternativas descartadas:** Pasarlo a `normalizeFondo` como campo extra del raw (ej: `raw.patrimonio_fondo = grupoData.patrimonio` antes del spread); descartado porque cambia la firma pública de `normalizeFondo` sin necesidad.
+**Consecuencias / riesgo residual:** Los consumidores que lean `result.patrimonio_fondo` lo encuentran directamente; si en el futuro `normalizeFondo` emite ese campo, habrá que quitar la línea extra o se pisará el valor del grupo con el de la clase.
+
+> Generado por el loop · feature F-0072 · step 4
+
+---
 ## ADR-0205 · 2026-10-01 · Tarjetas KPI propias en la ficha de fondo en vez de KpiCard
 
 **Estado:** aceptada
