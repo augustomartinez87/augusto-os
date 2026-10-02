@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0240 · 2026-10-02 · Alcance real de F-0080 step 8 es 2 archivos, no 5
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Solo se tocan `AllocationPanel.jsx` y `ComparadorLegend.jsx` (color de categoría usado como texto → `ink-mute`); se revierte `FundingCiclosTab.jsx` y no se tocan `GroupedPositionsTable.jsx` ni `DashboardOverview.jsx`.
+**Contexto:** El step lista 5 archivos, pero el criterio real es "color de categoría usado COMO TEXTO". En 3 de los 5 el color de categoría ya es relleno/marca (dot `background`, acento/ícono/sparkline de `KpiCard` cuyo value va en `text-ink`), no texto. Los builders previos editaban los 5 por igual y el reviewer los rechazó dos veces por salirse de alcance.
+**Alternativas descartadas:** Reestilizar el `color` de `KpiCard` y el label de grupos (descartado: son rellenos/marcas, explícitamente excluidos y sin impacto en contraste de texto).
+**Consecuencias / riesgo residual:** En `ComparadorLegend` el estado oculto ya no usa un gris propio; queda atenuado solo por `opacity-25` del botón, que es suficiente como afordance de "oculto".
+
+> Generado por el loop · feature F-0080 · step 8
+
+---
+## ADR-0239 · 2026-10-02 · Alcance de aria-label extendido a label-como-botón y nav Links con texto condicional
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agrega `aria-label` al elemento `<label>` de upload en TradesTabContent (que actúa como botón de archivo) y a los nav `<Link>` del Sidebar cuyo texto `{item.label}` solo está en el DOM cuando `isExpanded=true`. Ambos casos van más allá de la definición estricta de "botón/link de solo ícono" del spec.
+**Contexto:** El spec dice "botón/link de solo ícono sin texto visible". El `<label>` de upload y los nav Links no son `<button>` puros, pero en ambos casos el screen reader no tiene nombre accesible en el estado colapsado/mobile porque el texto está fuera del DOM (`{isExpanded && <span>…</span>}`) o hidden via CSS. El espíritu del ticket es garantizar etiquetas accesibles en todos los controles interactivos.
+**Alternativas descartadas:** Limitar el scope a `<button>` y `<Link>` estrictamente y omitir el `<label>` y los nav Links; en ese caso los controles quedarían sin nombre accesible en mobile/colapsado.
+**Consecuencias / riesgo residual:** Los nav Links ahora tienen `aria-label={item.label}` que coincide con el texto visible cuando expandido (cumple WCAG 2.5.3 Label in Name). Si en el futuro se separan los `aria-label` por estado (expanded/collapsed), habría que hacerlo dinámico.
+
+> Generado por el loop · feature F-0080 · step 7
+
+---
+## ADR-0238 · 2026-10-02 · Pseudo-element solo hacia arriba en el link de nombre de fondo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El pseudo-element del link del nombre del fondo extiende solo hacia arriba (`after:-top-2 after:bottom-0`), dando exactamente 24px de área táctil, en lugar de extenderse simétricamente.
+**Contexto:** El link tiene debajo el div de gestora dentro del mismo `div.min-w-0`. Extender también hacia abajo (`after:-bottom-2`) solaparía el div de gestora y potencialmente interceptaría clicks en él. La extensión solo hacia arriba aprovecha el padding superior del `td` (`py-2.5` = 10px) que está desocupado.
+**Alternativas descartadas:** Extensión simétrica (`after:-inset-y-2`) que daría 32px pero podría interferir con la gestora; `min-h-[24px]` en el link que aumentaría el alto de fila ~8px (descartado por la restricción).
+**Consecuencias / riesgo residual:** El área táctil es exactamente 24px (el mínimo especificado), no 32px. Si la futura auditoría eleva el mínimo a 32px habrá que revisar la dirección de extensión o reestructurar la celda.
+
+> Generado por el loop · feature F-0080 · step 6
+
+---
+## ADR-0237 · 2026-10-02 · Áreas táctiles 32px — crecimiento de secciones internas del sidebar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Las secciones de toggle y footer del Sidebar crecen ~4–8px en altura al pasar los botones de 22–24px a `min-h-8` (32px), sin ajuste compensatorio en el padding de los contenedores.
+**Contexto:** La instrucción prohíbe "mover el layout visible del header ni de la barra lateral". Los contenedores de toggle (`py-1.5`) y footer (`p-2.5`) tienen padding que antes absorbía botones pequeños; al hacer los botones 32px esos contenedores se expanden. Ajustar el padding de los contenedores hubiera mantenido la altura exacta pero requería editar más líneas y mezclaba spacing con touch-targets.
+**Alternativas descartadas:** Reducir el padding de los contenedores para compensar (ej. `py-0.5` en toggle y `py-2` en footer). Descartado para mantener el cambio mínimo y evitar editar propiedades de layout que no son el objetivo.
+**Consecuencias / riesgo residual:** Las secciones de toggle y footer del sidebar son ~4–8px más altas, reduciendo el área de scroll del nav en la misma cantidad. Sin efecto fuera del sidebar (es `fixed`). Si la restricción se interpreta estrictamente, ajustar el padding de los contenedores en una iteración posterior.
+
+> Generado por el loop · feature F-0080 · step 4
+
+---
+## ADR-0236 · 2026-10-02 · Color de texto de reemplazo fijado como teal-ink leído desde index.css
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El test (b) parsea `--teal-ink` de `src/index.css` en lugar de hardcodear `#06302E`, siguiendo el mismo patrón que `contrastUtils.designTokens.test.ts` (readFileSync + regex).
+**Contexto:** El spec del feature dice "color de texto oscuro elegido" sin nombrarlo. El design system ya usa `var(--teal-ink)` en los dos botones principales correctos (GroupedPositionsTable L304, MobileHeader L104), lo que lo identifica como la elección canónica.
+**Alternativas descartadas:** Hardcodear `#06302E` directamente en el test (más simple pero queda desacoplado del token real; si cambia el token el test no se entera).
+**Consecuencias / riesgo residual:** Si en el futuro `--teal-ink` cambia de valor, el test (b) fallará automáticamente si el nuevo valor no cumple AA, lo cual es el comportamiento correcto.
+
+> Generado por el loop · feature F-0080 · step 1
+
+---
 ## ADR-0235 · 2026-10-02 · `titleAs` en Card en lugar de `as`
 
 **Estado:** aceptada

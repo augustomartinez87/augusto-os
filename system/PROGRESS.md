@@ -2207,3 +2207,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0079/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-02 — F-0080 completado
+
+## Feature F-0080
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar un test puro en `src/utils/__tests__/` (patrón de `contrastUtils.designTokens.test.ts`: leer fuentes con `fs`, sin testing-library) que falle con el estado actual: (a) verifica que ninguna línea de `src/**/*.{jsx,tsx}` combine `bg-profit` sólido con `text-white` (salvo excepciones documentadas), y (b) verifica con `contrastRatio` que el color de texto oscuro elegido tenga >= 4,5:1 contra `#2FD4CD`. (2b25fffc)
+- [x] Step 2: Exponer el token `--teal-ink` (#06302E) como clase de Tailwind en `tailwind.config.js` si aún no está disponible (hacer grep de `teal-ink` para confirmar cómo se expone), reutilizando el token existente de `src/index.css` sin crear paleta nueva. (2b25fffc)
+- [x] Step 3: Corregir los 14 botones principales `bg-profit text-white` para que el texto use el color oscuro `teal-ink` (>= 4,5:1 sobre el relleno) en: `TradesTabContent.jsx`, `FciPortfolio.jsx`, `Fci.jsx`, `FciLotModal.jsx`, `FciLotTable.jsx`, `FinancingDashboard.jsx`, `FundingCiclosTab.jsx`, `FundingConversionesTab.jsx`, `TradeJournal.jsx`, `CryptoPortfolio.jsx`, `DefiLoans.jsx` y `NexoLoans.jsx`, ajustando hover, foco, íconos y estados deshabilitados; los botones translúcidos (`bg-profit/10`, `bg-profit-muted`) no cambian. (262751c0)
+- [x] Step 4: Ampliar las áreas táctiles del chrome de la app (`Topbar.jsx`, `Sidebar.jsx`, `MobileHeader.jsx`, `NotificationsBell.jsx`) a >= 32×32 px de área clicable con padding, `min-h-8 min-w-8` o área ampliada por pseudo-elemento, SIN agrandar el ícono ni mover el layout visible del header ni de la barra lateral. (1317cbe7)
+- [x] Step 5: Ampliar a >= 32 px de alto y ancho los chips y botones de filtro de las pantallas principales (Transacciones `1M`/`3M`/`6M`/`YTD`/`1A`/`Max`; Financiación `Todas`/`Caución`/`CapyFi`; Explorador `Todos`/`ARS`/`USD` y chips de categoría; Fondos `Ver en FCI`/`Ver Historial`/`Nueva Operación`) reutilizando el patrón F-0079 (`min-h-8` + `flex items-center justify-center`), conservando tamaño de letra, bordes y fondos; los que ya miden >= 32 no cambian. (3982068e)
+- [x] Step 6: Ampliar a >= 24×24 px el área clicable de los controles dentro de filas de tabla (botones de ícono de filas en Fondos y similares, links de nombre de fondo del Explorador) usando pseudo-elemento con `inset` negativo sobre contenedor `relative` o el link ocupando la celda, SIN cambiar el alto de las filas ni su densidad. (262361cb)
+- [x] Step 7: Hacer grep de `<button` y `<a` con hijo ícono en `src/components`, `src/features` y `src/pages` (p. ej. `FciLotTable.jsx`, `FciLotsList.jsx`, `FciPortfolio.jsx`, filas del Explorador) y agregar `aria-label` en español descriptivo a todo botón/link de solo ícono sin texto visible que aún no lo tenga, conservando `title` y sin cambiar comportamiento ni diseño. (41774022)
+- [x] Step 8: Reemplazar el uso del color de categoría (`#6B7280` de `Bonos`) como color de texto por `ink-mute` (o derivado con >= 4,5:1) en `AllocationPanel.jsx`, `GroupedPositionsTable.jsx`, `FundingCiclosTab.jsx`, `ComparadorLegend.jsx` y `DashboardOverview.jsx`, conservando el color de categoría solo como relleno, punto o borde de leyendas y gráficos; `utils/constants.ts` no cambia mientras se use solo como relleno. (4acc9557)
+
+### Decisiones (ADR)
+- ADR-0236 — Color de texto de reemplazo fijado como teal-ink leído desde index.css [Supuesto del agente] **⚠ REVISAR**
+- ADR-0237 — Áreas táctiles 32px — crecimiento de secciones internas del sidebar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0238 — Pseudo-element solo hacia arriba en el link de nombre de fondo [Supuesto del agente] **⚠ REVISAR**
+- ADR-0239 — Alcance de aria-label extendido a label-como-botón y nav Links con texto condicional [Supuesto del agente] **⚠ REVISAR**
+- ADR-0240 — Alcance real de F-0080 step 8 es 2 archivos, no 5 [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0080/`
+
+> Revisar con Claude in Chrome para validación de UX.
