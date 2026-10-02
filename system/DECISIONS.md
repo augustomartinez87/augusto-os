@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0235 · 2026-10-02 · `titleAs` en Card en lugar de `as`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agregó la prop `titleAs` a Card en vez de `as` porque `as` ya está tomada para controlar el elemento contenedor (div por defecto). El default es `'h2'` para alinearse con el spec, lo cual es inocuo dado que no existe ningún consumidor que pase `title` a Card en todo el repo.
+**Contexto:** El spec pedía "prop `as` (default h2)" pero Card ya expone `as: Tag = 'div'` para el contenedor; reutilizar el mismo nombre crearía ambigüedad entre elemento contenedor y elemento de título.
+**Alternativas descartadas:** Renombrar el contenedor a `containerAs` y liberar `as` para el título; descartado porque rompería la convención y no hay consumidores que usen `as` en Card (0 ocurrencias en el repo), por lo que el beneficio sería mínimo.
+**Consecuencias / riesgo residual:** Los consumidores futuros de `<Card title="...">` deberán recordar que el nivel del heading se controla con `titleAs`, no `as`. Si en el futuro se crea un componente de título compartido, ambas props podrían unificarse.
+
+> Generado por el loop · feature F-0079 · step 7
+
+---
+## ADR-0234 · 2026-10-02 · title= se conserva junto a aria-label; no se elimina
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** En todos los botones de ícono se agrega `aria-label` como atributo adicional sin remover el `title` preexistente.
+**Contexto:** `title` provee tooltip visual en desktop; `aria-label` provee la etiqueta accesible para lectores de pantalla y controles táctiles donde el tooltip no aparece. Son complementarios, no redundantes.
+**Alternativas descartadas:** Eliminar title= y dejar solo aria-label (tooltip nativo desaparecería en desktop).
+**Consecuencias / riesgo residual:** Los dos valores deben mantenerse en sincronía si en el futuro se cambia el texto de uno de ellos.
+
+> Generado por el loop · feature F-0079 · step 6
+
+---
+## ADR-0233 · 2026-10-02 · min-h-8 + flex centering vs. solo min-h-8 en chips de texto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se añadió `flex items-center justify-center` junto con `min-h-8` a los chips de texto (period, grouping, allocation toggles), en lugar de solo `min-h-8`.
+**Contexto:** `min-h-8` sin flex layout deja el texto alineado al tope del área expandida en lugar de centrarlo verticalmente, produciendo un aspecto visual descuidado. El spec solo dice "usar min-h-8" pero no especifica cómo centrar.
+**Alternativas descartadas:** Solo `min-h-8` (el texto queda arriba del área táctil). Cambiar `py-1` → `py-2` para crecer naturalmente sin min-h (no garantiza 32px en todos los contextos de fuente/browser).
+**Consecuencias / riesgo residual:** Los chips ahora tienen `display:flex`, lo que podría interferir si en el futuro se agregan elementos multi-línea o iconos; en ese caso revisar que sigan usando `items-center`.
+
+> Generado por el loop · feature F-0079 · step 5
+
+---
+## ADR-0232 · 2026-10-02 · Tamaño mínimo fijado en 11 px (no 12 px)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El reemplazo se detuvo en 11 px para todos los textos que eran 9 px o 10 px, sin escalar hasta 12 px.
+**Contexto:** El spec dice "text-[9px] y text-[10px] pasan a text-[11px]", no "pasan a 12 px". Pero WCAG AA para texto normal no establece un mínimo de tamaño; la restricción relevante es de contraste (4.5:1). 11 px uppercase tracking-widest sigue siendo muy pequeño para legibilidad real.
+**Alternativas descartadas:** Usar 12 px como mínimo universal (más alineado con recomendaciones prácticas de accesibilidad).
+**Consecuencias / riesgo residual:** Si en una auditoría posterior se decide que 11 px uppercase no cumple legibilidad práctica, habrá que hacer otro paso mecánico de 11 px → 12 px solo en los textos uppercase micro. El ADR en docs/ documenta esta deuda explícitamente.
+
+> Generado por el loop · feature F-0079 · step 4
+
+---
+## ADR-0231 · 2026-10-02 · Parsear tailwind.config.js como texto en lugar de importarlo dinámicamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Los valores de `ink.mute` e `ink.faint` se extraen de `tailwind.config.js` con regex sobre el texto del archivo, sin hacer `import()` dinámico del módulo.
+**Contexto:** `tailwind.config.js` importa `defaultTheme` de `tailwindcss/defaultTheme`; importarlo en un test requiere que vitest resuelva esa dependencia en modo Node, lo cual puede fallar silenciosamente o producir errores de resolución difíciles de debuggear. El spec solo pedía "leer los valores".
+**Alternativas descartadas:** Dynamic `import(resolve(root, 'tailwind.config.js'))` dentro del test — más robusto ante cambios de formato del archivo pero agrega complejidad de ESM/CJS.
+**Consecuencias / riesgo residual:** Si el formato del bloque `ink:` en tailwind.config.js cambia de comillas simples a dobles, o se introduce indentación inusual, el regex puede no matchear. El mensaje de error del helper (`throw new Error`) haría fallar el test de forma obvia en ese caso.
+
+> Generado por el loop · feature F-0079 · step 2
+
+---
+## ADR-0230 · 2026-10-02 · Nombre del archivo `contrastUtils.ts` (no `colorUtils.ts`)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La función se colocó en `src/utils/contrastUtils.ts` para mantener consistencia con la convención de nombres descriptivos del repo (ej: `bondUtils.ts`, `vcpHelpers.js`).
+**Contexto:** El spec solo indica "en `src/utils/`" sin especificar nombre de archivo; se podría haber usado `colorUtils`, `a11yUtils` u otro nombre genérico.
+**Alternativas descartadas:** `colorUtils.ts` (más genérico, admite futuras helpers de color) o `a11yUtils.ts` (agrupa utilidades de accesibilidad). Se descartaron porque el archivo solo contiene lógica de contraste y el naming específico es más buscable.
+**Consecuencias / riesgo residual:** Si en steps futuros se agregan otras helpers de color/a11y conviene evaluar si moverlas aquí o crear un archivo hermano; no hay impacto funcional.
+
+> Generado por el loop · feature F-0079 · step 1
+
+---
 ## ADR-0229 · 2026-10-02 · Alcance de la corrección del double-sign en celdas de PnL carry
 
 **Estado:** aceptada

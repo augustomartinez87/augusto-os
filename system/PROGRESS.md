@@ -2179,3 +2179,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0078/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-02 — F-0079 completado
+
+## Feature F-0079
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear función pura `contrastRatio(fgHex, bgHex)` (WCAG 2.x, luminancia relativa) en `src/utils/` con sus tests unitarios en `__tests__/` que cubran casos conocidos (negro/blanco = 21:1, pares del design system). (31efaf58)
+- [x] Step 2: Agregar un test puro que lea los valores de `--ink-mute`/`--ink-faint` de `src/index.css` y `ink.mute`/`ink.faint` de `tailwind.config.js` y verifique: (a) CSS y Tailwind coinciden, (b) cada uno >= 4,5:1 contra `--bg`, `--surface`, `--surface-2` y `--surface-3` usando `contrastRatio`, (c) ink-mute más claro que ink-faint. Debe quedar en rojo con los valores actuales. (25a01b74)
+- [x] Step 3: Cambiar los tokens de texto secundario: `--ink-faint`/`--text-tertiary` de `#5A5E68` a `#868B95` y `--ink-mute`/`--text-secondary` de `#8A8F99` a `#A3A8B2` en todos los bloques de `src/index.css` (~líneas 29-30, 39-40, 60-61) y en `tailwind.config.js` (`ink.mute`, `ink.faint`). Hacer grep de los literales `#5A5E68` y `#8A8F99` en `src/` y reemplazar usos hardcodeados por el token. El test del paso anterior debe pasar. [Nota Cowork 2026-10-02: cerrado a mano; los comentarios de fixtures de contrastUtils.contrastRatio.test.ts se aclararon como valores históricos pre-AR-053.] (461ec4c)
+- [x] Step 4: Reemplazo mecánico de tamaño mínimo: todos los `text-[9px]` y `text-[10px]` de `src/` pasan a `text-[11px]`, y los `fontSize` de 9 o 10 en props de gráficos (ticks de Recharts, `style={{ fontSize }}`) suben a 11. No tocar textos de 11px o más. Si algún contenedor desborda, ajustar el contenedor (no volver a 10px) y anotarlo en un ADR corto. (53788776)
+- [x] Step 5: Ampliar áreas táctiles a >= 32×32px en los controles interactivos compactos de las pantallas principales (empezar por Overview: chips de rango y botones de ícono), usando padding, `min-h-8 min-w-8` o área clicable ampliada SIN agrandar el ícono ni cambiar el diseño visible. No tocar los controles que ya miden >= 32px. (95e73e6e)
+- [x] Step 6: Agregar `aria-label` en español descriptivo a todo botón que solo tiene un ícono (sin texto visible). Hacer grep de `<button` con hijo ícono en `src/components`, `src/features` y `src/pages` y completar los que falten, sin cambiar comportamiento ni diseño. (4183df94)
+- [x] Step 7: Agregar prop `as` (default `h2`) al componente compartido de título de sección/tarjeta y corregir la jerarquía de encabezados en las páginas principales (Overview, Posiciones, Fondos, Financiación, Explorador) para que no salten niveles (h1→h2→h3), sin cambiar clases ni apariencia. (e5231d70)
+
+### Decisiones (ADR)
+- ADR-0230 — Nombre del archivo `contrastUtils.ts` (no `colorUtils.ts`) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0231 — Parsear tailwind.config.js como texto en lugar de importarlo dinámicamente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0232 — Tamaño mínimo fijado en 11 px (no 12 px) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0233 — min-h-8 + flex centering vs. solo min-h-8 en chips de texto [Supuesto del agente] **⚠ REVISAR**
+- ADR-0234 — title= se conserva junto a aria-label; no se elimina [Supuesto del agente] **⚠ REVISAR**
+- ADR-0235 — `titleAs` en Card en lugar de `as` [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0079/`
+
+> Revisar con Claude in Chrome para validación de UX.
