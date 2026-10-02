@@ -2150,3 +2150,32 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0076/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-02 — F-0078 completado
+
+## Feature F-0078
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar tests puros en `src/utils/__tests__/` para `formatUSD` (positivo con miles y decimales, redondeo, cero, `null`/`undefined`/`NaN`, negativo, negativo que redondea a cero) y para los negativos de `formatARS` y `formatUSDT`, cubriendo el formato es-AR con coma decimal y el signo `−` (U+2212) delante del prefijo. Los tests deben reflejar el comportamiento objetivo (quedarán en rojo hasta implementar). (58cd6aaf)
+- [x] Step 2: Agregar tests puros en `src/utils/__tests__/` para `formatPercent` y `formatPercentNoSign` (negativos con `−` U+2212, positivo con `+`, casi-cero sin `−`) y para el nuevo helper `formatPercentDecimals` (con y sin signo, 1 y 2 decimales, `null`/`undefined`/`NaN`), reflejando el comportamiento es-AR objetivo. [Nota Cowork 2026-10-01: el step 2 se cerró a mano e incluye la implementación de formatPercent/formatPercentNoSign/formatPercentDecimals (firma { decimals, signed }); formatPercentNoSign conserva el signo de los negativos.] (3857fe1)
+- [x] Step 3: Implementar en `src/utils/formatters.ts`: migrar `formatUSD` a locale `es-AR` manteniendo prefijo `US$ ` y los mismos guards; aplicar el patrón de signo `−` (U+2212) delante del prefijo en `formatARS`, `formatUSD` y `formatUSDT` usando `Math.abs(value)` y sin `-0` (valor que redondea a cero no lleva signo). No cambiar `formatAum`, `formatAumMoneda`, `formatCompactNumber`, `formatCuotapartes`, `formatQuantity`, `formatNumber` ni `formatDateAR`. (5a449919)
+- [x] Step 4: [Ya implementado en el step 2 (commit 3857fe1). Verificar que formatPercent, formatPercentNoSign y formatPercentDecimals(value, { decimals = 2, signed = false }) cumplen la spec y, si cumplen, no cambiar nada.] En `src/utils/formatters.ts`: modificar `formatPercent` y `formatPercentNoSign` para usar `−` (U+2212) en negativos (positivo con `+` como hoy; casi-cero sin `−`), y agregar el helper exportado `formatPercentDecimals(value, { decimals = 2, signed = false })` para porcentajes en escala porcentaje, es-AR, con `−` real y guard a `—`/`-` según patrón del call site. (5a449919)
+- [x] Step 5: Hacer grep de consumidores que inspeccionen el texto formateado de porcentajes con `startsWith('-')`/`includes('-')` o lo parseen (verificar que `src/components/ui/Badge.jsx` ya acepta `-` y `−`); ajustar en este mismo feature cualquier consumidor que solo acepte `-`, o documentar en un ADR corto si es riesgoso. (5a449919)
+- [x] Step 6: Migrar el módulo FCI a `formatPercentDecimals` y `formatNumber`: en `FciFondoDetalle.jsx` (`fmtPct`, `fmtTna`, el `toFixed(1)` de ~línea 42, los `${Number(h.val).toFixed(2)}%` de ~402 y `honorario_gerente_pct` de ~494), `FciExplorador.jsx` (`pctCell`, `tnaCell`) y `ExploradorStatsBar.jsx` (`formatTna`), para que muestren coma decimal. (11144886)
+- [x] Step 7: En `FciFondoDetalle.jsx` migrar a es-AR con `formatNumber(v, n)` los `tickFormatter`/`valueFormatter` del gráfico (~líneas 305 y 317) y el VCP (`c.vcp.toFixed(6)`, ~línea 482), conservando la misma cantidad de decimales visibles. (221ef7f4)
+- [x] Step 8: Barrido de `.toFixed(` y `'en-US'` en `src/` (excluyendo tests) y migrar a es-AR los textos visibles: carry (`RatesEvolutionChart`, `SpreadComparatorChart`, `SpreadRealizedChart`, `useCarry*`, `useHistoricalRates` si alimentan labels/tooltips), financing (`CaucionesTable`), portfolio (`BenchmarkChart`, `PortfolioHeroChart`), `Admin.jsx`, `ComparadorChart`, `ComparadorTooltip`; y `PositionDetailModal.jsx:25` a `formatDateAR` (o `es-AR` con mismas options si muestra mes en letras a propósito). No tocar inputs, `value=`, CSV ni notas internas. (0df79312)
+- [x] Step 9: Escribir un ADR corto que liste cada `.toFixed(` restante en el código justificando que corresponde a los casos excluidos (inputs `type=number` como `DefiLoanModal`/`NexoLoanModal`/`ConversionModal`/`LocalCsvUploader`, export CSV de `ComparadorTable.jsx` ~línea 19, `notes:` de `fciService.js`, claves/datos no mostrados), y documentar cualquier consumidor de `formatPercent` que se haya dejado sin ajustar. (6f33d16c)
+- [x] Step 10: Ejecutar `npm test`, typecheck y `npm run build`; verificar que los nuevos tests pasan y que los existentes (`formatAumMoneda`, `GroupedPositionsTable.columns`, `benchmarkService`) siguen verdes, ajustando cualquier regresión sin cambiar cálculos ni datos. (6f33d16c)
+
+### Decisiones (ADR)
+- ADR-0226 — roundsToZero check en importes monetarios (no solo en porcentajes) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0227 — Bug de doble signo en OperationsPositionCards/OperationsTab considerado pre-existente y fuera de scope [Supuesto del agente] **⚠ REVISAR**
+- ADR-0228 — formatPercentDecimals para ticks de porcentaje en gráficos [Supuesto del agente] **⚠ REVISAR**
+- ADR-0229 — Alcance de la corrección del double-sign en celdas de PnL carry [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0078/`
+
+> Revisar con Claude in Chrome para validación de UX.

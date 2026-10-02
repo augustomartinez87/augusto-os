@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0229 · 2026-10-02 · Alcance de la corrección del double-sign en celdas de PnL carry
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La corrección del double-sign documentada en el ADR se acota exclusivamente a la llamada a `formatPercent` (que ya emite `+`); la línea de importe `{sign}{formatARS(...)}` se declara correcta y se instruye conservar el `{sign}`, descartando `formatPercentNoSign` para esas celdas.
+**Contexto:** Dos reviews anteriores rebotaron el ADR por datos erróneos; el más grave sugería quitar el `{sign}` de la llamada a `formatARS`, lo que propagaría un bug (perder el `+` en PnL positivo) ya que `formatARS` no antepone `+` a positivos.
+**Alternativas descartadas:** Introducir una variante de `formatARS` con signo para centralizar (descartado por estar fuera de alcance de F-0078: no se crean formatters nuevos); usar `formatPercentNoSign` (descartado: elimina el `+` que un PnL positivo debe mostrar).
+**Consecuencias / riesgo residual:** Queda como deuda técnica abierta (DT-1/DT-2/DT-3) resolver el double-sign y los `replace('+','')` en un step de polish posterior; el ADR es solo inventario, no aplica el fix de código.
+
+> Generado por el loop · feature F-0078 · step 9
+
+---
+## ADR-0228 · 2026-10-02 · formatPercentDecimals para ticks de porcentaje en gráficos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usa `formatPercentDecimals` (con `signed: false` por defecto) para los `tickFormatter` y tooltips de porcentaje en Recharts, en lugar de construir la string manualmente con `.toFixed() + '%'`.
+**Contexto:** Los tick formatters reciben valores de Recharts que pueden incluir `-Infinity`/`Infinity` como bordes de dominio. `formatPercentDecimals` tiene guard para `null/undefined/NaN` pero no para `Infinity`. Se mantiene el guard explícito `typeof v === 'number'` o `isFinite(val)` antes de llamar al formatter para preservar el comportamiento original.
+**Alternativas descartadas:** Agregar guard de `isFinite` dentro de `formatPercentDecimals`; se descartó para no alterar el módulo de formatters en este step.
+**Consecuencias / riesgo residual:** Si `formatPercentDecimals` recibe `Infinity`, devolverá `"Infinity%"` en lugar de `''`. El guard externo en cada tick formatter previene esto en los casos conocidos.
+
+> Generado por el loop · feature F-0078 · step 8
+
+---
+## ADR-0227 · 2026-10-02 · Bug de doble signo en OperationsPositionCards/OperationsTab considerado pre-existente y fuera de scope
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** No se corrigió el patrón `${sign}${formatPercent(...)}` que produce `(++X%)` para PnL positivo porque el bug ya existía antes de F-0078 y el formatter antiguo también retornaba `+X%`. El scope del step 5 es solo consumidores que rompan con el nuevo `−` U+2212.
+**Contexto:** `OperationsPositionCards.jsx:8` define `sign = fciDailyPnl > 0 ? '+' : ''` y luego concatena `${sign}${formatPercent(...)}`. Dado que `formatPercent` siempre emitía `+X%` para positivos (tanto antes como después de F-0078), el doble signo es anterior a este feature.
+**Alternativas descartadas:** Corregir el bug en este step (usar `formatPercentNoSign` en esos call sites o eliminar `sign` del pnlPct), pero implicaría un cambio fuera del alcance declarado del step.
+**Consecuencias / riesgo residual:** El bug de doble signo queda documentado para un fix separado; no afecta correctitud semántica (el color viene de la comparación numérica, no del string).
+
+> Generado por el loop · feature F-0078 · step 5
+
+---
+## ADR-0226 · 2026-10-02 · roundsToZero check en importes monetarios (no solo en porcentajes)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se aplicó el mismo guard `Number(abs.toFixed(2)) === 0` en `formatARS`, `formatUSD` y `formatUSDT`, igual al usado en `formatPercentDecimals`.
+**Contexto:** El spec dice "sin -0: valor que redondea a cero no lleva signo" pero no especifica si esto aplica solo a porcentajes o también a importes. `formatCompactNumber` y `formatAum` (precedentes de U+2212 en el repo) no tienen ese guard; solo `formatPercentDecimals` lo tiene.
+**Alternativas descartadas:** Omitir el check en importes (siguiendo el precedente de `formatAum`/`formatCompactNumber`) — pero el spec lo menciona explícitamente en contexto de importes, y los tests de step 1 lo validan para los tres formatters.
+**Consecuencias / riesgo residual:** ninguna — los tests de step 1 ya cubren este caso y validan el comportamiento.
+
+> Generado por el loop · feature F-0078 · step 3
+
+---
 ## ADR-0225 · 2026-10-01 · benchmarkReturn usa el mismo netInvested que portfolioReturn
 
 **Estado:** aceptada
