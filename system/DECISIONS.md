@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0241 · 2026-10-02 · Step 4 cubre solo los tres botones de acción; las pills de sub-tab son de step 5
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se amplió a >=32px únicamente los tres botones (`Ver en FCI`, `Ver Historial`/`Ver Posiciones`, `Nueva Operación`) en `FciPortfolio.jsx` y se revirtieron las pills `Suscripciones`/`Rescates`. No se modificó `Fci.jsx`.
+**Contexto:** Dos intentos previos fueron rechazados por scope creep al forzar `min-h-8` sobre las pills de sub-tab. Al revisar el historial, esas pills ya fueron tratadas en el commit de step 5 ("chips y botones de filtro") en `Fci.jsx`, confirmando que son alcance de otro step.
+**Alternativas descartadas:** (1) Ampliar también las pills para uniformar altura — descartado: es alcance de step 5 y altera un control segmentado `p-0.5` fuera de lo pactado. (2) Replicar el fix en `Fci.jsx` — descartado: ya está commiteado por otros steps; reabrirlo sería scope creep inverso.
+**Consecuencias / riesgo residual:** Queda una posible inconsistencia visual entre `/portfolio/fondos` y `/carry-trade/fondos-en-caucion` respecto de las pills; si Cowork decide uniformarlas, corresponde a step 5, no a step 4.
+
+> Generado por el loop · feature F-0081 · step 4
+
+---
 ## ADR-0240 · 2026-10-02 · Alcance real de F-0080 step 8 es 2 archivos, no 5
 
 **Estado:** aceptada

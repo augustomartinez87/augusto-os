@@ -2235,3 +2235,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0080/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-03 — F-0081 completado
+
+## Feature F-0081
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En src/components/layout/Topbar.jsx, ampliar a >= 32 px el área clicable de los dos botones del toggle ARS/USD (CurrencyToggle, ~líneas 26-42): agregar `min-h-8` + `flex items-center justify-center` a cada botón, conservando el texto `text-[11px]`, fondos, bordes y la lógica de useCurrencyPreference. No tocar el toggle equivalente de MobileHeader.jsx que ya cumple. (58e8c2a8)
+- [x] Step 2: En src/components/layout/Topbar.jsx, ampliar el link del logo `ARGOS CAPITAL` (~línea 61-72) a >= 32 px de alto: agregar `min-h-8` + `flex items-center` al Link, sin cambiar el tamaño del `<img>` (w-6 h-6), el texto ni la posición visible, verificando que no desborde el header `h-12`. (931d00d0)
+- [x] Step 3: Hacer grep de la ruta `/portfolio/fondos` para confirmar si el componente activo es src/pages/FciPortfolio.jsx o src/pages/Fci.jsx (o ambos). Documentar el resultado; si uno de los dos es código muerto, anotarlo en un ADR corto en docs/adr/ y no modificarlo. (931d00d0)
+- [x] Step 4: En el/los archivo(s) de Fondos confirmados (FciPortfolio.jsx líneas ~213/287/312 y/o Fci.jsx líneas ~217/291/316), ampliar a >= 32 px de alto los botones de acción `Ver en FCI`, `Ver Historial`/`Ver Posiciones` y `Nueva Operación` usando `min-h-8` + `flex items-center justify-center`, conservando letra, colores y bordes. (5f894a3f)
+- [x] Step 5: En src/pages/FciExplorador.jsx, ampliar a >= 32×32 px los botones de paginación `Página anterior` y `Página siguiente` (~líneas 542 y 553): reemplazar `p-1.5` por `min-w-8 min-h-8` + `flex items-center justify-center`, conservando los `aria-label`/`title`, el icono ChevronLeft/Right y el estado disabled. (7bef77ff)
+- [x] Step 6: Ejecutar `npm test`, el typecheck y `npm run build` para confirmar que todo pasa sin errores tras los cambios de presentación. (7bef77ff)
+
+### Decisiones (ADR)
+- ADR-0241 — Step 4 cubre solo los tres botones de acción; las pills de sub-tab son de step 5 [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0081/`
+
+> Revisar con Claude in Chrome para validación de UX.
