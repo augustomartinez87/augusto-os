@@ -2257,3 +2257,19 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0081/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-03 — F-0082 completado
+
+## Feature F-0082
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/components/PortfolioCharts.jsx`, eliminar el bloque fijo `Analyst Insight` completo (el `<div className="p-4 bg-primary/5 ...">` con el título `Analyst Insight` y el texto fijo `"Che, mirá bien la concentración en el Treemap..."`, últimas líneas del contenedor `space-y-6`), cuidando de no borrar el cierre del contenedor ni del componente, y manteniendo el espaciado entre secciones (sin hueco ni margen extra al final). (eabdbb37)
+- [x] Step 2: En `src/features/portfolio/components/PortfolioCharts.jsx`, limpiar cualquier import, variable, constante o estilo que quede sin uso tras remover el bloque; verificar con grep que ni `Analyst Insight` ni el texto fijo quedan en ningún archivo de `src/`. Sin cambios de cálculo, datos, rutas ni esquema. (eabdbb37)
+- [x] Step 3: Ejecutar `npm test`, el typecheck (`tsc --noEmit` o el script configurado) y `npm run build`; confirmar que los tres pasan sin errores tras la eliminación del bloque. (eabdbb37)
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0082/`
+
+> Revisar con Claude in Chrome para validación de UX.
