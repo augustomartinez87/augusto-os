@@ -2298,3 +2298,26 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0083/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-04 — F-0084 completado
+
+## Feature F-0084
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el módulo puro `src/lib/finance/marketCalendar.ts`: constante `MARKET_HOLIDAYS` (YYYY-MM-DD) con SOLO las fechas verificadas (2026-10-12, 2026-11-09, 2026-11-23, 2026-12-08, 2026-12-25, 2027-01-01), con comentario de fuentes y nota de actualización anual; y `getMarketStatus(now: Date)` que usa ART fijo UTC-3, ventana lunes-viernes 10:00–17:59:59 (reusando las constantes de `priceRefresh.ts`) y devuelve `{ state, reason?, lastCloseDate }` calculando el último día hábil con rueda ya cerrada, excluyendo fines de semana y feriados. Agregar helper interno para detectar feriado/día hábil. Incluir el test `src/lib/finance/__tests__/marketCalendar.test.ts` con todos los casos de la aceptación (bordes 09:59/10:00/17:59/18:00, sábado, domingo, lunes feriado 2026-10-12 con lastCloseDate 2026-10-09, martes post-feriado antes de 10:00, conversión ART vs UTC, viernes/sábado apuntando al mismo viernes) más el test de que `MARKET_HOLIDAYS` está ordenada, sin duplicados y con formato válido. (24158575)
+- [x] Step 2: Modificar `isPriceWindowART` en `src/lib/finance/priceRefresh.ts` para que consulte el calendario de feriados (un feriado entre semana cuenta como fuera de ventana, usando el intervalo lento de polling), reutilizando la lógica/helpers de `marketCalendar.ts` sin duplicar constantes. Verificar que los tests existentes de `priceRefresh` siguen verdes (sus fechas no son feriados). (5bc99e39)
+- [x] Step 3: Crear el componente compartido `MarketStatusIndicator` que combina el estado de mercado (`getMarketStatus`) con `usePrices().isFetching` y expone los tres estados: (a) abierta sin descarga → punto `bg-teal` + `En vivo`; (b) abierta con descarga → punto `bg-warning animate-pulse` + `Actualizando…`; (c) cerrada → punto `bg-ink-faint` sin animación + `Mercado cerrado` con sufijo opcional `· cierre vie 02/10` (día abreviado + DD/MM es-AR, usando `formatDateAR` de `src/utils/formatters.ts` si sirve) a partir de `lastCloseDate`. Con mercado cerrado nunca mostrar `Actualizando…`. Soportar prop para versión corta (sin fecha) vs completa. Accesibilidad: texto `text-ink-mute`/`text-ink-faint`, mínimo 11 px, punto `aria-hidden`, contenedor con `aria-live="polite"`/`role="status"` que solo anuncie al cambiar el estado real. Incluir `setInterval` de 60 s con limpieza al desmontar que recalcula el estado sin disparar consultas a Supabase. (03439c5d)
+- [x] Step 4: Reemplazar `LiveIndicator` en `src/components/layout/Topbar.jsx` por `MarketStatusIndicator` en su versión corta (`hidden md:flex`, `Mercado cerrado` sin fecha), eliminando el literal `En vivo`/`Actualizando…` duplicado y manteniendo el layout/espaciado del topbar. (b0480e55)
+- [x] Step 5: Reemplazar `LiveDot` en `src/features/portfolio/components/PortfolioHeroChart.jsx` por `MarketStatusIndicator` en su versión completa (con la fecha de cierre junto al gráfico), sin tocar el resto del hero chart ni del Overview, y confirmar que `npm test`, typecheck y `npm run build` pasan. (e0d6df61)
+
+### Decisiones (ADR)
+- ADR-0246 — `lastCloseDate` se devuelve también cuando `state = 'open'` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0247 — Dependencia circular entre priceRefresh y marketCalendar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0248 — Separar el live-region de aria-live del label visible [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0084/`
+
+> Revisar con Claude in Chrome para validación de UX.

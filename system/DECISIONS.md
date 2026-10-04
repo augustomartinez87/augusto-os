@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0248 · 2026-10-04 · Separar el live-region de aria-live del label visible
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El label visible cubre los tres estados (En vivo / Actualizando / Mercado cerrado). Un span `sr-only` con `aria-live="polite"` separado sólo actualiza su contenido cuando el estado de mercado cambia (open ↔ closed), no cuando cambia `isFetching`.
+**Contexto:** La spec pide que el contenedor `aria-live` "solo anuncie al cambiar el estado real". Si se pone `aria-live` en el contenedor visible, cualquier cambio de `isFetching` (que ocurre cada 30 s en rueda) dispararía un anuncio de screen reader, lo cual sería spam auditivo.
+**Alternativas descartadas:** Poner `aria-live` en el contenedor entero (simple pero spam); usar `aria-label` dinámico en el contenedor (no anuncia cambios); usar `role="status"` sin texto separado y confiar en que el screen reader no anuncie cambios frecuentes (no confiable entre navegadores).
+**Consecuencias / riesgo residual:** El texto que leen los lectores de pantalla ("Mercado abierto" / "Mercado cerrado") difiere del texto visible ("En vivo" / "Actualizando…" / "Mercado cerrado"). Si en el futuro se quiere que el screen reader anuncie también el estado "Actualizando…", hay que actualizar el `announcedLabel`.
+
+> Generado por el loop · feature F-0084 · step 3
+
+---
+## ADR-0247 · 2026-10-04 · Dependencia circular entre priceRefresh y marketCalendar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / priceRefresh.ts
+
+**Decisión:** Se permite la dependencia circular entre los dos módulos. `priceRefresh.ts` importa `isMarketHoliday` de `marketCalendar.ts`, que a su vez importa constantes de `priceRefresh.ts`.
+**Contexto:** Para evitar duplicar `MARKET_HOLIDAYS` o la lógica de `isMarketHoliday`, la alternativa natural es importar desde `marketCalendar.ts`, pero ese módulo ya depende de `priceRefresh.ts`, creando un ciclo. El spec pide reutilizar helpers de `marketCalendar.ts` sin duplicar constantes.
+**Alternativas descartadas:** (a) Extraer `MARKET_HOLIDAYS` + `isMarketHoliday` a un tercer archivo `holidays.ts` sin dependencias cruzadas — más limpio arquitectónicamente pero crea un archivo nuevo. (b) Inyectar el predicado como parámetro opcional de `isPriceWindowART` — evita el ciclo pero obliga a los call-sites a pasarlo. (c) Duplicar la lista de feriados en `priceRefresh.ts` — viola el requisito explícito del spec.
+**Consecuencias / riesgo residual:** Si en el futuro algún módulo usa los valores importados a nivel de inicialización (fuera de una función), el ciclo puede romperse con valores `undefined`. Hoy ambos módulos usan los importados solo dentro de funciones, por lo que el riesgo es bajo con ESM live bindings.
+
+> Generado por el loop · feature F-0084 · step 2
+
+---
+## ADR-0246 · 2026-10-04 · `lastCloseDate` se devuelve también cuando `state = 'open'`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** `getMarketStatus` siempre incluye `lastCloseDate` independientemente del estado, apuntando al último día hábil anterior cuando el mercado está abierto.
+**Contexto:** El spec define `{ state, reason?, lastCloseDate }` pero no especifica si `lastCloseDate` se omite cuando el mercado está abierto. Para los consumidores que necesiten mostrar "última actualización" sin importar el estado, lo más útil es tenerlo siempre disponible.
+**Alternativas descartadas:** Omitir `lastCloseDate` cuando `state = 'open'` (campo opcional `lastCloseDate?`); complicaría los consumidores con un guard extra innecesario.
+**Consecuencias / riesgo residual:** Los steps siguientes que consuman `MarketStatus` pueden leer `lastCloseDate` sin verificar el estado primero. Si el producto decide que el significado de "último cierre" no aplica con mercado abierto, habría que cambiar el tipo a `lastCloseDate?`.
+
+> Generado por el loop · feature F-0084 · step 1
+
+---
 ## ADR-0245 · 2026-10-04 · Derivar latestPrice desde getRecentPrices en vez de mantener getLatestPrice separado
 
 **Estado:** aceptada
