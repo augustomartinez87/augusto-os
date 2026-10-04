@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0245 · 2026-10-04 · Derivar latestPrice desde getRecentPrices en vez de mantener getLatestPrice separado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** En `useFciLotEngine.loadLots` se eliminó el loop de `getLatestPrice` y se deriva `latestMap[id]` del último elemento de `getRecentPrices(id, 30)` (ya ordenado ASC). El loop `findIndex(fecha)` del código original se reemplaza por acceso directo al penúltimo índice.
+**Contexto:** El spec pedía "al máximo 3 consultas distintas" y preservar el contrato de emparejamiento por fecha exacta. La forma más directa de reducir 2N → N fue eliminar el primer loop, ya que `getRecentPrices` retorna la misma fila más reciente que `getLatestPrice` (ambas usan `ORDER DESC`). El emparejamiento por fecha queda implícitamente correcto porque el último y penúltimo elemento del mismo array ya están alineados; no hay riesgo de desincronización entre dos requests.
+**Alternativas descartadas:** Mantener ambos loops y sólo aplicar `dedupeInFlight` entre hooks (menos reducción de egress: hubiera dejado 2N queries en `useFciLotEngine` intactas). También se descartó un `getRecentPricesBatch` nuevo (requeriría ROW_NUMBER() en PostgREST, no disponible sin RPC).
+**Consecuencias / riesgo residual:** Si en el futuro `getRecentPrices` se cambia para no devolver el más reciente como último elemento (contrato roto desde fciService), `latestMap` derivaría el precio equivocado. El contrato ASC-al-final está documentado en el comentario de `getRecentPrices` (líneas 91-97 de fciService.js).
+
+> Generado por el loop · feature F-0083 · step 5
+
+---
+## ADR-0244 · 2026-10-03 · Separar effects en lugar de usar eslint-disable para la carga de lugares
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** useFciLotEngine
+
+**Decisión:** Se separó el único `useEffect` en dos efectos con sus deps naturales (`[loadLots]` y `[loadLugares]`) en lugar de añadir un `useEffect(() => { loadLugares(); }, [])` con comentario `// eslint-disable-line`. Ambas variantes tienen el mismo comportamiento observable.
+**Contexto:** El spec pedía que `loadLugares` corriera una sola vez por montaje sin crear loops. `loadLugares` tiene `useCallback([])` (referencia estable), por lo que `[loadLugares]` como dep produce exactamente "una vez por montaje" sin violar la regla exhaustive-deps de ESLint.
+**Alternativas descartadas:** Añadir `useEffect(() => { loadLugares(); }, [])` con `eslint-disable`; o convertir `loadLugares` a un efecto directo sin `useCallback`.
+**Consecuencias / riesgo residual:** Si en el futuro `loadLugares` recibe deps (ej. userId), el segundo efecto se actualizará correctamente solo ajustando el `useCallback` sin tocar el efecto.
+
+> Generado por el loop · feature F-0083 · step 4
+
+---
+## ADR-0243 · 2026-10-03 · Error de Supabase se convierte en throw dentro de _fetchFromDB
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** mepService / usdtService
+
+**Decisión:** Si `supabase.from(...).select(...)` devuelve `{ error }`, `_fetchFromDB` lanza ese error en lugar de retornar `localHistory`. El catch de `getHistory` lo captura y retorna `localHistory` como fallback.
+**Contexto:** El original tenía dos ramas distintas (error Supabase → `cachedHistory = localHistory; _refreshCache; return`) y (excepción → `return localHistory` sin tocar caché). Al extraer el fetch a una función wrapeada con `dedupeInFlight`, hay una sola salida de error. Convertirla en throw unifica ambos caminos en el catch de `getHistory` y garantiza que `dedupeInFlight` elimine la promesa fallida del mapa (el `.finally()` del helper solo corre si se usa la interfaz de promesa estándar).
+**Alternativas descartadas:** Retornar `localHistory` desde `_fetchFromDB` en caso de error Supabase (como el original), pero eso haría que `getHistory` lo tratara como éxito y ejecutara `lastUpdate = now`, cacheando el fallback local por 1h y bloqueando futuros reintentos.
+**Consecuencias / riesgo residual:** El comportamiento de "error Supabase → fallback a local sin cachear éxito" se preserva, pero ahora pasa por el catch en lugar de un return temprano. La rama que en el original seteaba `cachedHistory = localHistory` (sin `lastUpdate`) ya no existe; en su lugar el catch retorna `localHistory` sin tocar `cachedHistory` ni `lastUpdate`, que es la semántica más segura (próxima llamada reintenta).
+
+> Generado por el loop · feature F-0083 · step 2
+
+---
+## ADR-0242 · 2026-10-03 · Serialización de args con JSON.stringify como clave del mapa
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La clave del Map de promesas en vuelo se construye con `JSON.stringify(args)`, sin normalización ni hashing adicional.
+**Contexto:** El spec pide "clave estable por serialización de args" pero no prescribe el algoritmo. Las alternativas (hashing, comparación por referencia, WeakMap) son más complejas sin beneficio claro para los call-sites conocidos del repo (fciId strings, números, objetos planos serializables).
+**Alternativas descartadas:** toString de los args (no diferencia objetos complejos); hashing MD5/SHA (dependencia externa, overhead); WeakMap (no aplica a primitivos, que son los args predominantes).
+**Consecuencias / riesgo residual:** Los args deben ser JSON-serializables (no funciones, no instancias con métodos). Si en un futuro step se necesita deduplicar llamadas con args circulares o con clases, habrá que reemplazar la serialización. El comportamiento con `undefined` como arg es predecible (`JSON.stringify([undefined])` → `"[null]"`) pero puede sorprender si se mezclan llamadas con y sin ese arg.
+
+> Generado por el loop · feature F-0083 · step 1
+
+---
 ## ADR-0241 · 2026-10-02 · Step 4 cubre solo los tres botones de acción; las pills de sub-tab son de step 5
 
 **Estado:** aceptada

@@ -2273,3 +2273,28 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0082/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-04 — F-0083 completado
+
+## Feature F-0083
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear un helper puro y testeado en `src/lib/dedupeInFlight.js` (o `.ts`) que exporte `dedupeInFlight(fn)` y `memoizeAsync(fn, ttlMs)`: comparte la promesa de una llamada en curso entre invocaciones concurrentes con los mismos argumentos (clave estable por serialización de args) y, opcionalmente, cachea el resultado por TTL. Una promesa rechazada se elimina del mapa (no se cachea; el error se propaga a todos los que la esperaban). Incluir tests puros con vitest que cubran: concurrencia (una sola ejecución de `fn` para N llamadas simultáneas), falla sin caché (reintento tras rechazo), expiración de TTL, y claves distintas por argumentos distintos. (a0a1e429)
+- [x] Step 2: Aplicar el helper en `mepService.getHistory` y `usdtService.getHistory` envolviendo la carga con `dedupeInFlight`/`memoizeAsync` para que las llamadas concurrentes (PortfolioContext, Dashboard.jsx, usePortfolioHistory, useBenchmark) compartan una única consulta a `mep_history` y `usdt_history`. Conservar la caché de 1 h existente (`cachedHistory`/`lastUpdate`) y devolver exactamente el mismo resultado (mezcla de histórico local + base) que hoy. (e6fcf9c2)
+- [x] Step 3: Aplicar el helper en `eodHistoryService.getEodSeries` para deduplicar llamadas concurrentes por ticker: dos llamadas simultáneas al mismo ticker comparten la consulta a `daily_prices`. Conservar la caché de 1 h (`cache`, `TTL`) y la regla de no cachear series vacías. (bb148582)
+- [x] Step 4: En `src/features/fci/hooks/useFciLotEngine.js`, sacar `loadLugares()` del `useEffect` que dispara `loadLots` para que se ejecute una sola vez por montaje (no por cada cambio de `portfolioId`). Si `lugares` depende de `portfolioId`, cargarlo una vez por valor de `portfolioId` y reutilizar (React Query con clave estable o el helper). NO consolidar las 5 consultas de `loadLots` sobre `fci_lots`/`fci_rescates` (fuera de alcance). Mantener los comentarios de trazabilidad AR-0xx y evitar loops de refetch / doble ejecución en StrictMode. (2eb9976c)
+- [x] Step 5: Inventariar y deduplicar las consultas a `fci_prices` que se disparan al cargar el Overview (`fciService.js` líneas ~79, ~100, ~115, ~136, ~211; `mercadoService.js`; `portfolioHistoryService.ts` ~361 / `loadFciPortfolioData`). Usar el helper de promesas en vuelo / `getPricesBatch` para que el mismo conjunto de fondos no se consulte repetidamente, dejando como máximo 3 consultas distintas (las que realmente necesitan columnas o rangos diferentes se conservan). Preservar los contratos existentes: `.single()`→null vs array ASC con `reverse`, y el emparejamiento por fecha exacta del VCP anterior. No agregar filtros de fecha que cambien resultados. (bddac7bf)
+- [x] Step 6: Ejecutar `npm test` (incluyendo los nuevos tests del helper y los existentes de fci/portfolio), typecheck y `npm run build`; corregir cualquier fallo de tipos, lint o tests que surja de los cambios anteriores, asegurando que no cambien valores mostrados ni la forma de los datos. (bddac7bf)
+
+### Decisiones (ADR)
+- ADR-0242 — Serialización de args con JSON.stringify como clave del mapa [Supuesto del agente] **⚠ REVISAR**
+- ADR-0243 — Error de Supabase se convierte en throw dentro de _fetchFromDB [Supuesto del agente] **⚠ REVISAR**
+- ADR-0244 — Separar effects en lugar de usar eslint-disable para la carga de lugares [Instrucción de Augusto]
+- ADR-0245 — Derivar latestPrice desde getRecentPrices en vez de mantener getLatestPrice separado [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0083/`
+
+> Revisar con Claude in Chrome para validación de UX.
