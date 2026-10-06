@@ -2321,3 +2321,8 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0084/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-05 — SP-021: Renovar préstamos solo interés (novación) y fusión
+
+**Commit:** kredy c769c33 (main, deploy READY)
+**Qué se hizo:** Nueva acción Renovar en préstamos solo interés (planificador puro, router tRPC y diálogo), 21 tests con mutación. Aplicada en prod: dos préstamos de US.000 al 10% de Iván Néstor fusionados en uno de US.000 al 8% mensual (US/mes), cobro de US registrado el 2026-10-05; los anteriores quedan efinanced. Decisión en ADR-0249. Pendiente: verificar la TIR proyectada -7,22%.

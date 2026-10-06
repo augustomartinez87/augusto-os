@@ -3038,3 +3038,16 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 **Consecuencia:** `realizeCommissionsForPayment` es el punto de entrada correcto, no `createOpportunity`.
 
 ---
+
+---
+
+## ADR-0249 · 2026-10-05 · Cambio de tasa en préstamos solo interés: novación (no condonación)
+
+**Estado:** aceptada
+**Origen:** Augusto (Product Owner)
+**Target:** kredy
+
+**Decisión:** Un cambio de tasa sobre préstamos solo interés se modela como renovación por novación: se crea un préstamo nuevo (capital = suma de principalOutstanding, nueva tasa, 12 cuotas desde la primera fecha de vencimiento) y los anteriores pasan a efinanced, con payoffCapital/payoffTotal = capital y mora/interés vencido/diferimiento = 0. Se permite fusionar varios préstamos del mismo prestatario y moneda en uno. El capital se transfiere entre libros; no se condona ni se simula un repago. Las cuotas impagas de los préstamos cerrados no se arrastran (el prestatario paga la nueva tasa desde la cuota renovada).
+**Contexto:** Caso real del 2026-10-05: dos préstamos de US.000 al 10% mensual pasaron a 8%; se fusionaron en uno de US.000 con cobro de US ese día. La app no permitía cerrar con cuotas impagas, ni cambiar la tasa de un préstamo activo. lib/xirr-builder.ts ya trata cadenas como una sola inversión, por lo que la TIR del libro queda consistente (sin tocar el cálculo). Implementado en kredy c769c33, sin migración, con 21 tests.
+**Alternativas descartadas:** Condonar los préstamos viejos (falsea capital y reportes); editar la tasa in place (pierde historial y cuotas pagadas a la tasa anterior); cerrar como completado forzando un pago de capital inexistente (ensucia cashflows); ajuste manual por SQL (sin trazabilidad).
+**Consecuencias / riesgo residual:** La acción es irreversible desde la UI. Se excluyen préstamos con comisión AP. La TIR proyectada del préstamo nuevo muestra -7,22%, probablemente por el cronograma solo interés de 12 cuotas sin retorno de capital; no verificado.
