@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0252 · 2026-10-06 · Separar el green de `getCurrentRate` async en su propio commit de implementación
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El cambio de comportamiento `getCurrentRate` sync→async se commiteó aparte (223b6be) como step de implementación, dejando el step 5 como verificación pura (grep + test + typecheck) sin cambios de código.
+**Contexto:** El plan de steps 1–4 nunca asignó un commit al green que exige el test rojo del step 2; quedaba huérfano en el working tree y cada intento lo colaba en el commit de verificación, generando rechazo por scope creep.
+**Alternativas descartadas:** Dejar el fix sin commitear y solo reportar el plan roto (no cumple "implementá el fix mínimo"); re-bundlearlo en step 5 (ya rechazado dos veces).
+**Consecuencias / riesgo residual:** Tras step 4 ningún código de producción llama ya a `mepService.getCurrentRate()` (el único caller es el test); el método async queda como API pública correcta y a prueba de footgun para futuros consumidores.
+
+> Generado por el loop · feature F-0086 · step 5
+
+---
+## ADR-0251 · 2026-10-06 · El RED test de la carrera MEP await-ea getCurrentRate() y entra el remoto por el canal real de supabase
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El test reproduce la carrera del PortfolioContext inyectando el historial remoto a través del mock real de supabase (`.order()` resuelve a `{ data, error }`) y await-eando `mepService.getCurrentRate()`, capturándolo en frío antes de resolver `getHistory()`.
+**Contexto:** Los intentos previos fallaron porque el mock nunca inyectaba el remoto (rojo tautológico) y testeaban `getCurrentRate()` como síncrono sin camino a verde. Había que fijar el contrato del fix futuro para que el rojo sea válido.
+**Alternativas descartadas:** Testear solo `deriveCurrentRate(getHistory())` (ya da verde con el código actual, no reproduce el bug); mockear `getHistory` en vez del canal supabase (seguiría sin ejercer el merge real).
+**Consecuencias / riesgo residual:** El fix de producción deberá hacer que el rate actual se derive del historial resuelto (p. ej. `getCurrentRate` async que devuelva `deriveCurrentRate(await getHistory())`), compatible con el `await Promise.all` que el contexto ya usa.
+
+> Generado por el loop · feature F-0086 · step 2
+
+---
+## ADR-0250 · 2026-10-06 · Fallback de `deriveCurrentRate` al `localHistory` del módulo, no a `CONSTANTS.MEP_DEFAULT`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Cuando el historial pasado está vacío, `deriveCurrentRate` cae a `localHistory[0].price ?? 0`, no a `CONSTANTS.MEP_DEFAULT` (1467).
+**Contexto:** El spec dice "cayendo al fallback local" sin precisar si "local" es `localHistory` (último cierre embebido, 1468.93) o `CONSTANTS.MEP_DEFAULT` (1467). `localHistory` es la fuente más precisa del JSON embebido y mantiene consistencia con `getCurrentRate()` que usa el mismo source; `MEP_DEFAULT` es un tercer valor distinto, usado solo en `priceService`.
+**Alternativas descartadas:** Usar `CONSTANTS.MEP_DEFAULT` como fallback final; agregar un segundo parámetro `fallback` para que el caller decida.
+**Consecuencias / riesgo residual:** Si el caller pasa un historial vacío Y `localHistory` también está vacío (bundle corrupto o vacío), retorna `0` — igual que el comportamiento actual de `getCurrentRate()`. Si el spec quería `MEP_DEFAULT`, se necesita ajustar.
+
+> Generado por el loop · feature F-0086 · step 1
+
+---
 ## ADR-0248 · 2026-10-04 · Separar el live-region de aria-live del label visible
 
 **Estado:** aceptada

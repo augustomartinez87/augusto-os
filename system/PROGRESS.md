@@ -2326,3 +2326,26 @@ Screenshots en `orchestrator/qa-artifacts/F-0084/`
 
 **Commit:** kredy c769c33 (main, deploy READY)
 **Qué se hizo:** Nueva acción Renovar en préstamos solo interés (planificador puro, router tRPC y diálogo), 21 tests con mutación. Aplicada en prod: dos préstamos de US.000 al 10% de Iván Néstor fusionados en uno de US.000 al 8% mensual (US/mes), cobro de US registrado el 2026-10-05; los anteriores quedan efinanced. Decisión en ADR-0249. Pendiente: verificar la TIR proyectada -7,22%.
+
+## 2026-10-06 — F-0086 completado
+
+## Feature F-0086
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/features/portfolio/services/mepService.ts`, extraer una función pura exportada (p. ej. `deriveCurrentRate(history)`) que, dado un historial ya resuelto y ordenado descendente, devuelva `history[0].price` (con guardas para historial vacío cayendo al fallback local). No cambiar firmas existentes de `getHistory`/`getCurrentRate`/`findClosestRate`; solo agregar el helper reutilizable para que el contexto derive el rate del historial resuelto. (1f456fa4)
+- [x] Step 2: Agregar test unitario rojo en vitest (en `__tests__` del servicio) que reproduzca la carrera: dado un historial remoto cuyo último dato es `{ date: '2026-10-05', price: 1537.9 }` mientras el JSON local termina en `2026-01-26 / 1468.93`, el rate derivado del historial resuelto debe ser `1537.9` y nunca `1468.93`. (8f00921d)
+- [x] Step 3: Agregar test del caso de fallback: si `getHistory()` falla y devuelve `localHistory`, el rate derivado usa el último dato local (comportamiento actual sin cambios), verificando que `deriveCurrentRate(localHistory)` devuelve el último cierre embebido. (98a43e5e)
+- [x] Step 4: Modificar `loadMep` en `src/features/portfolio/components/PortfolioContext.jsx`: eliminar `mepService.getCurrentRate()` del `Promise.all` junto a `getHistory()`, y derivar `mepRate` del historial ya resuelto por `getHistory()` (usando el helper `deriveCurrentRate` o llamando a `getCurrentRate()` recién después de que `getHistory()` resolvió). No tocar ninguna fórmula ni otros consumidores de `mepRate`. (d2dbd883)
+- [x] Step 5: Correr `grep -rn mepRate src` para listar los 17 consumidores fuera de tests y confirmar que ninguno requiere edición propia; dejar la evidencia lista para el cuerpo del PR. Ejecutar `npm test` y typecheck completos y verificar que pasan. (223b6be2)
+
+### Decisiones (ADR)
+- ADR-0250 — Fallback de `deriveCurrentRate` al `localHistory` del módulo, no a `CONSTANTS.MEP_DEFAULT` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0251 — El RED test de la carrera MEP await-ea getCurrentRate() y entra el remoto por el canal real de supabase [Supuesto del agente] **⚠ REVISAR**
+- ADR-0252 — Separar el green de `getCurrentRate` async en su propio commit de implementación [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0086/`
+
+> Revisar con Claude in Chrome para validación de UX.
