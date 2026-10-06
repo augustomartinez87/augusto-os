@@ -2377,3 +2377,32 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0087/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-06 — F-0089 completado
+
+## Feature F-0089
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear helper puro `getFciDayLabel(latestDate, now)` en `src/features/fci/utils/` que, reutilizando la fecha ART de `src/lib/finance/marketCalendar.ts`, devuelva los rótulos a usar (título de tarjeta `P&L HOY` vs `P&L ÚLTIMO VCP`, subtítulo `al DD/MM` con `formatDateAR`, y encabezado de columna `PnL Diario` vs `P&L últ. día`) según si el último VCP es de hoy o no. Agregar tests con vitest: VCP de hoy, VCP del viernes visto un lunes, y sin VCP. (5289ea08)
+- [x] Step 2: Aplicar `getFciDayLabel` en la tarjeta `P&L HOY` de `/portfolio/fondos` y `/carry-trade/fondos-en-caucion` (page `src/pages/Fci.jsx`) usando `priceDate` expuesto por `useFciLotEngine.js:268` (con fallback a la fecha que ya muestra la fila si falta), y en el encabezado de columna `PnL Diario` de `FciLotTable.jsx:222`. No cambiar ningún valor numérico. (20b9465e)
+- [x] Step 3: Crear helper puro `getFuenteQueConviene(fuentes, umbralPp = 0.5)` en utils de carry que devuelva la fuente más barata solo si la diferencia con la siguiente es ≥ 0,5 pp, y null en caso contrario. Agregar tests: diferencia de 0,05 pp → null; exactamente 0,5 pp → la más barata; caso de 3 fuentes; y 1 sola fuente → null. (0bfac7a9)
+- [x] Step 4: Aplicar `getFuenteQueConviene` en `DashboardTab.jsx:78-141` (`¿Dónde financiar hoy?`): mostrar el badge `Conviene` y el resaltado de fila (`bg-primary/10 border-primary/30`) solo cuando el helper devuelve una fuente; cuando devuelve null, no marcar ninguna fila y mostrar en el pie `Sin diferencia relevante (menos de 0,5pp)`; cuando hay fuente, mantener el pie con el ahorro usando `formatNumber`. (15848937)
+- [x] Step 5: Crear helper puro `isActive(itemPath, currentPath)` para la navegación (con la regla: `Carry` activo en cualquier ruta que empiece con `/carry-trade/`; `Inicio` en `/portfolio/overview` y `/portfolio`; `Posiciones` en `/portfolio/posiciones`) y agregar test del helper con las 4 rutas de carry. (de790bf3)
+- [x] Step 6: Aplicar el helper `isActive` en `MobileNav.jsx` para el bottom nav mobile y agregar `aria-current='page'` al ítem activo. (c0c1e55f)
+- [x] Step 7: Agregar `aria-current='page'` al link activo del sidebar desktop en `Sidebar.jsx:63-80`. (b9764ea4)
+- [x] Step 8: Corregir microcopy: plural correcto `1 vigente` / `N vigentes` (`DashboardTab.jsx:291`); `Generando: $ …` con espacio (`DashboardTab.jsx:412`); y `Capital promedio por operación: $ …` con prefijo `$` usando `formatARS` en `FinancingDashboard.jsx:306`. (4f2328e7)
+
+### Decisiones (ADR)
+- ADR-0257 — Subtítulo formateado como "al DD/MM" (sin año) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0258 — Derivar latestDate como el máximo de los priceDate de las posiciones [Supuesto del agente] **⚠ REVISAR**
+- ADR-0259 — Ubicación del helper en `src/lib/finance/` en lugar de un directorio "utils de carry" nuevo [Supuesto del agente] **⚠ REVISAR**
+- ADR-0260 — Corrección del cálculo de ahorro en el pie de FundingVerdictCard [Supuesto del agente] **⚠ REVISAR**
+- ADR-0261 — Carry activo por prefijo de sección, no por mapeo individual de rutas [Supuesto del agente] **⚠ REVISAR**
+- ADR-0262 — Confiar en formatARS para el prefijo `$` en lugar de anteponerlo a mano [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0089/`
+
+> Revisar con Claude in Chrome para validación de UX.

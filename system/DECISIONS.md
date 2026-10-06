@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0262 · 2026-10-06 · Confiar en formatARS para el prefijo `$` en lugar de anteponerlo a mano
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** En `FinancingDashboard.jsx:306` se usa `formatARS(...)` directo, sin literal `$ ` previo, para cumplir el microcopy `Capital promedio por operación: $ …`.
+**Contexto:** La spec del step pedía "prefijo `$`" y los intentos previos lo agregaban a mano (`` `$ ${formatARS(...)}` ``), duplicando el símbolo (`$ $ …`) porque `formatARS` ya lo incluye (`formatters.ts:18`).
+**Alternativas descartadas:** Anteponer `$ ` literal (descartado: produce doble símbolo); formatear el número sin `formatARS` y poner `$ ` manual (descartado: reintroduce la cadena cruda que el step buscaba reemplazar y rompe la consistencia con el resto del tablero).
+**Consecuencias / riesgo residual:** ninguna; queda consistente con la línea hermana `DashboardTab.jsx:412`.
+
+> Generado por el loop · feature F-0089 · step 8
+
+---
+## ADR-0261 · 2026-10-06 · Carry activo por prefijo de sección, no por mapeo individual de rutas
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** `isActive` usa una tabla de prefijos de sección (`SECTION_PREFIXES`) en lugar de listar cada ruta de carry individualmente. Cualquier item cuyo path empiece con `/carry-trade/` queda activo en cualquier `currentPath` que también empiece con `/carry-trade/`.
+**Contexto:** El spec solo indicaba "Carry activo en cualquier ruta que empiece con `/carry-trade/`" sin especificar si la regla debía ser exhaustiva por ruta o por sección. Las rutas de carry en `navigation.js` pueden crecer; listarlas una a una generaría deuda de mantenimiento.
+**Alternativas descartadas:** Mapeo explícito de cada ruta de carry a un conjunto de `currentPath` válidos (más verboso, más frágil al agregar rutas nuevas).
+**Consecuencias / riesgo residual:** Si en el futuro se agrega una sección `/carry-trade/algo-nuevo`, quedará activa automáticamente sin modificar el helper. Si una ruta con ese prefijo debiera *no* activar el ítem de Carry, habría que refinar la lógica.
+
+> Generado por el loop · feature F-0089 · step 5
+
+---
+## ADR-0260 · 2026-10-06 · Corrección del cálculo de ahorro en el pie de FundingVerdictCard
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se reemplazó `Math.abs(fuentes[0].tna - fuentes[1].tna)` por `otherTna - fuenteQueConviene.tna` para calcular el ahorro a partir del ganador real y la siguiente fuente, no por posición del array.
+**Contexto:** El spec solo pedía "mantener el pie con el ahorro usando `formatNumber`", sin especificar si corregir el bug de posición de array. Sin embargo, al introducir `getFuenteQueConviene` como fuente de verdad del ganador, aplicar el mismo helper como base del cálculo del ahorro es la consecuencia natural; mantener `fuentes[0]`/`fuentes[1]` hubiese creado inconsistencia entre el ganador resaltado y el ahorro mostrado.
+**Alternativas descartadas:** Mantener `Math.abs(fuentes[0].tna - fuentes[1].tna)` tal cual; solo cambia el resultado cuando hay más de 2 fuentes o cuando el orden del array difiere del orden de TNA.
+**Consecuencias / riesgo residual:** Con solo 2 fuentes (caucion + capyfi) el resultado es idéntico al anterior en todos los casos; si en el futuro se agrega una tercera fuente, el ahorro seguirá siendo correcto sin modificación adicional.
+
+> Generado por el loop · feature F-0089 · step 4
+
+---
+## ADR-0259 · 2026-10-06 · Ubicación del helper en `src/lib/finance/` en lugar de un directorio "utils de carry" nuevo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El helper `getFuenteQueConviene` se colocó en `src/lib/finance/fundingVerdict.ts`, siguiendo el patrón existente de helpers puros con Decimal.js, en lugar de crear un directorio `src/features/carry/utils/` o `src/utils/carry/` que no existe en el repo.
+**Contexto:** El spec dice "en utils de carry" pero no existe ningún directorio de utils específico de carry. `src/lib/finance/` contiene todos los helpers financieros puros del proyecto (fundingSavings, caucionTNA, defiRates, etc.) con tests en su propio `__tests__/`.
+**Alternativas descartadas:** Crear `src/features/carry/utils/fundingVerdict.ts` — coherente con co-ubicar lógica junto al feature que la usa, pero rompe el patrón de lib puro y el directorio no existe.
+**Consecuencias / riesgo residual:** El step siguiente que integre este helper en `DashboardTab.jsx` importará desde `@/lib/finance/fundingVerdict`.
+
+> Generado por el loop · feature F-0089 · step 3
+
+---
+## ADR-0258 · 2026-10-06 · Derivar latestDate como el máximo de los priceDate de las posiciones
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se toma el `priceDate` máximo (lexicográfico) entre todas las posiciones para alimentar `getFciDayLabel`, en lugar de tomar el primero o alguna otra heurística.
+**Contexto:** El KPI card y el encabezado de columna agregan el P&L de múltiples fondos, cada uno con su propio `priceDate`. El spec dice "usar priceDate expuesto por useFciLotEngine.js:268" pero no especifica cómo colapsar N fechas a una para el rótulo.
+**Alternativas descartadas:** Tomar `positions[0].priceDate` (primero en el array); tomar la mínima (más conservadora). El máximo es el VCP más reciente disponible y el que mejor representa "el dato más fresco".
+**Consecuencias / riesgo residual:** Si dos fondos tienen fechas distintas (ej. uno publicó VCP hoy y otro ayer), el rótulo dirá "P&L HOY" aunque parte del P&L se calcule contra un VCP anterior. Aceptable: el detalle por fondo con su fecha propia sigue visible en la tabla.
+
+> Generado por el loop · feature F-0089 · step 2
+
+---
+## ADR-0257 · 2026-10-06 · Subtítulo formateado como "al DD/MM" (sin año)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El subtítulo se genera como `"al " + formatDateAR(latestDate).slice(0, 5)`, extrayendo solo los primeros 5 caracteres ("DD/MM") del resultado de `formatDateAR` que devuelve "DD/MM/YYYY".
+**Contexto:** El spec pide `al DD/MM` con `formatDateAR`, pero `formatDateAR` devuelve el formato completo "DD/MM/YYYY". El spec no especifica si usar la función completa o recortar.
+**Alternativas descartadas:** Construir la cadena manualmente parseando `latestDate` (fragmento YYYY-MM-DD); usar una variante de `formatDateAR` sin año. Se descartó duplicar lógica ya existente en el formatter.
+**Consecuencias / riesgo residual:** Si `formatDateAR` cambia su formato de salida (ej. deja de empezar por "DD/MM"), el slice quedaría desalineado. El string esperado en los tests documenta el contrato actual.
+
+> Generado por el loop · feature F-0089 · step 1
+
+---
 ## ADR-0256 · 2026-10-06 · VCP en USD: template literal vs formatUSD para 6 decimales
 
 **Estado:** aceptada
