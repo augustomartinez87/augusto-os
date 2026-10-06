@@ -2349,3 +2349,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0086/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-06 — F-0087 completado
+
+## Feature F-0087
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `src/utils/formatters.ts` agregar el helper `formatPp` (porcentaje en puntos porcentuales: mismo signo U+2212/+ y regla de redondeo a cero que `formatPercentDecimals`, coma decimal es-AR, sufijo `pp`), reutilizando la lógica de signo ya existente sin duplicarla. No tocar consumidores todavía. Agregar en `src/utils/__tests__/` un test por helper tocado o creado (`formatPp` seguro; y `formatPercent`/`formatPercentDecimals` si se refactorizan) cubriendo caso positivo, negativo (U+2212), cero según la regla vigente de `formatPercent`, y null. (cba1bd8e)
+- [x] Step 2: Antes de reemplazar, correr una búsqueda con regex multilínea (`'\+'\s*:\s*''\}\s*\{?\s*formatNumber`) acotada a `src/**/*.{js,jsx,ts,tsx}` para confirmar los 8 sitios de la aceptación y detectar variantes multilínea no listadas; dejar registrada la lista definitiva (sin modificar código en este paso). (cba1bd8e)
+- [x] Step 3: Migrar los badges de P&L % de posiciones en `GroupedPositionsTable.jsx:146` (`PnlPctBadge`) y `MobilePositionsList.jsx:77` del patrón manual `{x >= 0 ? '+' : ''}{formatNumber(x, n)}%` a `formatPercent`/`formatPercentDecimals` de `@/utils/formatters`, para que una posición con pérdida muestre `−2,19%` con menos real. Sin cambios de cálculo. (63446bff)
+- [x] Step 4: Migrar los sitios de porcentaje manual en `DistributionChart.jsx:139` y `CurrencyRiskCard.jsx:10` a `formatPercent`/`formatPercentDecimals`, emitiendo `+`/`−` (U+2212) y coma decimal. Sin cambios de cálculo ni datos. (39a7752c)
+- [x] Step 5: Migrar los deltas en puntos porcentuales de Estrategia a `formatPp`: `TargetAllocation.jsx:65`, `CompoundProjection.jsx:103` y `ReinvestmentTracker.jsx:156`, de modo que el delta de asignación muestre `−43,0pp` con menos real. Sin cambios de cálculo. (ba81eb7b)
+- [x] Step 6: Migrar el delta `pp` de carry en `DashboardTab.jsx:125` a `formatPp` (mismo signo y redondeo). Sin cambios de cálculo ni datos. (5119f207)
+- [x] Step 7: Corregir el formateo de las stats de Spread: las cuatro tarjetas de `RatesEvolutionChart.jsx` (SPREAD PROM., MÁX, MÍN, ACTUAL) que interpolan `${stats.x}%` crudo y las de `SpreadRealizedChart.jsx:177` deben pasar por `formatPercent`/`formatPercentDecimals` para mostrar coma decimal y menos real (p. ej. `17,75%`, `−4,63%`). `stats.*` ya son números; solo cambia el string mostrado, no el cálculo. (a5eccf31)
+- [x] Step 8: Eliminar las apariciones de `u$s` en `PositionDetailModal.jsx:615`, `FciLotsList.jsx:76`, `FciPendingLots.jsx:118,129` y `FciPendingRescates.jsx:111,122`, reemplazándolas por `formatUSD` o el prefijo `US$ ` con número es-AR (decisión AR-057/F-0078). Cuidar las ramas ternarias `isUSD`/`currency` para no duplicar el prefijo de moneda. Sin cambios de cálculo. (a6167669)
+- [x] Step 9: Verificación final: correr `grep` de `'+' : ''}{formatNumber` y de `u\$s` acotado a `src/` (excluyendo tests) para confirmar cero remanentes, y ejecutar `npm test` y el typecheck completos hasta que pasen. (a6167669)
+
+### Decisiones (ADR)
+- ADR-0253 — Extensión de formatPercentDecimals con parámetro `suffix` para reusar lógica en formatPp [Supuesto del agente] **⚠ REVISAR**
+- ADR-0254 — CompoundProjection:103 y ReinvestmentTracker:156 migrados a `formatPercent`, no a `formatPp` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0255 — `formatPercentDecimals` sin `signed` en lugar de `formatPercent` para las stats de Spread [Supuesto del agente] **⚠ REVISAR**
+- ADR-0256 — VCP en USD: template literal vs formatUSD para 6 decimales [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0087/`
+
+> Revisar con Claude in Chrome para validación de UX.

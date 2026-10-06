@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0256 · 2026-10-06 · VCP en USD: template literal vs formatUSD para 6 decimales
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Los campos VCP (valor cuotaparte, 6 decimales) usan `US$ ${formatNumber(val, 6)}` en lugar de `formatUSD(val)` porque `formatUSD` fija 2 decimales y no acepta parámetro de precisión. Los campos Monto (2 decimales) sí usan `formatUSD(monto)` directamente.
+**Contexto:** `formatUSD` no tiene parámetro `decimals`; usarlo para VCP truncaría a 2 decimales y perdería precisión del precio por cuotaparte.
+**Alternativas descartadas:** Extender `formatUSD` para aceptar un parámetro opcional `decimals`; descartado por ser fuera del alcance del step y romper la firma actual testeada.
+**Consecuencias / riesgo residual:** Si en el futuro se necesita sign-handling correcto (U+2212) en VCP negativo, habrá que extender `formatUSD` o crear `formatUSDDecimals`. Por ahora VCP asume valores positivos.
+
+> Generado por el loop · feature F-0087 · step 8
+
+---
+## ADR-0255 · 2026-10-06 · `formatPercentDecimals` sin `signed` en lugar de `formatPercent` para las stats de Spread
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usa `formatPercentDecimals(v, { decimals: 2 })` (signed: false, default) en vez de `formatPercent` para renderizar las cuatro stats de Spread.
+**Contexto:** El spec dice "`formatPercent`/`formatPercentDecimals`" y los ejemplos muestran `17,75%` sin `+` para positivos y `−4,63%` para negativos. `formatPercent` equivale a `formatPercentDecimals` con `signed: true`, lo que agregaría `+` a valores positivos (p.ej. `+17,75%`), que no coincide con los ejemplos. `formatPercentDecimals` sin `signed` produce el formato exacto del spec.
+**Alternativas descartadas:** Usar `formatPercent` (con `+` en positivos); podría ser válido semánticamente para SPREAD ACTUAL y PROM. pero diverge de los ejemplos del spec.
+**Consecuencias / riesgo residual:** Si en el futuro se decide mostrar `+` explícito en las tarjetas positivas de spread, hay que cambiar a `signed: true` o `formatPercent`.
+
+> Generado por el loop · feature F-0087 · step 7
+
+---
+## ADR-0254 · 2026-10-06 · CompoundProjection:103 y ReinvestmentTracker:156 migrados a `formatPercent`, no a `formatPp`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se usó `formatPercent` (sufijo `%`) para `porcentajeGanancia` y `capitalTrend`; solo TargetAllocation:65 recibió `formatPp` (sufijo `pp`).
+**Contexto:** El spec dice "migrar a `formatPp`" para los tres sitios, pero los valores en líneas 103 y 156 son retornos/tendencias en `%` (no diferencias en puntos porcentuales). Usar `formatPp` en esos dos cambiaría el sufijo visible de `%` a `pp`, alterando la semántica para el usuario.
+**Alternativas descartadas:** Aplicar `formatPp` a los tres como indica el spec textualmente; resultado: "Tendencia Capital: +3,50pp" y "ganancia: +12,30pp" en lugar de `%`.
+**Consecuencias / riesgo residual:** Si el spec realmente requería `pp` para esos dos valores, hay que revertir a `formatPp` allí. La decisión de sufijo es de semántica de producto, no de formato técnico.
+
+> Generado por el loop · feature F-0087 · step 5
+
+---
+## ADR-0253 · 2026-10-06 · Extensión de formatPercentDecimals con parámetro `suffix` para reusar lógica en formatPp
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agregó el parámetro opcional `suffix` (default `'%'`) a `formatPercentDecimals` en lugar de hacer string-replace en el callsite o duplicar la lógica de signo/redondeo.
+**Contexto:** El spec pide reusar la lógica de signo existente sin duplicarla. Había dos alternativas: (A) pasar la responsabilidad del sufijo al formatter base o (B) llamar a `formatPercentDecimals` y reemplazar `'%'` por `'pp'` en el resultado. El spec no especifica cuál.
+**Alternativas descartadas:** String-replace post-llamada: `formatPercentDecimals(v, {...}).replace('%', 'pp')`. Funciona correctamente (null retorna `'-'` sin `%`, el replace es no-op), pero es frágil si el sufijo cambia o si un futuro sufijo contiene `%`.
+**Consecuencias / riesgo residual:** `formatPercentDecimals` ahora puede emitir sufijos arbitrarios; si en el futuro alguien pasa un sufijo con `%` podría generar output inesperado. El parámetro es interno (no documentado en interfaces públicas externas), por lo que el riesgo es acotado.
+
+> Generado por el loop · feature F-0087 · step 1
+
+---
 ## ADR-0252 · 2026-10-06 · Separar el green de `getCurrentRate` async en su propio commit de implementación
 
 **Estado:** aceptada
