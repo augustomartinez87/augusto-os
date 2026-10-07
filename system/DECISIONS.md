@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0267 · 2026-10-07 · Excepción de bg-danger persiste en test de regresión
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se mantienen `CryptoTradeModal.jsx:286` en LINE_EXCEPTIONS y `TradeModal.jsx:231` en BLOCK_EXCEPTIONS porque ambos son ternarios donde `bg-danger text-white` y `bg-primary` coexisten en la misma línea/bloque; corregir `bg-danger` es explícitamente fuera de alcance de F-0085.
+**Contexto:** El test chequea presencia de `bg-primary` (solid) + `text-white` en la misma línea/bloque sin poder distinguir a qué background pertenece cada `text-white`; las dos ocurrencias restantes usan `text-white` en la rama `bg-danger` del mismo ternario, no en la rama `bg-primary`.
+**Alternativas descartadas:** Corregir también `bg-danger text-white` → `bg-danger text-background-primary` en esos dos archivos, lo que vaciaría completamente las excepciones pero ampliaría el alcance del step.
+**Consecuencias / riesgo residual:** Las excepciones deben borrarse cuando se migre `bg-danger text-white` en un step futuro.
+
+> Generado por el loop · feature F-0085 · step 4
+
+---
+## ADR-0266 · 2026-10-07 · Usar DOCUMENTED_EXCEPTIONS en lugar de test inicialmente rojo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos (portfolio-tracker)
+
+**Decisión:** El test de regresión arranca en verde enumerando las 47 violaciones existentes como excepciones documentadas, en vez de fallar inmediatamente con ~60 reportes.
+**Contexto:** El spec prohíbe migrar los usos existentes (`bg-primary text-white` en ~25 archivos) en este step. Sin excepciones, el test fallaría desde el día 1 bloqueando CI sin dar información adicional sobre nuevas regresiones.
+**Alternativas descartadas:** Test inicialmente rojo (`.fails` o sin excepciones) para señalar deuda técnica; requeriría marcar el test como `todo`/`fails` en Vitest, lo que lo excluye de la cobertura de CI.
+**Consecuencias / riesgo residual:** Las excepciones deben reducirse a cero cuando se migre el código a `text-teal-ink`; de lo contrario, la lista de excepciones puede desincronizarse con el código si cambian números de línea.
+
+> Generado por el loop · feature F-0085 · step 3
+
+---
+## ADR-0265 · 2026-10-07 · Test como `.js` en vez de `.ts`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El test se escribió como `.js` (no `.ts`) para evitar que tsc intente type-check un import relativo fuera de `src/` hacia `tailwind.config.js`, que no tiene tipos ni es parte del `include` del tsconfig.
+**Contexto:** `tsconfig.json` tiene `"include": ["src"]`, `strict: true` y sin `allowJs: true`; importar `../../tailwind.config.js` desde un `.ts` haría fallar el typecheck (`Cannot find module` o `implicit any`). El proyecto ya tiene precedentes de tests `.js` (e.g. `fciService.moveLotContext.test.js`).
+**Alternativas descartadas:** Escribirlo como `.ts` con `@ts-ignore` en la línea del import, o usar `readFileSync` + regex como en `contrastUtils.designTokens.test.ts` (sin import real del módulo).
+**Consecuencias / riesgo residual:** El test queda fuera del chequeo estático de tsc, lo cual es aceptable dado que solo accede a propiedades de config; si en el futuro se agrega `allowJs: true` al tsconfig se puede migrar a `.ts`.
+
+> Generado por el loop · feature F-0085 · step 2
+
+---
+## ADR-0264 · 2026-10-07 · `primary` definido como objeto `{ DEFAULT }` y no como string plano
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** portfolio-tracker
+
+**Decisión:** Se definió `primary` como `{ DEFAULT: '#2FD4CD' }` en lugar del string plano `'#2FD4CD'` que usan `accent`, `success` y otros tokens del mismo archivo.
+**Contexto:** El spec indica "agregar la clave de primer nivel `primary: { DEFAULT: '#2FD4CD' }`" explícitamente con esa forma de objeto. Sin embargo, todos los tokens hermanos (`accent`, `success`, `profit`) son strings planos. La forma objeto es válida en Tailwind 3 y también soporta opacidad, pero crea una inconsistencia menor de estilo con el resto del bloque.
+**Alternativas descartadas:** Definirlo como string plano `primary: '#2FD4CD'` —idéntico en comportamiento, más consistente con el bloque— fue descartado porque el spec lo especifica explícitamente como objeto con DEFAULT.
+**Consecuencias / riesgo residual:** Si en el futuro se agregan variantes (`primary.bright`, `primary.ink`, `primary.dim`) el objeto ya está listo para recibirlas. La inconsistencia de estilo con los strings hermanos puede corregirse en una limpieza posterior.
+
+> Generado por el loop · feature F-0085 · step 1
+
+---
 ## ADR-0263 · 2026-10-07 · Altura dinámica vs. fija para el chart de 10 performers
 
 **Estado:** aceptada

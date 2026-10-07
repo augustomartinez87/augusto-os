@@ -2427,3 +2427,28 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0088/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-07 — F-0085 completado
+
+## Feature F-0085
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En `tailwind.config.js`, agregar la clave de primer nivel `primary: { DEFAULT: '#2FD4CD' }` dentro de `theme.extend.colors` (mismo teal que `accent`/`success`/`profit`), sin modificar los tokens legacy anidados `background.primary`, `border.primary` ni `text.primary` (deben seguir generando `bg-background-primary`, `border-border-primary`, `text-text-primary`). Usar hex plano para que los modificadores de opacidad `/90`, `/10`, `/5` funcionen. (743f65fc)
+- [x] Step 2: Agregar un test de vitest que importe `tailwind.config.js` y verifique: `theme.extend.colors.primary.DEFAULT === '#2FD4CD'`, y que sigan existiendo `theme.extend.colors.background.primary`, `theme.extend.colors.border.primary` y `theme.extend.colors.text.primary`. Sin dependencias nuevas. (2b3e4aa7)
+- [x] Step 3: Agregar un test de regresión en vitest que recorra con `fs` todos los `.jsx`/`.tsx` bajo `src/` y falle si encuentra una línea (o `className` con plantilla/multilínea) que combine `bg-primary` sólido (sin modificador `/opacidad`) junto con `text-white`. Debe ignorar usos con opacidad como `bg-primary/10`. (3bafd9d6)
+- [x] Step 4: Hacer un `grep` de `bg-primary` + `text-white` en la misma línea sobre `src/` para enumerar los 27 archivos afectados (incluye `FciComparador.jsx`, `ErrorBoundary.jsx`, `ProtectedRoute.jsx`, `OperationsTab.jsx`, `ConversionModal.jsx`, `CycleModal.jsx`, `DefiLoanModal.jsx`, `DefiLoanReconciliation.jsx`, `CryptoTradeModal.jsx`, `SignUp.jsx`, etc.) y reemplazar `text-white` por `text-background-primary` solo en elementos con fondo `bg-primary` sólido, revisando también `className` multilínea o con template literals. No tocar usos con opacidad (`bg-primary/10`, etc.). (eb32dd1e)
+- [x] Step 5: Revisar explícitamente el botón principal de `src/features/portfolio/components/TradeModal.jsx` (afectado por el commit `ab82f52`): si su diseño actual de contraste invertido nativo ya logra contraste >= 4.5:1 dejarlo como está y documentarlo con un comentario; si no, ajustarlo para que cumpla usando `bg-primary text-background-primary`. (564625f6)
+- [x] Step 6: Ejecutar `npm test` y el typecheck completos; corregir cualquier fallo residual de los tests nuevos o del build hasta que todo pase en verde. (c56d7d1d)
+
+### Decisiones (ADR)
+- ADR-0264 — `primary` definido como objeto `{ DEFAULT }` y no como string plano [Instrucción de Augusto]
+- ADR-0265 — Test como `.js` en vez de `.ts` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0266 — Usar DOCUMENTED_EXCEPTIONS en lugar de test inicialmente rojo [Supuesto del agente] **⚠ REVISAR**
+- ADR-0267 — Excepción de bg-danger persiste en test de regresión [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0085/`
+
+> Revisar con Claude in Chrome para validación de UX.
