@@ -27,6 +27,20 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0263 · 2026-10-07 · Altura dinámica vs. fija para el chart de 10 performers
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** TopPerformersChart
+
+**Decisión:** La altura del contenedor se calcula como `Math.max(280, n × 32)` (proporcional al número de barras), en lugar de un valor fijo.
+**Contexto:** El spec pedía "ajustar el alto del contenedor para que las 10 etiquetas no se solapen" pero no especificaba si usar un valor fijo o dinámico. Con un valor fijo (ej. 320px) la altura quedaría sobredimensionada si `slice(0,10)` devuelve menos de 10 items.
+**Alternativas descartadas:** Valor fijo de 320px (simple, predecible); minHeight calculado solo, sin tocar height (deja al ResponsiveContainer crecer).
+**Consecuencias / riesgo residual:** Si el card padre tiene overflow oculto con altura fija, el contenedor dinámico podría quedar recortado — hay que verificar visualmente en el card de PortfolioCharts.
+
+> Generado por el loop · feature F-0088 · step 5
+
+---
 ## ADR-0262 · 2026-10-06 · Confiar en formatARS para el prefijo `$` en lugar de anteponerlo a mano
 
 **Estado:** aceptada

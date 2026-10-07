@@ -2406,3 +2406,24 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0089/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-07 — F-0088 completado
+
+## Feature F-0088
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear una función pura `getHeroChartState({ loading, historyLoading, pointsCount })` que devuelva 'skeleton' | 'chart' | 'empty' en `src/utils/` (o junto a los helpers de chart), sin tocar UI. Reglas: si loading/historyLoading es true → 'skeleton'; si terminó de cargar y pointsCount < 2 → 'empty'; si pointsCount >= 2 → 'chart'. Agregar test de vitest cubriendo: historyLoading=true con 0 puntos → 'skeleton'; historyLoading=false con 0 puntos → 'empty'; 2+ puntos → 'chart'. No agregar Testing Library ni jsdom. (a1b56c32)
+- [x] Step 2: Propagar un prop nuevo `historyLoading` (desde `portfolioHistory.isLoading`, ya expuesto en `Dashboard.jsx:114-125`) a través de `DashboardOverview.jsx` hacia las dos instancias de `PortfolioHeroChart` (líneas ~207 y ~259). En `PortfolioHeroChart.jsx`, reemplazar la decisión actual de render por el resultado de `getHeroChartState(...)`: mostrar el skeleton existente (`bg-white/[0.02] animate-pulse`, L233) mientras el estado sea 'skeleton', y mostrar 'Sin datos para este período' solo cuando el estado sea 'empty'. Mantener el render del gráfico cuando sea 'chart'. (46cd4ded)
+- [x] Step 3: En `PositionDetailModal.jsx`, ajustar el `YAxis` del gráfico de precio histórico (~L609-620) para que el dominio se adapte a los datos con margen y no arranque en 0, p. ej. `domain={[dataMin => dataMin * 0.98, dataMax => dataMax * 1.02]}`. El ajuste debe calcularse sobre la serie back-ajustada (`adjustedHistorical`) y mantener la conversión ARS/USD por `mepRate` en el `tickFormatter`. Solo aplicar el dominio cuando hay serie (evitar NaN/dominio vacío). (a74360d9)
+- [x] Step 4: En la tabla 'Historial de Operaciones' del mismo `PositionDetailModal.jsx`, agregar `whitespace-nowrap` a las celdas de montos (precio, invertido, valor actual, resultado, % resultado) para que a ~1492px ningún monto se parta en dos líneas. Cambio puramente de clases Tailwind. (606b9ab5)
+- [x] Step 5: En `TopPerformersChart.jsx` (~L59-72), configurar el `YAxis` con `interval={0}` y un ancho suficiente para mostrar las 10 etiquetas de ticker (nombres largos truncados con `title`), ajustar el alto del contenedor para que las 10 etiquetas no se solapen, y cambiar el `XAxis` a un dominio que incluya 0 (p. ej. `[(min) => Math.min(0, min), 'auto']`) para que la longitud de las barras sea proporcional al P&L %. Mantener `formatPercent` en el tooltip. (f982d6f9)
+
+### Decisiones (ADR)
+- ADR-0263 — Altura dinámica vs. fija para el chart de 10 performers [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0088/`
+
+> Revisar con Claude in Chrome para validación de UX.
