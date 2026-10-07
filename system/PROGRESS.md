@@ -2452,3 +2452,25 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0085/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-07 — F-0090 completado
+
+## Feature F-0090
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear un helper/hook compartido `useFciDayLabel(positions)` en `src/features/fci/utils/` (o `src/features/fci/hooks/`) que derive el `priceDate` más reciente de `positions` (map → filter Boolean → sort → at(-1)) y devuelva el resultado de `getFciDayLabel(latestDate)` ({cardTitle, subtitle, columnHeader}), replicando el `useMemo` de `Fci.jsx` (~L194-197). No modificar `getFciDayLabel` ni su firma. (bd54c757)
+- [x] Step 2: Agregar test unitario en `__tests__/` para el nuevo `useFciDayLabel`, cubriendo: sin positions / sin priceDate (fallback 'P&L ÚLTIMO VCP'), VCP de hoy ('P&L HOY') y VCP previo (subtítulo 'al DD/MM'), inyectando `now` para determinismo. No tocar `getFciDayLabel.test.ts`. (1ca6d963)
+- [x] Step 3: Refactorizar `src/pages/Fci.jsx` para consumir el nuevo `useFciDayLabel(positions)` en lugar del `useMemo` inline de `dayLabel`, manteniendo idéntico el comportamiento del KpiCard de Fondos en Caución. (3d162c1e)
+- [x] Step 4: En `src/pages/FciPortfolio.jsx` (`/portfolio/fondos`), importar y usar `useFciDayLabel(positions)` para reemplazar el `label="P&L Hoy"` fijo (~L246) del KpiCard por `dayLabel.subtitle ? \`${dayLabel.cardTitle} · ${dayLabel.subtitle}\` : dayLabel.cardTitle`. No cambiar el valor numérico ni la lógica de moneda (ARS/USD). (7ed2c926)
+- [x] Step 5: Verificar coherencia visual entre la tarjeta P&L y el encabezado de columna `P&L últ. día` de `FciLotTable` en `/portfolio/fondos` (nunca una tarjeta 'HOY' junto a columna 'últ. día'), y correr `npm test` y el typecheck completos corrigiendo cualquier regresión. (7ed2c926)
+
+### Decisiones (ADR)
+- ADR-0268 — Ubicación del hook en `hooks/` en lugar de `utils/` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0269 — Inyección de `now` en el hook vs. fake timers [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0090/`
+
+> Revisar con Claude in Chrome para validación de UX.

@@ -27,6 +27,34 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0269 · 2026-10-07 · Inyección de `now` en el hook vs. fake timers
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se agregó `now` como segundo parámetro opcional a `useFciDayLabel` y se lo pasa a `getFciDayLabel`, en lugar de usar `vi.useFakeTimers()` en los tests.
+**Contexto:** La firma de `getFciDayLabel` ya tenía `now` como segundo parámetro para determinismo. El spec pedía "inyectando `now`" pero no especificaba si vía firma o vía fake timers.
+**Alternativas descartadas:** `vi.useFakeTimers()` + `vi.setSystemTime()` en cada test (patrón ya presente en `useDefiLoanEngine.test.ts`). Se descartó porque requeriría `afterEach(() => vi.useRealTimers())` en cada suite y acoplaría el test a la implementación de `new Date()` dentro del helper, en vez de usar la interfaz ya diseñada para esto.
+**Consecuencias / riesgo residual:** Los callers existentes de `useFciDayLabel` (FciPortfolio.jsx, Fci.jsx) no pasan `now` y siguen usando `new Date()` por defecto. Si en algún momento se quiere testear el comportamiento de "hoy" sin inyectar `now`, habrá que usar fake timers igual.
+
+> Generado por el loop · feature F-0090 · step 2
+
+---
+## ADR-0268 · 2026-10-07 · Ubicación del hook en `hooks/` en lugar de `utils/`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se creó `useFciDayLabel` en `src/features/fci/hooks/` (archivo `.js`) en lugar de `utils/`.
+**Contexto:** El spec dice "en `src/features/fci/utils/` (o `src/features/fci/hooks/`)" — ambas opciones válidas. Un hook con `useMemo` que depende de React pertenece semánticamente a `hooks/`; los `utils/` del proyecto solo contienen helpers puros sin React.
+**Alternativas descartadas:** Colocarlo en `utils/` como `.ts` alineando con `getFciDayLabel.ts`; descartado porque introduce una dependencia de React en utils y rompe la convención pure-helper del directorio.
+**Consecuencias / riesgo residual:** El consumidor importa desde `@/features/fci/hooks/useFciDayLabel`, no desde `utils/`. Si en el futuro se decide poner todos los hooks con lógica de fecha en `utils/`, habrá que mover el archivo.
+
+> Generado por el loop · feature F-0090 · step 1
+
+---
 ## ADR-0267 · 2026-10-07 · Excepción de bg-danger persiste en test de regresión
 
 **Estado:** aceptada
