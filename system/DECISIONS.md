@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0283 · 2026-10-08 · Prop `closeClassName` opt-in en lugar de cambio global del botón de cierre
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se agregó `closeClassName?: string` a `DialogContent` para que solo `RegisterPaymentDialog` amplíe el área táctil del botón de cierre; ningún otro modal recibe la prop y queda sin cambios.
+**Contexto:** Hay 10 archivos que usan `DialogContent`. Cambiar el cierre globalmente habría alterado todos los modales, en contra de la restricción "sin cambios en el resto de la app". El spec indicaba explícitamente usar un className/variante opcional si el cambio global era invasivo.
+**Alternativas descartadas:** (a) Crear variante `DialogContent` separada (más verboso, duplica estructura); (b) pasar children del close button como slot (más flexible pero rompe la API actual de todos los consumidores).
+**Consecuencias / riesgo residual:** Si en el futuro otros diálogos necesitan áreas táctiles grandes, deberán pasar `closeClassName` explícitamente. No queda ningún mecanismo global de "habilitar touch-friendly en todos los modales a la vez".
+
+> Generado por el loop · feature F-0092 · step 7
+
+---
+## ADR-0282 · 2026-10-08 · Resetear payInstMutation al abrir el diálogo de cobro, no al cerrar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se limpia el estado de error de `payInstMutation` llamando `payInstMutation.reset()` en los dos botones que abren el diálogo (tabla y móvil), en lugar de hacerlo en `onOpenChange` al cerrar.
+**Contexto:** El error quedaba persistido entre aperturas; los intentos previos resetaban al cerrar, pero el diálogo se desmonta por `onSuccess` (setPayInstId(null)) sin disparar `onOpenChange`, así que el reset no corría en todas las transiciones y el reviewer lo marcó dos veces.
+**Alternativas descartadas:** Reset en `onOpenChange` al cerrar (frágil, no cubre desmontaje programático); gatear el render del error con `payInstMutation.variables?.installmentId === payInstId` (no cubre reabrir la misma cuota).
+**Consecuencias / riesgo residual:** La lógica de apertura queda duplicada en dos call sites; si se agrega un tercer disparador habrá que repetir el `reset()` (o extraer un helper `openPayDialog`).
+
+> Generado por el loop · feature F-0092 · step 6
+
+---
+## ADR-0281 · 2026-10-08 · Foco devuelto vía setTimeout(0) en lugar de flushSync
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Al hacer click en un atajo, se usa `setTimeout(() => amountRef.current?.focus(), 0)` para devolver el foco al campo después de que React renderice el nuevo valor del estado.
+**Contexto:** `setAmount(...)` + `amountRef.current?.focus()` en forma síncrona puede fallar en algunos navegadores si el campo todavía no recibió el nuevo valor; `setTimeout(0)` garantiza que el DOM ya se actualizó. La alternativa (`flushSync`) sería más determinista pero introduce `react-dom/client` solo para este caso.
+**Alternativas descartadas:** `flushSync(() => setAmount(...))` seguido de `amountRef.current?.focus()` sin setTimeout; `useLayoutEffect` con un flag.
+**Consecuencias / riesgo residual:** En la práctica, `setTimeout(0)` funciona en todos los navegadores para este caso; si aparece un parpadeo de foco, se puede migrar a `flushSync`.
+
+> Generado por el loop · feature F-0092 · step 3
+
+---
+## ADR-0280 · 2026-10-08 · Truncado vs. redondeo en parseAmountEsAR
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se trunca a 2 decimales con `Math.trunc(n * 100) / 100` en lugar de redondear. Esto garantiza que nunca se genere un cobro mayor al monto que el usuario tipea.
+**Contexto:** El spec dice "nunca más de 2 decimales" pero no especifica si truncar o redondear. En un contexto financiero, cobrar de más por redondeo es peor que cobrar de menos.
+**Alternativas descartadas:** Usar `Math.round` (comportamiento bancario estándar) o `Decimal.js` para precisión exacta.
+**Consecuencias / riesgo residual:** Si el backend o la contabilidad esperan redondeo half-up, puede haber diferencias de centavos en montos con más de 2 decimales reales (caso improbable dado que el input es texto del usuario).
+
+> Generado por el loop · feature F-0092 · step 2
+
+---
+## ADR-0279 · 2026-10-08 · Tipo mínimo estructural para el input de `getPaymentShortcuts` en lugar de importar `LoanInstallment`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se definieron interfaces locales `MinInstallment` y `MinLoan` con solo los campos necesarios (`isPaid`, `dueDate`, `amount`, `paidAmount`), en lugar de importar `LoanInstallment` desde `components/loans/types.ts`.
+**Contexto:** `LoanInstallment` es un tipo inferido de la salida del router tRPC. Importarlo desde `lib/` crearía una dependencia desde una capa de infraestructura pura hacia componentes, invirtiendo el grafo de dependencias. El spec no especifica cómo tipar el input.
+**Alternativas descartadas:** Importar `LoanInstallment` directamente (acopla `lib/` a `components/`); exportar el tipo de input desde `lib/payment-shortcuts.ts` y hacer que `types.ts` lo reexporte (overkill para step 1).
+**Consecuencias / riesgo residual:** El tipo estructural acepta cualquier objeto que satisfaga la forma mínima, lo que es más flexible pero no garantiza en tiempo de compilación que `LoanDetail.loanInstallments` siga siendo asignable si Prisma agrega campos no-opcionales incompatibles. En la práctica, `Number()` sobre campos Decimal de Prisma funciona igual.
+
+> Generado por el loop · feature F-0092 · step 1
+
+---
 ## ADR-0278 · 2026-10-08 · Pruebas de mutación como tests de función pura, no de integración del router
 
 **Estado:** aceptada

@@ -2508,3 +2508,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0091/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-08 — F-0092 completado
+
+## Feature F-0092
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear módulo puro `lib/payment-shortcuts.ts` con `getPaymentShortcuts(loan, now)` que extrae la lógica actual de `register-payment-dialog.tsx` (L33-44: overdueInsts, nextDueInst, unpaidInsts, totalPendingAmount) sin cambiar resultados, devolviendo `overdue` (suma de lo que falta de cuotas impagas con dueDate < now), `next` (lo que falta de la primera impaga con dueDate >= now, con flag de parcial) y `allPending` (suma de lo que falta de todas las impagas); cada importe redondeado a centavos sin artefactos de coma flotante y omitido si es 0. Agregar tests en `tests/` con fixtures: (a) 2 vencidas/1 próxima/3 pendientes, (b) próxima con paidAmount>0, (c) sin vencidas, (d) sin cuotas pendientes (sin atajos), (e) centavos como 471222.44. (b8e7b157)
+- [x] Step 2: Crear helper puro `lib/payment-amount.ts` con `parseAmountEsAR(text)` y `formatAmountEsAR(n)`: coma=decimal, punto=miles; punto seguido de 1-2 dígitos al final sin coma = decimal ('1.5'→1.5, '1.50'→1.5), punto seguido de exactamente 3 dígitos = miles ('1.500'→1500, '90.000'→90000); '1,500'→1.5; devuelve null si no es monto válido o es ≤0; nunca más de 2 decimales. Agregar tests unitarios que cubran espacios, '$', texto vacío, '0', negativo y '90.000,50'→90000.5. (4a7776dd)
+- [x] Step 3: En `RegisterPaymentDialog`: reemplazar el cálculo inline de atajos por `getPaymentShortcuts` de `lib/payment-shortcuts.ts` y convertir las filas 'Vencidas', 'Próxima' y 'Cuotas pendientes' en `<button type="button">` con altura mínima 44px en <640px, señal visual de que se tocan ('Usar' o flecha), foco visible y `aria-label` tipo 'Cobrar vencidas: $ 90.000,00'. Al tocar un atajo, completar el campo Monto con ese importe (formateado es-AR) y devolver el foco al campo. La fila 'Capital vivo prestado' y los préstamos solo interés / 0% se muestran como hoy, sin atajo. (8a21b5c8)
+- [x] Step 4: En `RegisterPaymentDialog`: migrar el campo Monto de `type="number"` a `type="text"` con `inputMode="decimal"`, sin flechas, placeholder '0,00', formateo es-AR al salir del campo y al completarse desde un atajo (usando `lib/payment-amount.ts`); asociar `Label` por `htmlFor`/`id` a los tres campos (Monto, Fecha, Nota); deshabilitar el botón mientras `parseAmountEsAR` devuelva null; enviar a `registerPayment` el número parseado sin cambiar el contrato de la mutación. (474a6d07)
+- [x] Step 5: En `RegisterPaymentDialog`: mostrar el monto interpretado en el botón de confirmar ('Confirmar cobro de $ 90.000,50') con altura mínima 44px en móvil, y renderizar el error de `registerMutation` bajo el botón usando el mensaje del servidor (agregar `onError`/estado); el modal no se cierra ante error, el error se limpia al reabrir o al editar el monto, y el botón vuelve a habilitarse. (99777259)
+- [x] Step 6: En el diálogo 'Cobrar cuota N' de `app/dashboard/loans/page.tsx` (~L1299-1357): mostrar el mismo texto 'Confirmar cobro de $ ...' con el monto fijo, aplicar altura táctil mínima 44px al botón y renderizar el error de `payInstMutation` dentro del modal bajo el botón, sin cerrar ante error. (9ab14c4d)
+- [x] Step 7: Agrandar áreas táctiles en móvil (<640px): el botón 'Registrar Cobro' (hoy size="sm", 32px) y el botón de cerrar del modal (`components/ui/dialog.tsx` L46, ~16px) a 44×44px. Revisar los usos de `DialogContent` compartido y, si agrandar el cierre global altera otros modales, limitarlo a un `className` opcional o variante usada solo por estos dos diálogos; sin cambios en el aspecto de escritorio ni en el resto de la app. (e1148ffc)
+- [x] Step 8: Agregar pruebas de mutación: verificar que al romper `getPaymentShortcuts` (usar el monto total de la cuota en vez de lo que falta) fallan los tests de atajos, y que al cambiar la regla del punto de `parseAmountEsAR` fallan sus tests; confirmar que typecheck, lint sin warnings y `npm test` completos pasan. (2d96f18c)
+
+### Decisiones (ADR)
+- ADR-0279 — Tipo mínimo estructural para el input de `getPaymentShortcuts` en lugar de importar `LoanInstallment` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0280 — Truncado vs. redondeo en parseAmountEsAR [Supuesto del agente] **⚠ REVISAR**
+- ADR-0281 — Foco devuelto vía setTimeout(0) en lugar de flushSync [Supuesto del agente] **⚠ REVISAR**
+- ADR-0282 — Resetear payInstMutation al abrir el diálogo de cobro, no al cerrar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0283 — Prop `closeClassName` opt-in en lugar de cambio global del botón de cierre [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0092/`
+
+> Revisar con Claude in Chrome para validación de UX.
