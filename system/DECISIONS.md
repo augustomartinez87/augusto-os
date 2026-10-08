@@ -27,6 +27,132 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0278 · 2026-10-08 · Pruebas de mutación como tests de función pura, no de integración del router
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Las pruebas de mutación del criterio 13 se implementaron como tests de función pura sobre `simulateLoan`, sin duplicar el boilerplate de mock de Prisma que ya existe en los tests del criterio 3.
+**Contexto:** El criterio 3 ya tiene un test de integración completo en `ap-preapprove-relationship.test.ts`. Duplicar esa estructura para criterion 13 habría copiado ~80 líneas de boilerplate sin agregar cobertura nueva; los tests de función pura son más concisos y prueban directamente la propiedad de divergencia de fecha.
+**Alternativas descartadas:** Test de integración full-stack (duplica criterio 3); anotación de comentario en archivos existentes sin test ejecutable.
+**Consecuencias / riesgo residual:** Criterion 13 no prueba el path completo de `approvePreApproval` de forma autónoma; para eso sigue dependiendo del criterio 3. Si `simulateLoan` cambia su comportamiento por fecha, los tests de mutación lo detectan inmediatamente.
+
+> Generado por el loop · feature F-0091 · step 10
+
+---
+## ADR-0277 · 2026-10-08 · TNA efectiva calculada con reverseFromInstallmentSmart en el cliente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se calcula la TNA efectiva directamente en el componente React (cliente) importando `reverseFromInstallmentSmart` de `lib/loan-calculator`, usando `todayArt()` como startDate.
+**Contexto:** El spec indica mostrar la TNA efectiva "si la fecha de hoy hace que difiera ≥ 1 punto porcentual de la cotizada", pero no especifica si el cálculo debe ser server-side (endpoint tRPC) o client-side. Dado que `loan-calculator.ts` es una lib de funciones puras sin dependencias server-only, el cálculo client-side evita una round-trip innecesaria.
+**Alternativas descartadas:** Agregar el campo `effectiveTnaIfApprovedToday` al resultado de `ap.listPreApprovals` (server-side), lo que sería más correcto para datos inmutables pero requería modificar el router y la query existente.
+**Consecuencias / riesgo residual:** Si en el futuro `loan-calculator.ts` incorpora dependencias server-only, este import rompería el bundle del cliente. El cálculo con bisección se ejecuta en el hilo del browser; con listas largas de pre-aprobados, podría ser perceptible (< 1ms por card en la práctica).
+
+> Generado por el loop · feature F-0091 · step 9
+
+---
+## ADR-0276 · 2026-10-08 · simulateLoan se llama client-side en lugar de via tRPC para la vista previa
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El bloque preview de create-loan-dialog llama a `simulateLoan` como función pura del cliente (importada de `@/lib/loan-calculator`) en lugar de disparar la mutación tRPC `loans.simulate` en cada cambio de parámetro.
+**Contexto:** El spec dice "el mismo cálculo del servidor" pero no prescribe el mecanismo. Una llamada tRPC por cada keystroke requeriría debounce y estado async, añadiendo complejidad. Como `simulateLoan` es una función pura sin acceso a DB (el servidor también la llama directamente), el resultado es bitwise idéntico.
+**Alternativas descartadas:** Llamar a `trpc.loans.simulate.useMutation` con debounce — descartado por complejidad innecesaria y latencia visible.
+**Consecuencias / riesgo residual:** Si en el futuro `simulateLoan` tuviera lógica server-only (e.g. lookup de DB), este patrón debería migrar a la llamada tRPC.
+
+> Generado por el loop · feature F-0091 · step 8
+
+---
+## ADR-0275 · 2026-10-08 · Comparación del guard a precisión de centavo (round2), no exacta
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usa `Math.round(actual * 100) !== Math.round(expected * 100)` (comparación a centavo) en lugar de `actual !== expected` (igualdad flotante exacta).
+**Contexto:** `plan.installmentAmount` en el camino French estándar sin redondeo es un float IEEE-754 de muchos decimales (ej. 36721.345678…). Si el cliente serializa/deserializa ese valor por JSON y lo reenvía, podría perder 1 ULP de precisión. La comparación exacta dispararía el guard por una diferencia invisible para el usuario.
+**Alternativas descartadas:** Comparación exacta (`!==`); diferencia absoluta (`Math.abs(a-b) > 0.005`). La primera genera falsos positivos en el camino French no redondeado; la segunda es equivalente pero menos idiomática en este codebase (que ya usa `round2 = Math.round(n*100)/100`).
+**Consecuencias / riesgo residual:** Diferencias de hasta 0.004 pesos entre lo mostrado y lo calculado no disparan el guard. Para los fixtures del spec (valores redondeados a múltiplos de 1000 o a 2 decimales) esto no tiene impacto práctico.
+
+> Generado por el loop · feature F-0091 · step 7
+
+---
+## ADR-0274 · 2026-10-08 · confirmRefinancing no necesita fixedInstallment
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** confirmRefinancing no se modifica porque el importe de la cuota no está pre-fijado en la propuesta de refinanciación; se computa legítimamente en tiempo de confirmación a partir del capital final y el plazo elegido por el deudor.
+**Contexto:** La tarea pedía "si ya respeta los importes, dejarla y anotarlo". confirmRefinancing persiste installmentAmount=0 en la propuesta, y el deudor elige termMonths al confirmar; activateLoanChain recalcula la cuota con esos valores, lo cual es correcto y no viola ningún invariante cotizado.
+**Alternativas descartadas:** Podría haberse persistido la cuota a cada opción de refinanciación al crear la propuesta y luego honrarla al confirmar, pero eso requeriría cambio de schema y backfill — fuera del scope de este step.
+**Consecuencias / riesgo residual:** Si en el futuro se quiere congelar también la cuota de la propuesta de refinanciación al momento de oferta, se necesitará migración y ajuste de confirmRefinancing para pasar fixedInstallment.
+
+> Generado por el loop · feature F-0091 · step 5
+
+---
+## ADR-0273 · 2026-10-08 · TNA persistida en el Loan = TNA efectiva de la fecha real, no la TNA de cotización
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** `loan.tna` se persiste con la TNA efectiva derivada por `reverseFromInstallmentSmart` para `startDate=hoy`, no con `Number(pa.grossTna)/100` (la TNA nominal de la cotización).
+**Contexto:** El spec dice "tna/monthlyRate pasan a ser los efectivos de la fecha real" y que el Loan debe tener la cuota cotizada como inmutable, pero grossTna del PreApproval es la TNA cotizada (puede diferir de la efectiva cuando cambia la fecha). La pregunta es si `loan.tna` debe ser la cotizada o la efectiva; el spec es explícito en que la TNA es la "efectiva de la fecha real".
+**Alternativas descartadas:** Mantener `loan.tna = Number(pa.grossTna)/100` (la cotizada). Descartado porque el spec dice explícitamente que tna/monthlyRate son los efectivos.
+**Consecuencias / riesgo residual:** La TNA visible en la vista del prestamista puede diferir de la TNA que aparece en el pre-aprobado. Esto es intencional per spec. El pagaré y cláusula SÉPTIMA usan `totalAmount = installmentAmount × termMonths`, que es invariante.
+
+> Generado por el loop · feature F-0091 · step 4
+
+---
+## ADR-0272 · 2026-10-08 · `todayArt` acepta parámetro `now` para testabilidad
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La función recibe un parámetro opcional `now = new Date()` en vez de llamar `new Date()` internamente sin escape. Eso permite tests deterministas sin mockear el reloj global.
+**Contexto:** Sin ese parámetro, los tests solo podrían verificar el formato pero no la conversión de zona horaria (el valor real de "hoy" cambia con el tiempo). El spec pedía "agregar test unitario del helper" sin especificar la estrategia de testabilidad.
+**Alternativas descartadas:** `vi.setSystemTime` de Vitest podría mockear `Date` globalmente, pero introduce acoplamiento al framework de testing; el parámetro opcional es más idiomático y no afecta a los call-sites de producción.
+**Consecuencias / riesgo residual:** Los call-sites de producción (`ap.preApprove`, `ap.approvePreApproval`) llaman `todayArt()` sin argumento — correcto. Si en el futuro se necesita inyectar un "now" en producción, la firma ya lo soporta.
+
+> Generado por el loop · feature F-0091 · step 3
+
+---
+## ADR-0271 · 2026-10-08 · Generalizar condición Newton de `roundingMultiple > 0` a `installment !== exactInstallment`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se removió la guarda `roundingMultiple > 0` del bloque Newton y se reemplazó por `installment !== exactInstallment`, unificando el camino de rounding y el de cuota fija en un solo bloque.
+**Contexto:** El Newton original solo corría cuando había redondeo explícito. Con `fixedInstallment` la cuota puede diferir del valor exacto sin que haya `roundingMultiple`, así que la guarda más amplia es necesaria. Si `fixedInstallment === exactInstallment` (por coincidencia numérica), el Newton se saltea correctamente.
+**Alternativas descartadas:** Mantener dos bloques `if` separados (uno para rounding, otro para fixedInstallment) — descartado por duplicación de código idéntico.
+**Consecuencias / riesgo residual:** Si en el futuro se llamara a `generateSmartSchedule` con un `roundingMultiple = 0` y una cuota exacta que por float difiere ínfimamente del valor calculado, el Newton correría innecesariamente. En la práctica, sin rounding y sin `fixedInstallment`, `installment = exactInstallment` estrictamente por asignación directa, así que no hay riesgo real.
+
+> Generado por el loop · feature F-0091 · step 2
+
+---
+## ADR-0270 · 2026-10-08 · test.fails para el test de reproducción del bug
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El test que afirma el comportamiento deseado (installmentAmount = 165000) se marca `test.fails` en lugar de `test`, para que el verifier (que exige todos los tests en verde) no bloquee el paso 1 mientras el bug aún existe.
+**Contexto:** El verifier corre `vitest run` y exige 0 tests rojos en cada paso. Un test que afirma el comportamiento correcto fallaría hoy porque el código produce 164000. `test.fails` permite que el test "pase" en el sentido del verifier exactamente mientras el bug esté presente; cuando se aplique el fix, `test.fails` se convertirá en un fallo (señal de que hay que cambiarlo a `test`).
+**Alternativas descartadas:** Omitir la aserción del comportamiento correcto y poner solo las aserciones de loan-calculator (que documentan el bug pero no fallan). Se descartó porque el paso 2 necesita un test que se convierta en regresión permanente al hacer el fix.
+**Consecuencias / riesgo residual:** El paso 2 debe cambiar `test.fails` por `test` al implementar la corrección en approvePreApproval; de lo contrario el verifier detectará el fallo invertido.
+
+> Generado por el loop · feature F-0091 · step 1
+
+---
 ## ADR-0269 · 2026-10-07 · Inyección de `now` en el hook vs. fake timers
 
 **Estado:** aceptada
