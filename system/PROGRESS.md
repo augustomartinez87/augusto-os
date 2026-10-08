@@ -2536,3 +2536,28 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0092/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-08 — F-0093 completado
+
+## Feature F-0093
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: En tests/payment-amount.test.ts, agregar un barrido de regresión de centavos marcado con `test.fails`: para los enteros {0,1,29,57,1234,90000,165000,471222,1485000,99999999} y todos los centavos 00–99, armar el texto en las 3 grafías ('165.000,05', '165000,05', '165000.05') y afirmar `Math.round(parseAmountEsAR(texto)*100) === enteros*100+centavos` y `parseAmountEsAR(texto) === Number(`${enteros}.${cc}`)`. Debe quedar verde (porque hoy falla) y registrar en un comentario cuántos/ cuáles casos fallan (esperado ~39/899). (199a9c9a)
+- [x] Step 2: Reimplementar `parseAmountEsAR` en lib/payment-amount.ts con aritmética de enteros: validar el texto por regex (grafías es-AR coma decimal / punto de miles), construir los centavos como entero a partir de la parte entera concatenada con la parte decimal rellenada a 2 dígitos, y devolver `centavos/100` (única división), SIN `parseFloat`, `Math.trunc(n*100)` ni multiplicaciones por 100. Preservar el contrato: `null` si inválido o ≤0. Luego quitar el `test.fails` del barrido y dejarlo en verde. (837d4019)
+- [x] Step 3: En tests/payment-amount.test.ts, agregar casos de borde y de rechazo: más de 2 decimales → `null` ('1,234','1,2345','1.2345','0,001'); excepción de miles conservada ('1.500'→1500,'90.000'→90000); ceros/signos/basura → `null` ('0' igual a antes,'0,00','-5','','$','1,5,5','1..5'); y equivalencias exactas ('$ 90.000,50'→90000.5,'  1.000.000 '→1000000,'1.5'→1.5,'1.50'→1.5,'1,5'→1.5,'1,50'→1.5). Un test por caso. (c2e93da0)
+- [x] Step 4: Revisar `formatAmountEsAR` (lib/payment-amount.ts) y el redondeo a centavos de lib/payment-shortcuts.ts; agregar en tests/payment-amount.test.ts el ida y vuelta `parseAmountEsAR(formatAmountEsAR(x)) === x` para todos los centavos 00–99 sobre los enteros de ejemplo. Si el barrido detecta un desvío en `formatAmountEsAR` o en payment-shortcuts, corregirlo en estos mismos archivos manteniendo verde todo lo anterior. (61446062)
+- [x] Step 5: Agregar una prueba de mutación contra el CÓDIGO REAL de lib/payment-amount.ts: documentar en un script/test que al reintroducir temporalmente `Math.trunc(n*100)/100` con `parseFloat` el barrido falla (con conteo y casos), restaurando luego con `git checkout -- lib/payment-amount.ts`. Además, agregar en la cabecera de tests/f0092-mutation.test.ts una nota aclarando que sus mutantes son copias locales y que la prueba efectiva contra el código real vive en el barrido de payment-amount.test.ts. (3e147dbd)
+- [x] Step 6: Verificar que los consumidores UI del parseo envían el número exacto sin re-truncar: components/loans/register-payment-dialog.tsx (L63-66 y L160-161, formateo al aplicar atajo y al salir del campo) y el diálogo rápido 'Cobrar cuota N' en app/dashboard/loans/page.tsx. Confirmar que el monto parseado se pasa tal cual a `registerPayment`/`payInstallment` y que el label/botón de confirmación muestra el centavo correcto, sin cambiar contratos de mutaciones ni contabilidad. (0bdec8a7)
+
+### Decisiones (ADR)
+- ADR-0284 — Soft-assertion con array de fallos en lugar de expect() directos [Supuesto del agente] **⚠ REVISAR**
+- ADR-0285 — Punto-decimal con 4+ dígitos: truncar a 2, no rechazar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0286 — Rechazar fracPart.length > 2 en punto-decimal en lugar de truncar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0287 — Mutante con lógica de puntos correcta, solo muta el truncado final [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0093/`
+
+> Revisar con Claude in Chrome para validación de UX.

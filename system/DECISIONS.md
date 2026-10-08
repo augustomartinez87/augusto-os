@@ -27,6 +27,62 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0287 · 2026-10-08 · Mutante con lógica de puntos correcta, solo muta el truncado final
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** `parseAmountEsARTruncMutant` replica íntegramente la detección de punto-miles/decimal de la implementación real y solo introduce `parseFloat + Math.trunc` en el bloque final; no reutiliza el mutante de f0092 (que invierte la condición del punto).
+**Contexto:** El spec dice "reintroducir `Math.trunc(n*100)/100` con `parseFloat`", sin especificar si la lógica de puntos del mutante debe ser la del viejo código o la del código actual. El mutante de f0092 ya tiene la condición invertida, por lo que mezclar ambos mutantes haría imposible aislar cuál de los dos bugs produce los 117 fallos.
+**Alternativas descartadas:** Reutilizar `parseAmountEsARMutant` de f0092 (que ya tiene parseFloat+trunc) añadiendo la condición de puntos corregida; descartado porque no estaba disponible como función reutilizable y duplicaría un tercer mutante combinado.
+**Consecuencias / riesgo residual:** Los 117 fallos son atribuibles exclusivamente al drift de IEEE-754 en el truncado, no a la lógica de puntos; el aislamiento es limpio. Si en el futuro se cambia la lógica de puntos en `parseAmountEsAR`, el mutante deberá sincronizarse manualmente.
+
+> Generado por el loop · feature F-0093 · step 5
+
+---
+## ADR-0286 · 2026-10-08 · Rechazar fracPart.length > 2 en punto-decimal en lugar de truncar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En el path `dotCount === 1` con `fracPart.length ≠ 3`, se valida explícitamente `fracPart.length ≤ 2` y se retorna `null` para 4+ dígitos, en lugar de usar `slice(0, 2)` para truncar silenciosamente.
+**Contexto:** El código de step 2 usó `slice(0, 2)` para truncar `'1.2345'` → `1.23`, pero el test de step 1 establecía `'1.2345' → null` porque 4 dígitos tras el punto no es ningún formato válido es-AR (ni miles/3d, ni decimal/1-2d). El comentario en el código justificaba el truncado, pero el test existente era la fuente de verdad del contrato.
+**Alternativas descartadas:** Mantener el truncado y actualizar el test para aceptar `1.23`; usar decimal.js para parseo.
+**Consecuencias / riesgo residual:** Inputs con 3+ decimales sobre punto (ej. `'1.234'` ya era miles por la rama 3d, `'1.2345'` ahora es null) devuelven null. El round-trip `parseAmountEsAR(formatAmountEsAR(x))` no se ve afectado porque `formatAmountEsAR` nunca produce strings con 3+ dígitos decimales.
+
+> Generado por el loop · feature F-0093 · step 4
+
+---
+## ADR-0285 · 2026-10-08 · Punto-decimal con 4+ dígitos: truncar a 2, no rechazar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando un monto sin coma trae un punto decimal con más de 2 dígitos fraccionarios (fuera del caso de miles de exactamente 3), se trunca la parte decimal a 2 dígitos (`'1.2345'` → `1.23`) en vez de devolver `null`.
+**Contexto:** El contrato documenta solo 1-2 dígitos como decimal y exactamente 3 como miles; 4+ dígitos tras punto es un caso no especificado que el reviewer marcó dos veces como inflado de ~100×. El barrido SP-025 no lo cubre (solo centavos de 2 dígitos).
+**Alternativas descartadas:** Rechazar con `null` por simetría con la rama de coma (`/^\d{1,2}$/`). Se descartó porque la implementación anterior (`Math.trunc(n*100)/100`) truncaba a `1.23`; devolver `null` sería un cambio de comportamiento, y el reviewer enmarcó el defecto como regresión contra ese truncado.
+**Consecuencias / riesgo residual:** Entrada ambigua tipo `'1.2345'` se acepta truncada en lugar de forzar reingreso; si en el futuro se prefiere fallar duro ante fracciones malformadas, habría que alinear ambas ramas (coma y punto) para rechazar >2 decimales de forma consistente.
+
+> Generado por el loop · feature F-0093 · step 2
+
+---
+## ADR-0284 · 2026-10-08 · Soft-assertion con array de fallos en lugar de expect() directos
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se recolectan los fallos en un array y se hace un único `expect(failures).toHaveLength(0)` al final, en vez de llamar `expect()` individualmente por cada (texto, grafía).
+**Contexto:** `test.fails` en Vitest pasa (verde) si el cuerpo del test lanza exactamente una vez. Con `expect()` directo, el primer fallo corta la ejecución y los siguientes 116 no se evalúan, lo que impide contar y listar todos los casos afectados. El spec pedía registrar cuántos/cuáles fallan.
+**Alternativas descartadas:** `expect()` individual por caso (sólo reporta el primero); un `test.fails` por entero (los enteros sin fallos quedarían rojos porque su subtest pasa); `expect.soft()` nativo de Vitest (disponible pero no documentado en el spec para este caso).
+**Consecuencias / riesgo residual:** Al corregir `parseAmountEsAR`, `failures` quedará vacío → la aserción pasará → `test.fails` se tornará rojo → señal explícita para eliminar `.fails` y convertirlo en `test` normal.
+
+> Generado por el loop · feature F-0093 · step 1
+
+---
 ## ADR-0283 · 2026-10-08 · Prop `closeClassName` opt-in en lugar de cambio global del botón de cierre
 
 **Estado:** aceptada
