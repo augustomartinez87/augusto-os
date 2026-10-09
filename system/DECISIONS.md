@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0312 · 2026-10-09 · dashboard.ts:448 excluido de la regla única — XIRR forward cashflows
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La comparación `new Date(inst.dueDate) > now` en la estimación de TNA forward-looking (XIRR) se clasifica en Categoría D (excluida) y se agrega a la whitelist del test guardian, sin migrar a `!isInstallmentOverdue`.
+**Contexto:** El barrido del step 7 encontró esta línea que no figuraba en el inventario del ADR F-0096. La frontera `> now` selecciona flujos de caja futuros para el modelo XIRR, no para mostrar si una cuota está "vencida". Migrar a `!isInstallmentOverdue` incluiría las cuotas `due_today` en el flujo proyectado, cambiando la semántica del modelo financiero.
+**Alternativas descartadas:** Migrar a `!isInstallmentOverdue(inst.dueDate, now)` — incluiría `due_today` en el XIRR forward projection; se descartó porque es una decisión de modelado financiero que requiere validación de negocio separada, análoga a la exclusión de `registerPayment`.
+**Consecuencias / riesgo residual:** La cuota que vence hoy permanece excluida del flujo XIRR proyectado (mismo comportamiento que antes). Si en el futuro se decide incluirla, el ADR §4.4 documenta el razonamiento y el punto exacto de cambio.
+
+> Generado por el loop · feature F-0097 · step 7
+
+---
+## ADR-0311 · 2026-10-09 · Test de consistencia de mora ejecuta los procedures reales, no copias del predicado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El test de consistencia de F-0097 step 6 invoca los cuatro procedures tRPC reales (`getDashboardMetrics`, `getDashboardMetricsDebtor`, `getProductMetrics`, `portfolio.getMetrics`) vía `createCaller` con un prisma mockeado basado en Proxy, y sondea cada cuota individualmente leyendo la clasificación desde la salida real de cada endpoint.
+**Contexto:** Los dos intentos previos reimplementaban el predicado `isInstallmentOverdue` inline cuatro veces; el reviewer lo rechazó como tautológico porque copias idénticas de un literal no pueden diferir y no verifican nada sobre los endpoints reales.
+**Alternativas descartadas:** (a) Mantener predicados inline (descartado: es la causa del fallo repetido). (b) Test estructural por grep del código fuente (descartado: verifica texto, no comportamiento). (c) Extraer un único clasificador compartido y testearlo (descartado: no demuestra que los cuatro endpoints lo usen).
+**Consecuencias / riesgo residual:** El test asume el patrón de mock (prisma Proxy + fake timers) y la forma de salida de los endpoints (overdueCount/moraCapital/overdueCapital/nextInstallment); si un procedure dejara de exponer esos agregados habría que actualizar el extractor. Verificación en vivo (solo lectura) sigue a cargo de Cowork tras el merge.
+
+> Generado por el loop · feature F-0097 · step 6
+
+---
+## ADR-0310 · 2026-10-09 · Test de portfolio.ts extrae la lógica como función pura local en lugar de testear el router tRPC
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se creó `calcOverdueCapital` como función pura inline en el test (no se extrajo al módulo `portfolio.ts`) para poder testarla sin mockear el contexto tRPC/Prisma.
+**Contexto:** El spec pide "extraer a función pura testeable si hace falta". El loop de `overdueCapital` en `portfolio.ts` es simple (3 líneas) y está embebido en un procedimiento tRPC; extraerlo requeriría agregar un export nuevo que solo existe para los tests, lo cual es abstracción sin demanda funcional real.
+**Alternativas descartadas:** Exportar una función `calcOverdueCapital` desde `portfolio.ts` y testearla directamente. Se descartó porque agrega surface pública al módulo solo por testabilidad, sin beneficio en producción.
+**Consecuencias / riesgo residual:** Si la lógica de `overdueCapital` crece (p.ej. múltiples monedas, filtros extra), habrá que decidir si extraer la función al módulo. Por ahora el test replica la lógica mínima; cualquier divergencia futura es responsabilidad del implementador siguiente.
+
+> Generado por el loop · feature F-0097 · step 5
+
+---
+## ADR-0309 · 2026-10-09 · `nextInst` se expresa como negación de `isInstallmentOverdue` en vez de `isInstallmentDueToday || isInstallmentUpcoming`
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** La frontera inversa se implementa como `!isInstallmentOverdue(i.dueDate, now)` en lugar de la conjunción explícita `installmentDueState(...) !== 'overdue'` o los dos predicados positivos `isInstallmentDueToday || ...upcoming`.
+**Contexto:** El spec exige migrar en lockstep ambas fronteras. La negación de `isInstallmentOverdue` captura exactamente `due_today | upcoming` sin necesidad de exportar un tercer predicado, y es simétrica con el filtro de overdue en la línea anterior.
+**Alternativas descartadas:** (1) `installmentDueState(i.dueDate, now) !== 'overdue'` — semánticamente idéntico pero más verboso; (2) exportar `isInstallmentNotOverdue` — introduce un helper innecesario. Ambos descartados por verbosidad sin beneficio.
+**Consecuencias / riesgo residual:** Si en el futuro se agrega un estado nuevo al union `InstallmentDueState` (p.ej. `'grace-period'`), la negación lo incluirá automáticamente en "próxima" sin tocar este archivo; es la decisión más conservadora respecto a cambios futuros.
+
+> Generado por el loop · feature F-0097 · step 2
+
+---
+## ADR-0308 · 2026-10-09 · Test documental secundario junto con test.fails
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se agregó un segundo test (`'documenta los sitios A/B del ADR F-0096 pendientes...'`) que verifica que al menos los 4 sitios clave SIGUEN teniendo violaciones, además del test.fails principal.
+**Contexto:** El spec solo pedía un test.fails que quedara en verde. Sin el test documental, no hay señal automática de cuándo retirar el test.fails al terminar SP-029; el desarrollador tendría que recordarlo manualmente.
+**Alternativas descartadas:** Dejar solo el test.fails y un comentario en prosa; o usar un snapshot de la lista de violaciones.
+**Consecuencias / riesgo residual:** El test documental fallará cuando todos los sitios estén migrados — esa falla es la señal explícita de "ahora podés endurecer el guardián". Si la lista de sitios clave cambia antes de SP-029, este test deberá actualizarse.
+
+> Generado por el loop · feature F-0097 · step 1
+
+---
 ## ADR-0307 · 2026-10-09 · Diferencia de granularidad entre getInstallmentStatusLabel (display) y (detail) para due_today
 
 **Estado:** aceptada

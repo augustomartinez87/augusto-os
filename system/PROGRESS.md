@@ -2652,3 +2652,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0096/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-09 — F-0097 completado
+
+## Feature F-0097
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el test guardián `tests/no-instant-overdue.test.ts` que lee con `fs` el código de `lib/`, `components/`, `app/` y `server/` y detecta comparaciones de instante de vencimiento (`dueDate < now`, `new Date(...dueDate) < now`, `dueDate >= now` y variantes con `today`) fuera de una lista blanca explícita y comentada (`lib/installment-status.ts`, `server/services/loan-accounting.service.ts` L151). Como los 8 sitios todavía comparan por instante, marcar la aserción con `test.fails` (o expectativa invertida equivalente documentada) para que la suite quede en verde en este paso, dejando el guardián listo para endurecerse al final. (14e62213)
+- [x] Step 2: Migrar `lib/payment-shortcuts.ts`: reemplazar `overdueSum` (L36, `new Date(i.dueDate) < now`) y `nextInst` (L40, `>= now`) por `isInstallmentOverdue`/`installmentDueState` de `lib/installment-status.ts`, migrando ambas fronteras en lockstep (la que vence hoy cuenta como 'Próxima', no como 'Vencidas'). Pasar `now` explícito a los helpers. Agregar/actualizar fixtures en `tests/payment-shortcuts.test.ts` para los casos: cuota que vence hoy 15:00 ART → 'Próxima'; cuota de ayer → 'Vencidas'; cuota de hoy con cobro parcial → 'Próxima' con indicador parcial; importes con centavos (471222.44); sin vencidas ni próximas; y que `overdue + next` no duplique ni pierda cuotas. Justificar en el ADR cada cambio a tests de F-0092. (4375ffb7)
+- [x] Step 3: Migrar `components/loons/register-payment-dialog.tsx`: reemplazar `overdueInsts` (L55, `< now`) y `nextDueInst` (L56, `>= now`) por los helpers de `lib/installment-status.ts`, alineando su clasificación con `getPaymentShortcuts` para que el botón 'Vencidas' y el importe mostrado sean consistentes. Solo cambia qué cuota se considera vencida vs próxima en el display/atajos; no se tocan montos, imputación ni el contrato de `registerPayment`. (0e2c6fc5)
+- [x] Step 4: Migrar `components/loans/upcoming-installments-gadget.tsx`: reemplazar el conteo de vencidas (L22, `< now`) y el flag `isOverdue` (L52) por `installmentDueState`/`isInstallmentOverdue`, de modo que la cuota de hoy se muestre como 'Vence hoy' (ámbar) y el conteo de vencidas la excluya. Mantener el badge rojo solo para cuotas realmente 'overdue'. (aae52022)
+- [x] Step 5: Migrar `server/routers/portfolio.ts` `overdueCapital` (L134, 'Capital en Mora', `!inst.isPaid && new Date(inst.dueDate) < now`) a `isInstallmentOverdue`/`installmentDueState`, preservando la lógica financiera existente (excluir préstamos `defaulted`, `remaining = max(amount - paidAmount, 0)` antes de `pesify`). Extraer a una función pura testeable si hace falta y agregar test que verifique la clasificación por cuota. (2044ea5d)
+- [x] Step 6: Migrar `server/routers/loans/dashboard.ts` `getDebtMetrics.nextInstallment` (L565, `dueDate >= now`) a la regla ART (primera cuota impaga cuyo día ART >= hoy, incluyendo la que vence hoy) usando los helpers de `lib/installment-status.ts`. Agregar un test de consistencia que, para una misma lista de cuotas, verifique que `getDashboardMetrics`, `getDebtMetrics`, `getProductMetrics` y `portfolio.overdueCapital` clasifican idénticamente cada cuota como overdue/due_today/upcoming. (1489aa6b)
+- [x] Step 7: Barrer el repo (`lib/`, `components/`, `app/` incluido `app/api/*`, `server/`, jobs/crons/exports) en busca de otras comparaciones de instante contra fechas de vencimiento que el inventario de F-0096 no listó; migrar las que correspondan y justificar en `docs/adr/F-0096-una-sola-regla-de-vencida.md` las que queden fuera de alcance. No se modifica `LoanAccountingService.registerPayment`, la cascada, importes, esquema ni datos. (3022136b)
+- [x] Step 8: Endurecer el guardián: quitar el `test.fails` de `tests/no-instant-overdue.test.ts` y dejarlo en verde con los 8 sitios ya migrados, de forma que falle si se reintroduce cualquier comparación de instante fuera de la lista blanca. Ejecutar la prueba de mutación contra el código real (revertir una línea migrada, confirmar que el guardián falla, restaurar con `git checkout -- <archivo>`) y documentar el resultado y la lista blanca final en el ADR. (eb3c3fd1)
+
+### Decisiones (ADR)
+- ADR-0308 — Test documental secundario junto con test.fails [Supuesto del agente] **⚠ REVISAR**
+- ADR-0309 — `nextInst` se expresa como negación de `isInstallmentOverdue` en vez de `isInstallmentDueToday || isInstallmentUpcoming` [Instrucción de Augusto]
+- ADR-0310 — Test de portfolio.ts extrae la lógica como función pura local en lugar de testear el router tRPC [Supuesto del agente] **⚠ REVISAR**
+- ADR-0311 — Test de consistencia de mora ejecuta los procedures reales, no copias del predicado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0312 — dashboard.ts:448 excluido de la regla única — XIRR forward cashflows [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0097/`
+
+> Revisar con Claude in Chrome para validación de UX.
