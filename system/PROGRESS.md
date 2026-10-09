@@ -2621,3 +2621,34 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0095/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-09 — F-0096 completado
+
+## Feature F-0096
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Barrido completo del repo (`git grep` de `dueDate <`, `< now`, `< today`, `daysUntil < 0`, `overdue`) para inventariar todos los sitios que deciden 'vencida', y confirmar con un test/consulta de solo lectura cómo se guardan las fechas de vencimiento (hora 12:00 interpretada como UTC en Vercel = 09:00 ART). Crear el ADR de F-0096 en docs/adr/ con: la lista final de sitios a migrar (y justificación de cualquiera que NO se migre), la decisión de día calendario ART, el criterio para el caso `T00:00:00Z` (medianoche UTC), la nota de que `registerPayment`/cascada no se tocan y por qué, y que las métricas de mora cambian el día del vencimiento intencionalmente. (8afe4710)
+- [x] Step 2: Crear el módulo puro `lib/installment-status.ts` (sin React ni Prisma) como ÚNICA definición de vencimiento de cuota, con `installmentDueState(dueDate, now): 'upcoming' | 'due_today' | 'overdue'`, `isInstallmentOverdue`, `isInstallmentDueToday` e `installmentDaysOverdue`, resolviendo la fecha a su día calendario ART (reusando/generalizando `calendarDaysAgoART` de `lib/date-utils.ts` sin cambiar su resultado actual), aceptando `Date` o string ISO y sin lanzar en entradas inválidas. Agregar tests Vitest con fixtures (a)-(g) y la prueba de mutación (cambiar `<` por `<=` o volver a comparar por instante hace fallar los tests; restaurar con git checkout). (980e93e3)
+- [x] Step 3: Migrar `lib/loan-list-row.ts` (`getLoanStatus`, `getStatusDisplay`, `getLoanListRow`) y `lib/loan-detail-summary.ts` (`getNextInstallmentSummary` y su `getInstallmentStatusLabel`) para que usen `lib/installment-status.ts`: introducir el `statusKey` 'due_today', exponer `daysOverdue` con `installmentDaysOverdue` (N ≥ 1 en 'overdue'), eliminar el caso especial 'Vencida' sin días, y definir el orden por estado (defaulted, overdue, due_today, current, open, new, completed) y el filtro 'overdueOnly' solo para 'overdue'. Actualizar los tests de F-0094/F-0095 al criterio nuevo. (3f45f795)
+- [x] Step 4: UI de lista y detalle: en `components/loans/loans-table-view.tsx` (tabla de escritorio y tarjetas móviles) y en los componentes de detalle (tarjeta 'Próxima cuota', cronograma escritorio y móvil) renderizar el estado 'Vence hoy' en ámbar (paleta de advertencia ya usada) y 'Vencido · N d' desde el día siguiente, consumiendo el contrato extendido de `loan-list-row`/`loan-detail-summary`. (0937ea3b)
+- [x] Step 5: Servidor: en `server/routers/loans/dashboard.ts` migrar métricas de mora (`overdueCount`, `overdueAmount`, L559-560, L612-615) y la ventana 'esta semana' (L192-199) a `lib/installment-status.ts`, garantizando que 'due_today' cuenta como 'esta semana' y NO como vencida, sin cuotas fuera de ambos grupos ni en los dos (extraer a función pura si hace falta y testearla). Migrar también `server/services/collection-reminders.service.ts` (L66, L70) para `overdue`/`overdueCount`. (8d3f812b)
+- [x] Step 6: Mensajes de cobro y recordatorios: en `components/loans/bulk-collection-message.tsx` (incl. `daysUntil < 0`) y `components/loans/copy-collection-message.tsx` clasificar la cuota que vence hoy en la sección 'hoy'/próximas y NO en 'VENCIDAS', usando `lib/installment-status.ts` sin cambiar el texto salvo esa clasificación. (d1852754)
+- [x] Step 7: Migrar el resto de pantallas que comparan instante para 'vencida' a `lib/installment-status.ts`: `app/dashboard/loans/page.tsx` (L1263, L1376), `app/dashboard/persons/page.tsx` (L635, L693), `app/ap/page.tsx` (L1158), `app/share/[personId]/page.tsx` (L205, L302, L401, L471, misma regla y sin mostrar TNA/tasa, conservando el 'TNA check'), `components/loans/collector-view.tsx` (L160) y `components/loans/installment-calendar.tsx` (L112, L136, L169). (6f127206)
+- [x] Step 8: Agregar un test de consistencia que recorra una lista de fixtures y exija que `getLoanStatus`, `getInstallmentStatusLabel`, `getNextInstallmentSummary` y la clasificación de métricas coincidan en cada caso; registrar el resultado en el ADR. (20a9a286)
+- [x] Step 9: Cierre: correr typecheck, lint con cero warnings (`npx eslint . --ext .ts,.tsx --max-warnings 0`) y `npm test` completos, corregir cualquier residuo y dejar todo verde. (20a9a286)
+
+### Decisiones (ADR)
+- ADR-0301 — Fallback 'upcoming' para entradas inválidas en installmentDueState [Supuesto del agente] **⚠ REVISAR**
+- ADR-0302 — isOverdue=false para 'due_today' en InstallmentSummary [Instrucción de Augusto]
+- ADR-0303 — `due_today` excluido del filtro `overdueOnly` y de las métricas de mora [Instrucción de Augusto]
+- ADR-0304 — `due_today` incluido en `thisWeek`; excluido de `overdueInstallments` [Instrucción de Augusto]
+- ADR-0305 — copy-collection-message: añadir split de verbo "vence"/"venció" basado en installmentDueState [Supuesto del agente] **⚠ REVISAR**
+- ADR-0306 — `app/dashboard/loans/page.tsx` ya migrado en step anterior — sin cambios en step 7 [Instrucción de Augusto]
+- ADR-0307 — Diferencia de granularidad entre getInstallmentStatusLabel (display) y (detail) para due_today [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0096/`
+
+> Revisar con Claude in Chrome para validación de UX.

@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0307 · 2026-10-09 · Diferencia de granularidad entre getInstallmentStatusLabel (display) y (detail) para due_today
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El test documenta como aceptado que `getInstallmentStatusLabel` de `loan-installment-display` devuelve `'Pendiente'` (no `'Vence hoy'`) para el estado `due_today`, porque opera sobre flags booleanos sin `isDueToday`. No se extendió su union type.
+**Contexto:** La suite de consistencia verifica que las cuatro funciones "coincidan". Para `due_today`, la versión display y la versión detail producen labels distintos (`'Pendiente'` vs `'Vence hoy'`). El spec no especificó qué significa "coincidan" cuando dos funciones tienen conjuntos de retorno distintos.
+**Alternativas descartadas:** Extender `InstallmentStatusLabel` con `'Vence hoy'` y agregar la rama en `loan-installment-display`. Se descartó porque está fuera del alcance del step 8 (test de consistencia) y podría romper consumidores tipados del union type.
+**Consecuencias / riesgo residual:** El test queda como documentación ejecutable de la brecha; si en un step futuro se extiende `loan-installment-display`, el test deberá actualizar `displayLabel: 'Pendiente'` a `'Vence hoy'` para `due_today`.
+
+> Generado por el loop · feature F-0096 · step 8
+
+---
+## ADR-0306 · 2026-10-09 · `app/dashboard/loans/page.tsx` ya migrado en step anterior — sin cambios en step 7
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El archivo `app/dashboard/loans/page.tsx` no recibió modificaciones en este step porque ya importaba `installmentDueState`/`installmentDaysOverdue` y no contenía ninguna comparación `dueDate < now` al momento de ejecutar el step 7.
+**Contexto:** El spec listaba L1263 y L1376 de ese archivo como pendientes, pero los steps previos (step 3 o step 4) ya completaron esa migración; el grep confirmó cero matches.
+**Alternativas descartadas:** Re-migrar igual aunque ya estuviera correcto (redundante y riesgoso).
+**Consecuencias / riesgo residual:** Si en algún punto se agregan nuevas cuotas a esa página con comparación de instante, el patrón ya establecido en el archivo sirve de guía.
+
+> Generado por el loop · feature F-0096 · step 7
+
+---
+## ADR-0305 · 2026-10-09 · copy-collection-message: añadir split de verbo "vence"/"venció" basado en installmentDueState
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se introduce la distinción "venció el / vence el" en el mensaje de recordatorio individual usando installmentDueState, en lugar de mantener siempre "vence el". La cuota de hoy (due_today) usa "vence".
+**Contexto:** copy-collection-message.tsx no tenía secciones "VENCIDAS"/"PRÓXIMAS" como bulk-collection-message, por lo que la única superficie de clasificación visible al cobrador era el verbo del mensaje. El spec pide usar lib/installment-status.ts para que hoy no sea tratado como vencido, pero no especificaba explícitamente si había que agregar el split de verbo en este componente.
+**Alternativas descartadas:** Dejar siempre "vence el" (sin cambio funcional para hoy, pero mensajes factualmente incorrectos para cuotas realmente vencidas). Descartado porque el parallelo con collection-reminders-panel ya tiene este split y el spec dice "sin cambiar el texto salvo esa clasificación", implicando que la clasificación sí puede cambiar texto.
+**Consecuencias / riesgo residual:** Mensajes de cobro individual para cuotas vencidas dirán "venció el X" en lugar de "vence el X". Este cambio de texto debería verificarse con Cowork en la prueba de vivo post-merge.
+
+> Generado por el loop · feature F-0096 · step 6
+
+---
+## ADR-0304 · 2026-10-09 · `due_today` incluido en `thisWeek`; excluido de `overdueInstallments`
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** La ventana "esta semana" (`thisWeek`) incluye cuotas con estado `due_today` o `upcoming` con dueDate ≤ weekFromNow. Las cuotas `due_today` nunca caen en `overdueInstallments`. Esto es una partición estricta: ninguna cuota puede estar en ambos grupos.
+**Contexto:** El spec F-0096 exige que `due_today` cuente como "esta semana" y NO como vencida. La comparación original `i.dueDate >= now` excluía cuotas con dueDate midnight UTC (= 03:00 ART) cuando `now` era posterior en el mismo día ART, enviándolas erróneamente a `overdueInstallments`.
+**Alternativas descartadas:** Usar `i.dueDate >= startOfTodayART` como límite inferior de thisWeek (timestamp absoluto de medianoche ART). Se descartó porque `installmentDueState` ya resuelve correctamente el caso calendario ART y evita construir un timestamp adicional.
+**Consecuencias / riesgo residual:** Los números de mora del dashboard cambian el día del vencimiento: la cuota de hoy ya no suma a `overdueCount`/`overdueAmount` ni a `moraByProduct`; esto es intencional y debe documentarse en el ADR de entrega del feature (SP-028). Cowork debe verificar en vivo tras el merge.
+
+> Generado por el loop · feature F-0096 · step 5
+
+---
+## ADR-0303 · 2026-10-09 · `due_today` excluido del filtro `overdueOnly` y de las métricas de mora
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El filtro "Solo vencidas" (`overdueOnly`) y el cómputo de mora del dashboard siguen usando `status === 'overdue'`, excluyendo explícitamente `due_today`. Una cuota que vence hoy no suma a los contadores de mora.
+**Contexto:** El spec indica explícitamente: "Los números de mora del dashboard cambian el día del vencimiento (la cuota de hoy ya no suma): es intencional." El filtro `overdueOnly` en `loans-table-view.tsx` línea 147 ya filtraba solo `overdue`; se mantiene sin cambio.
+**Alternativas descartadas:** Incluir `due_today` en `overdueOnly` para que el chip "Solo vencidas" también muestre las de hoy — descartado por instrucción explícita del spec.
+**Consecuencias / riesgo residual:** El chip "Solo vencidas" y las métricas de mora del dashboard no incluyen las cuotas que vencen hoy, lo que puede sorprender al prestamista si espera verlas ahí. Queda abierto documentarlo en el ADR definitivo de F-0096.
+
+> Generado por el loop · feature F-0096 · step 4
+
+---
+## ADR-0302 · 2026-10-09 · isOverdue=false para 'due_today' en InstallmentSummary
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El campo `isOverdue` en `InstallmentSummary` refleja solo el estado 'overdue' (N≥1 días de atraso); una cuota que vence hoy tiene `isOverdue=false` y `daysOverdue=0`.
+**Contexto:** El spec pedía "exponer daysOverdue con installmentDaysOverdue (N≥1 en overdue)" y "eliminar el caso especial 'Vencida' sin días", lo cual implica separar semánticamente 'due_today' de 'overdue'. El test existente (f) esperaba `isOverdue=true, daysOverdue=0` para "vence hoy", que era el comportamiento antiguo (comparación por instante). Al migrar a día calendario ART, ese test fue el único que requirió actualización de expectativa.
+**Alternativas descartadas:** Mantener `isOverdue=true` para 'due_today' para preservar retrocompatibilidad de la interfaz; descartado porque significaría exponer un estado "vencido sin días" que el spec prohíbe.
+**Consecuencias / riesgo residual:** Los consumidores de `InstallmentSummary.isOverdue` (actualmente solo `app/dashboard/loans/page.tsx:583` via `daysOverdue > 0`, no usa `isOverdue` directamente) no se ven afectados. Las comparaciones `dueDate < now` inline en `page.tsx` (líneas 1263/1376) quedan fuera de este step y producirán inconsistencia con la lista hasta el step que las unifique.
+
+> Generado por el loop · feature F-0096 · step 3
+
+---
+## ADR-0301 · 2026-10-09 · Fallback 'upcoming' para entradas inválidas en installmentDueState
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando el input a `installmentDueState` (o las funciones derivadas) no puede parsearse como una fecha válida, se retorna `'upcoming'` / `false` / `0` en lugar de lanzar.
+**Contexto:** La tarea dice "sin lanzar en entradas inválidas" pero no especifica qué valor devolver. Se eligió `'upcoming'` porque es el estado más conservador (no marca nada como vencido ni como vence-hoy a partir de basura), y `0` días de atraso por la misma razón. Una alternativa sería retornar `null` o un tipo Result, pero eso cambiaría la firma e impactaría todos los consumidores del step 3.
+**Alternativas descartadas:** Retornar `null` / tipo `Result<InstallmentDueState, Error>` para que el llamador pueda distinguir "no hubo fecha" de "upcoming real"; retornar `'overdue'` como fail-safe (más agresivo, menos probable que oculte bugs de datos).
+**Consecuencias / riesgo residual:** Si en producción hay registros con `dueDate = null` o string vacío, la función los tratará silenciosamente como `upcoming` sin alertar. El step que migre los consumidores debe verificar que esos casos no existan en los datos.
+
+> Generado por el loop · feature F-0096 · step 2
+
+---
 ## ADR-0300 · 2026-10-09 · Divergencia canDelete tabla vs. detalle — documentar sin relajar
 
 **Estado:** aceptada
