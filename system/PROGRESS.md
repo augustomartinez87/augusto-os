@@ -2561,3 +2561,35 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0093/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-09 — F-0094 completado
+
+## Feature F-0094
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el módulo puro `lib/loan-detail-summary.ts` con `getNextInstallmentSummary(loan, now)` (devuelve `{ number, amount, remaining, dueDate, isPartial, isOverdue, daysOverdue }` para la primera cuota impaga ordenada por número; `remaining` = `amount` menos `paidAmount` redondeado a centavos; `daysOverdue` vía `calendarDaysAgoART` de `lib/date-utils.ts`, nunca negativo; `null` si no hay impagas) y `getInstallmentStatusLabel(inst, now)` (devuelve 'Pagada' / 'Parcial' / 'Vencida · N d' / 'Vencida' / 'Pendiente' usando la MISMA regla `!inst.isPaid && new Date(dueDate) < now`, sin cambiarla). Reutilizar redondeo a centavos de `lib/payment-shortcuts.ts`. Agregar tests con fixtures (a) próxima futura, (b) vencida hace 35 días, (c) parcial, (d) todas pagas → null, (e) centavos 471222.44, (f) vence hoy daysOverdue=0, y tests de cada texto de estado (576b50d4)
+- [x] Step 2: Agregar prueba de mutación contra el CÓDIGO REAL de ambos helpers: documentar/ejecutar que romper `getNextInstallmentSummary` (usar `amount` en vez de `remaining`) y `getInstallmentStatusLabel` (omitir los días) hace fallar los tests nuevos en ambos casos, y restaurar con `git checkout -- <archivo>`. Registrar el resultado en el ADR (37f3551e)
+- [x] Step 3: En `app/dashboard/loans/page.tsx`, agregar la tarjeta de resumen 'Próxima cuota $X · vence DD/MM' (con variante 'Vencida hace N d' en rojo y 'Parcial: falta $X') justo debajo del título, solo en móvil (< 768 px, `md:hidden`), para préstamos `active` con cuotas impagas, construida con `getNextInstallmentSummary` y con botón 'Registrar cobro' de ≥ 44 px que reutiliza `RegisterPaymentDialog` sin cambiar su contrato. Escritorio igual (0bbffd95)
+- [x] Step 4: Revisar `app/dashboard/layout` para ver cómo se apila la barra de navegación inferior móvil, y agregar la barra fija inferior de cobro en móvil (`fixed bottom-0`, con `env(safe-area-inset-bottom)`), ubicada sin tapar la barra de navegación ni el contenido (padding inferior equivalente al contenido de la página). Reutiliza `RegisterPaymentDialog` sin duplicar lógica ni modificar `registerPayment` (5364e59a)
+- [x] Step 5: Convertir las métricas secundarias del detalle en una sección plegable 'Análisis' solo en móvil (cerrada por defecto, con indicador abierto/cerrado y área táctil ≥ 44 px): mover 'Intereses proyectados', 'Cuotas', la fila TNA/TEA/TEM (L748-757) y las tarjetas avanzadas Capital progresivo/Mora acumulada/TIR (XIRR)/Slippage (L767-814); mantener 'Capital', 'Cobrado' y 'Capital pendiente' visibles arriba. En escritorio sin plegar. Reemplazar 'N/D' por '—' en esas métricas, sin tocar fórmulas (a0849739)
+- [x] Step 6: Agrupar la botonera secundaria en un menú 'Más acciones' (`components/ui/dropdown-menu.tsx`) en móvil y escritorio: dejar visibles solo 'Registrar cobro' y 'Mensaje de cobro'; mover 'Refinanciar', 'Generar contrato' (con su selector de jurisdicción), 'Recalcular' y 'Marcar como incobrable' al menú. 'Marcar como incobrable' conserva su confirmación en dos pasos, va al final, separada y en rojo. Resolver la apertura de `RefinanceDialog` y `GenerateContractButton` desde el menú sin cambiar sus contratos (p. ej. estado controlado). Aplicar el mismo criterio a las botoneras de solo interés / tasa 0 (L946-1008), conservando sus acciones de cobro visibles NOTA DE REVISIÓN (corrida previa): todo control interactivo nuevo debe tener área táctil ≥ 44 px en móvil (`min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0`), incluidos los DropdownMenuItem y el botón X de cerrar el panel 'Generar contrato' (ambas botoneras); 'Generar contrato' solo se muestra si `direction === 'lender' && loanInstallments.length > 0`; no agregar acciones nuevas a botoneras que no las tenían; no compartir estado entre las dos botoneras. (3d132d14)
+- [x] Step 7: Apilar en móvil el banner 'Pendiente: subir contrato firmado y pagaré' (L666-688): texto arriba y botones debajo a ancho completo (≥ 44 px) sin desbordar a 375 px. Escritorio igual (7bb7aa0a)
+- [x] Step 8: Ajustar la lista de pestañas del detalle (L1011-1017) para que las cuatro (Cuotas, Contabilidad, Actividad, Documentos) entren sin cortarse a 375 px en móvil (texto más corto o ancho repartido; si hay scroll horizontal, con indicio visible), modificando solo la lista del detalle y, si hace falta, agregando una variante opcional sin alterar `components/ui/tabs.tsx` existente (0a327099)
+- [x] Step 9: En el cronograma móvil (L1157+), mostrar en cada tarjeta de cuota el texto de `getInstallmentStatusLabel` además del color (no solo color). Escritorio igual (aa67ebe3)
+- [x] Step 10: Cierre: correr typecheck, lint con cero warnings (`npx eslint . --ext .ts,.tsx --max-warnings 0`) y `npm test` completos, verificando que todo pasa (aa67ebe3)
+
+### Decisiones (ADR)
+- ADR-0288 — Precedencia de 'Parcial' sobre 'Vencida' en getInstallmentStatusLabel [Supuesto del agente] **⚠ REVISAR**
+- ADR-0289 — La variante 'Vencida hace N d' se decide por daysOverdue, no por isOverdue [Supuesto del agente] **⚠ REVISAR**
+- ADR-0290 — Condición del cobro bar = unión exacta de las condiciones existentes de RegisterPaymentDialog [Supuesto del agente] **⚠ REVISAR**
+- ADR-0291 — Slippage 0 muestra '—' en móvil [Supuesto del agente] **⚠ REVISAR**
+- ADR-0292 — Usar className prop en DocUploadButton en lugar de wrapper con arbitrary variant [Supuesto del agente] **⚠ REVISAR**
+- ADR-0293 — Pestañas del detalle en móvil con scroll horizontal en vez de grid de 4 columnas [Supuesto del agente] **⚠ REVISAR**
+- ADR-0294 — `getInstallmentStatusLabel` acepta flags pre-computados, no el objeto crudo [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0094/`
+
+> Revisar con Claude in Chrome para validación de UX.

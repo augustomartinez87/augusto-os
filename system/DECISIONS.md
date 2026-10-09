@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0294 · 2026-10-09 · `getInstallmentStatusLabel` acepta flags pre-computados, no el objeto crudo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La función recibe `{ isPaid, isPartial, isOverdue }` (booleans ya derivados en el componente) en lugar de un objeto `LoanInstallment` completo con `dueDate`/`paidAmount`.
+**Contexto:** El spec dice "FUERA DE ALCANCE: Unificar la definición de 'vencida'". Centralizar el cálculo dentro del helper hubiera sido una unificación implícita; hacerlo con flags pre-computados deja esa lógica intacta en cada sitio.
+**Alternativas descartadas:** Aceptar el installment crudo y computar internamente (unifica la semántica pero viola el out-of-scope); usar un enum en vez de string literal union (más explícito pero añade indirección innecesaria).
+**Consecuencias / riesgo residual:** Si en el futuro se unifica la definición de 'vencida' habrá que actualizar los dos sites de cálculo (desktop y mobile) además del helper, pero eso es intencional según el spec actual.
+
+> Generado por el loop · feature F-0094 · step 9
+
+---
+## ADR-0293 · 2026-10-09 · Pestañas del detalle en móvil con scroll horizontal en vez de grid de 4 columnas
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En móvil la lista de pestañas del detalle usa ancho natural con scroll horizontal e indicio de fundido al borde derecho; en md+ se restaura el inline-flex por defecto sin cambios visuales. Se descartó el grid de 4 columnas iguales.
+**Contexto:** El step 8 falló repetidamente forzando `grid grid-cols-4 w-full` a 375px: regresionaba escritorio (sin reset `md:`) y recortaba "Contabilidad"/"Documentos", palabras únicas que ni con wrap entran en columnas de ~75px.
+**Alternativas descartadas:** Grid de 4 columnas iguales (fragil y ya rechazado por el reviewer); acortar etiquetas en móvil (ambiguo/feo); permitir wrap (no parte palabras únicas sin guionado feo).
+**Consecuencias / riesgo residual:** Radix no autoscrollea la pestaña activa si queda fuera de vista al cambiar por teclado (impacto menor en móvil táctil). El fundido atenúa levemente el borde de la última pestaña visible de forma permanente, aceptado como affordance de scroll.
+
+> Generado por el loop · feature F-0094 · step 8
+
+---
+## ADR-0292 · 2026-10-09 · Usar className prop en DocUploadButton en lugar de wrapper con arbitrary variant
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se extendió la interfaz de DocUploadButton con `className?: string` (mergeado vía `cn`) para pasar `w-full min-h-[44px]` desde el banner. Se descartó el enfoque de selector arbitrario `[&_button]:w-full` en el contenedor.
+**Contexto:** El banner necesita botones a ancho completo en móvil, pero DocUploadButton no exponía ninguna prop de estilo. La alternativa era usar `[&_button]:w-full` como clase en el div contenedor.
+**Alternativas descartadas:** `[&_button]:w-full [&_button]:min-h-[44px]` en el div contenedor de botones; evita tocar DocUploadButton pero usa un selector de escape de Tailwind menos explícito y puede romperse si el botón interno cambia de elemento.
+**Consecuencias / riesgo residual:** DocUploadButton ahora acepta `className`; otros banners o tablas que usen este componente pueden aprovechar la prop. No queda nada abierto.
+
+> Generado por el loop · feature F-0094 · step 7
+
+---
+## ADR-0291 · 2026-10-08 · Slippage 0 muestra '—' en móvil
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En la tarjeta Slippage dentro del plegable móvil, el valor `0 bps` se reemplaza por '—'. En desktop se mantiene '0 bps'.
+**Contexto:** El spec dice "Reemplazar 'N/D' por '—' en esas métricas" sin mencionar '0 bps'. En móvil, mostrar '0 bps' cuando no hay desvío aporta poco en pantalla chica.
+**Alternativas descartadas:** Mantener '0 bps' en móvil (comportamiento idéntico a desktop).
+**Consecuencias / riesgo residual:** Si producto decide que '0 bps' es dato relevante en móvil, hay que revertir esa línea en el plegable y dejar solo la sustitución de 'N/D'.
+
+> Generado por el loop · feature F-0094 · step 5
+
+---
+## ADR-0290 · 2026-10-08 · Condición del cobro bar = unión exacta de las condiciones existentes de RegisterPaymentDialog
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se muestra el cobro bar cuando `loan.status === 'active' && (unpaidCount > 0 || isZeroRate)`, replicando los dos bloques de acciones donde RegisterPaymentDialog ya aparece en la UI, en vez de usar simplemente `loan.status === 'active'`.
+**Contexto:** El spec no especificó cuándo mostrar la barra; usar solo `active` mostraría el botón de cobro incluso para préstamos sin cuotas (ej. amortizados 100% pagados pero no cerrados), que actualmente no tienen el botón de cobro y donde presionarlo no tendría utilidad.
+**Alternativas descartadas:** Usar `loan.status === 'active'` (más simple, siempre visible para activos); delegar toda la lógica al `allowPayment` interno de RegisterPaymentDialog (pero ese flag no desactiva el botón trigger, solo los shortcuts).
+**Consecuencias / riesgo residual:** Si en el futuro se agrega un caso de cobro fuera de estos dos bloques, habrá que actualizar también `showCobroBar`. La condición está colocada inline en el componente, sin extraer a helper.
+
+> Generado por el loop · feature F-0094 · step 4
+
+---
+## ADR-0289 · 2026-10-08 · La variante 'Vencida hace N d' se decide por daysOverdue, no por isOverdue
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El branch rojo de la tarjeta de resumen móvil se condiciona a `summary.daysOverdue > 0` en lugar de `summary.isOverdue`; con `daysOverdue === 0` (incluye cuota que vence hoy) se muestra la línea neutra 'Próxima cuota $X · vence DD/MM'.
+**Contexto:** `isOverdue` (timestamp `dueDate < now`) y `daysOverdue` (días calendario ART) difieren para una cuota que vence hoy: `isOverdue=true`, `daysOverdue=0`. Keyear el texto 'hace N d' sobre `isOverdue` generaba el literal inválido 'Vencida hace hoy'; dos intentos previos fallaron parcheando el string en vez de la condición.
+**Alternativas descartadas:** Implementar un estado explícito 'Vence hoy' (descartado: es spec aparte, fuera de alcance). Seguir parcheando el literal dentro del branch 'isOverdue' (descartado: conceptualmente incorrecto, el caso degenerado siempre reaparece).
+**Consecuencias / riesgo residual:** Una cuota que vence hoy se muestra como 'Próxima cuota' (no resaltada en rojo) hasta el día siguiente. Si producto define el estado 'Vence hoy' en la spec aparte, habrá que agregar un tercer branch; la condición actual lo deja limpio para extender.
+
+> Generado por el loop · feature F-0094 · step 3
+
+---
+## ADR-0288 · 2026-10-08 · Precedencia de 'Parcial' sobre 'Vencida' en getInstallmentStatusLabel
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando una cuota tiene paidAmount > 0 y además está vencida, se retorna 'Parcial' (no 'Vencida · N d'). El orden de evaluación sigue el listado del spec: Pagada → Parcial → Vencida · N d → Vencida → Pendiente.
+**Contexto:** El spec no define explícitamente qué label tiene prioridad cuando una cuota es simultáneamente parcial y vencida. La lista textual del spec se leyó como orden de prioridad decreciente.
+**Alternativas descartadas:** Mostrar 'Vencida · N d' cuando la cuota parcial está vencida (prioriza urgencia sobre estado de pago). Requeriría un ADR de producto explícito.
+**Consecuencias / riesgo residual:** Si producto decide que una cuota parcial vencida debe mostrar el texto de vencimiento, habrá que invertir el orden de las primeras dos ramas en getInstallmentStatusLabel.
+
+> Generado por el loop · feature F-0094 · step 1
+
+---
 ## ADR-0287 · 2026-10-08 · Mutante con lógica de puntos correcta, solo muta el truncado final
 
 **Estado:** aceptada
