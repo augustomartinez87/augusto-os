@@ -2593,3 +2593,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0094/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-09 — F-0095 completado
+
+## Feature F-0095
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `lib/loan-list-row.ts`: mover `getLoanStatus` y su mapa de etiquetas desde `components/loans/loans-table-view.tsx` (L49-70) a `lib` SIN cambiar su resultado, y exportar `getLoanListRow(loan, now)` que devuelve `{ statusKey, statusLabel, nextDueDate, nextAmount, daysOverdue, concept, canCollect }`. `nextAmount` replica el criterio de la columna 'Próx. cuota' (L558-580) redondeado a centavos; `daysOverdue` usa `calendarDaysAgoART` de `lib/date-utils.ts` (0 si no vencido); `canCollect` solo true para préstamos `active`. Actualizar `loans-table-view.tsx` para importar estado/etiquetas desde `lib` y así no romper typecheck/lint (sin unused). (1a8239f6)
+- [x] Step 2: Agregar tests en `tests/` para `getLoanListRow` con fixtures: (a) activo al día; (b) vencido hace 35 días; (c) solo interés; (d) tasa 0 / sin cuotas ('nunca vencido'); (e) completado/incobrable (`canCollect` falso); (f) importes con centavos (471222.44). Incluir un test de equivalencia que compare, para los mismos fixtures, el `statusKey`/`statusLabel` de la función movida contra el resultado de la lógica original (sin cambio de comportamiento). (5cde0f48)
+- [x] Step 3: Vista móvil (< 768 px) de la lista de préstamos: renderizar cada préstamo como tarjeta (mismo patrón visual que el cronograma móvil del detalle en `app/dashboard/loans/page.tsx` L1157+) usando `getLoanListRow`, con persona y concepto, progreso, próxima cuota (monto + fecha), estado con TEXTO ('Vencido · N d' cuando `daysOverdue` ≥ 1; 'Vencido' si la regla lo marca vencido y N = 0) y un botón 'Cobrar' de ≥ 44 px que abre `RegisterPaymentDialog` con las mismas condiciones que el botón de escritorio (solo `status === 'active'`). Tocar el resto de la tarjeta llama `onSelect(loan.id)` (abre detalle). Mantener filtros, búsqueda, orden por defecto (próxima cuota ascendente) y la fila de totales como línea resumen en móvil. La tabla actual se muestra solo en ≥ 768 px sin cambios de datos. (29afdb8b)
+- [x] Step 4: Colapsar `LenderHeaderPanel` (`components/loans/lender-header-panel.tsx`) a una sola línea en móvil (< 768 px) tipo 'Esta semana $X · N cuotas vencidas $X', cerrada por defecto, que se expande al tocar (área táctil ≥ 44 px), con TNA y riesgo dentro del desplegable. Las cifras salen de los mismos datos/consultas que ya usa el panel (sin consultas ni fórmulas nuevas). En escritorio el panel se muestra como hoy. (c19f57d1)
+- [x] Step 5: Quitar el botón 'Eliminar préstamo' (ícono papelera y su confirmación en dos pasos, `loans-table-view.tsx` L605-653) de la tabla y de las tarjetas móviles, dejando la columna 'Acciones' de escritorio solo con 'Registrar cobro'. Eliminar `deleteMutation`, `deleteConfirmId`, el import de `Trash2` y cualquier helper/estado que quede sin uso para no romper lint/noUnusedLocals. Verificar que el flujo de borrado sigue disponible en el detalle del préstamo. (bbd2380c)
+- [x] Step 6: Escribir/actualizar el ADR de F-0095: documentar la condición exacta de `canDelete` de la tabla, si el detalle aplica la misma condición (y dejar constancia sin relajarla si difiere), y registrar el resultado de la prueba de mutación sobre `getLoanListRow` (romper `nextAmount`/`canCollect`, confirmar que los tests nuevos fallan, restaurar con `git checkout`). (60df1e32)
+- [x] Step 7: Cierre de verificación: correr typecheck, `npx eslint . --ext .ts,.tsx --max-warnings 0` (cero warnings) y `npm test` completos, y corregir cualquier fallo residual para que todo pase. (60df1e32)
+
+### Decisiones (ADR)
+- ADR-0295 — getLoanStatus recibe `now` como parámetro opcional [Supuesto del agente] **⚠ REVISAR**
+- ADR-0296 — Fixture (c) "solo interés" mapeado al status 'new' [Supuesto del agente] **⚠ REVISAR**
+- ADR-0297 — Botón "Cobrar" en tarjeta móvil llama onSelect en lugar de abrir RegisterPaymentDialog directamente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0298 — Contenido del desplegable móvil incluye Cobranza además de TNA y Riesgo [Supuesto del agente] **⚠ REVISAR**
+- ADR-0299 — Conservar deleteMutation para pre-aprobados al quitar la papelera de la tabla [Supuesto del agente] **⚠ REVISAR**
+- ADR-0300 — Divergencia canDelete tabla vs. detalle — documentar sin relajar [Instrucción de Augusto]
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0095/`
+
+> Revisar con Claude in Chrome para validación de UX.

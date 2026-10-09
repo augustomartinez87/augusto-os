@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0300 · 2026-10-09 · Divergencia canDelete tabla vs. detalle — documentar sin relajar
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** Se documenta que la vista de detalle (`app/dashboard/loans/page.tsx`) no aplica `canDeleteLoan` y expone la papelera sin verificar `direction`, `paidCount` ni estado terminal; la condición restrictiva de la tabla se mantiene como referencia correcta y la divergencia queda como deuda técnica.
+**Contexto:** El spec de F-0095 pide documentar si el detalle aplica la misma condición que la tabla; la inspección del código reveló que no la aplica, lo que no fue especificado explícitamente.
+**Alternativas descartadas:** Unificar ambas vistas aplicando `canDeleteLoan` en el detalle (fuera del alcance de F-0095 según las restricciones declaradas).
+**Consecuencias / riesgo residual:** La papelera en el detalle puede aparecer para borrowers y para préstamos con cuotas pagas; el borrado fallará a nivel de router si la regla de negocio existe en el servidor, pero la UI no lo impide preventivamente. Queda pendiente como deuda técnica para un step posterior.
+
+> Generado por el loop · feature F-0095 · step 6
+
+---
+## ADR-0299 · 2026-10-09 · Conservar deleteMutation para pre-aprobados al quitar la papelera de la tabla
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se mantuvo `deleteMutation` en `LoansTableView` con opciones inline, ya que sigue siendo necesaria para `PreApprovedLoanCard.onDelete`. Solo se eliminaron `deleteConfirmId`, los imports de `buildDeleteLoanMutationOptions` y `buildDeleteConfirmHandler`, y el bloque UI de confirmación.
+**Contexto:** El spec pedía eliminar `deleteMutation` junto con la papelera, pero el mismo componente la usa para borrar préstamos pre-aprobados (línea 277 del archivo original). Eliminarla habría roto esa funcionalidad sin que el spec lo contemplara.
+**Alternativas descartadas:** Mover el borrado de pre-aprobados a `PreApprovedLoanCard` con su propia mutation local. Descartado por estar fuera del alcance del step.
+**Consecuencias / riesgo residual:** `lib/delete-loan-handlers.ts` y sus tests (`tests/loans-table-view.test.ts`) quedan sin consumidor en `loans-table-view.tsx`. Las funciones exportadas siguen siendo válidas pero desacopladas de la UI; cleanup pendiente para un step futuro si no hay otro consumidor.
+
+> Generado por el loop · feature F-0095 · step 5
+
+---
+## ADR-0298 · 2026-10-09 · Contenido del desplegable móvil incluye Cobranza además de TNA y Riesgo
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El panel expandido en móvil muestra Rendimiento (TNA), Cobranza detallada (totalPending, capital/interés, barra de cobrado, chip de vencidas) y Riesgo. No solo TNA y Riesgo como dice el spec mínimo.
+**Contexto:** El spec dice "TNA y riesgo dentro del desplegable" pero la línea resumen sólo menciona "Esta semana" y "cuotas vencidas". Los datos de totalPending, capital/interés y barra de cobrado no aparecen en ninguno de los dos lugares si no se incluyen en el desplegable, lo que dejaría información de cobranza inaccesible en móvil.
+**Alternativas descartadas:** Omitir Cobranza del desplegable y mostrar sólo TNA + Riesgo (interpretación literal del spec). Eso ocultaría el monto pendiente total y el desglose capital/interés en móvil.
+**Consecuencias / riesgo residual:** Si el producto quiere el desplegable más acotado (solo TNA + Riesgo), hay que eliminar la sección Cobranza del bloque expandido. El cambio es localizado y no rompe nada.
+
+> Generado por el loop · feature F-0095 · step 4
+
+---
+## ADR-0297 · 2026-10-09 · Botón "Cobrar" en tarjeta móvil llama onSelect en lugar de abrir RegisterPaymentDialog directamente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El botón "Cobrar" de la tarjeta móvil llama `onSelect(loan.id)` en lugar de abrir `RegisterPaymentDialog` inline.
+**Contexto:** `RegisterPaymentDialog` requiere `LoanDetail` (con `loanInstallments` completo), pero en la lista sólo existe `LoanListItem`. Renderizar el diálogo inline implicaría una query adicional por fila. El botón de escritorio ya hace exactamente `onSelect(loan.id)` bajo el title "Registrar cobro".
+**Alternativas descartadas:** Fetch de `trpc.loans.getById` por demanda al pulsar "Cobrar" para poder abrir el diálogo inline; descartado porque agrega complejidad de estado, una query extra y no hay precedente en la tabla.
+**Consecuencias / riesgo residual:** El usuario es llevado a la pantalla de detalle donde `RegisterPaymentDialog` está disponible (incluyendo la barra fija `md:hidden` del detalle). Si en el futuro se quiere el diálogo inline desde la lista, deberá extraerse una variante ligera que sólo requiera `loanId` + `cur`.
+
+> Generado por el loop · feature F-0095 · step 3
+
+---
+## ADR-0296 · 2026-10-09 · Fixture (c) "solo interés" mapeado al status 'new'
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El fixture (c) representa un préstamo interest-only (`monthlyRate > 0`) con `nextDueDate = null` y `status = 'active'`, lo que produce `statusKey = 'new'` en `getLoanStatus`. Se usa `concept = 'solo interés'` para identificarlo en el output.
+**Contexto:** El spec nombraba el fixture como "solo interés" sin especificar exactamente qué rama de `getLoanStatus` debía ejercitar. Los estados cubiertos por los otros fixtures son current, overdue, open, completed y defaulted; el único camino sin cobertura era `!nextDue && status === 'active' → 'new'`, que corresponde a un préstamo interest-only activo sin cuotas pendientes asignadas.
+**Alternativas descartadas:** Hacer (c) idéntico a (a) pero con `loanType = 'interest_only'` (sin efecto en la función, ya que `getLoanListRow` no consume `loanType`); o saltar el status 'new' y dejar (c) como un segundo test 'current'. Ambas opciones habrían dejado el camino 'new' sin cobertura.
+**Consecuencias / riesgo residual:** Si el spec F-0095 define "solo interés" de forma distinta (por ej., como un loan con cuotas futuras en lugar de sin cuotas), el fixture deberá ajustarse en un step posterior. La cobertura del status 'new' igual queda asegurada.
+
+> Generado por el loop · feature F-0095 · step 2
+
+---
+## ADR-0295 · 2026-10-09 · getLoanStatus recibe `now` como parámetro opcional
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se agregó un parámetro opcional `now = new Date()` a `getLoanStatus` para que `getLoanListRow` pueda pasarle el mismo instante sin usar `new Date()` interno, manteniendo el comportamiento por defecto de los callers existentes.
+**Contexto:** El spec pide `getLoanListRow(loan, now)` con `daysOverdue` calculado con `calendarDaysAgoART(..., now)`, lo que requiere comparar estado y días de vencimiento con el mismo instante. La función original usaba `const now = new Date()` internamente, lo que podría producir una diferencia de microsegundos entre la comparación de estado y el cálculo de días.
+**Alternativas descartadas:** Dejar `getLoanStatus` sin cambios y calcular `now` internamente en `getLoanListRow`; descartado porque introduciría dos instantes distintos dentro de la misma llamada.
+**Consecuencias / riesgo residual:** Los callers que llamen `getLoanStatus(loan)` sin pasar `now` siguen funcionando idéntico. El nuevo parámetro queda abierto para tests deterministas (pasar fecha fija).
+
+> Generado por el loop · feature F-0095 · step 1
+
+---
 ## ADR-0294 · 2026-10-09 · `getInstallmentStatusLabel` acepta flags pre-computados, no el objeto crudo
 
 **Estado:** aceptada
