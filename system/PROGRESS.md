@@ -2710,3 +2710,34 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0098/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-10 — F-0099 completado
+
+## Feature F-0099
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear función pura `lib/quick-collect.ts` que derive el estado del botón 'Cobrar' ('idle' | 'loading' | 'error' | 'ready') a partir de `{ loanId, isLoading, isError, data }`: sin loanId → idle; isLoading → loading; isError → error; data de OTRO préstamo (data.id !== loanId) → NO ready (loading); data del elegido → ready. Agregar tests en `tests/quick-collect.test.ts` cubriendo los cinco casos (idle/loading/error/ready/datos de otro préstamo). (f9eaf514)
+- [x] Step 2: Extender `components/loans/register-payment-dialog.tsx` para admitir modo controlado con props opcionales `open`, `onOpenChange` y `hideTrigger`. Sin esas props el componente debe comportarse EXACTAMENTE igual que hoy (estado `open` interno, DialogTrigger visible) para no afectar los 4 usos existentes en `app/dashboard/loans/page.tsx`. No tocar la mutación `registerPayment`, sus invalidaciones, `getPaymentShortcuts` ni el cálculo de montos. (fc03b16d)
+- [x] Step 3: Crear componente `components/loans/quick-collect-dialog.tsx` que reciba `loanId: string | null` y `onOpenChange`/limpieza: usa `trpc.loans.getById` con `enabled` solo cuando hay loanId (una sola consulta, nunca por fila), deriva el estado con `quickCollectState` de `lib/quick-collect.ts`, muestra estado de carga, y en error muestra mensaje con botón 'Reintentar' (no abre modal vacío). Cuando el estado es 'ready' monta `RegisterPaymentDialog` en modo controlado (`open`, `onOpenChange`, `hideTrigger`) con el `LoanDetail`. Al cerrar limpia el préstamo elegido. (fa4aed67)
+- [x] Step 4: Cablear `QuickCollectDialog` en `components/loans/loans-table-view.tsx`: montarlo UNA sola vez con un estado `collectLoanId`, y cambiar el botón 'Cobrar' móvil (bloque '{/* Cobrar */}') y el ícono de billetera de escritorio (columna Acciones) para que hagan `e.stopPropagation()` + `setCollectLoanId(loan.id)` en vez de `onSelect(loan.id)`. Preservar la condición `getLoanListRow(...).canCollect`, el objetivo táctil mínimo 44px, el estado de carga/anti-doble-toque, y que tocar la tarjeta/fila fuera del botón siga llamando `onSelect` (detalle). No agregar `useQuery` dentro del `.map` de filas. (88c4d5a8)
+- [x] Step 5: Agregar test de código fuente (`fs`) en `tests/quick-collect-wiring.test.ts` que lea `components/loans/loans-table-view.tsx` y verifique que el botón 'Cobrar' ya no llama `onSelect` directamente (usa `setCollectLoanId`) y que no existe ningún `useQuery` dentro del `.map` de filas. (ee4a8d0d)
+- [x] Step 6: Refactorizar el guardián `tests/no-instant-overdue.test.ts`: reemplazar `WHITELIST_FILES` (nivel archivo) por una lista blanca a nivel de LÍNEA donde cada entrada declara `{ file, snippet, reason }` anclada por fragmento exacto de contenido. Actualizar `findViolations` para exentar solo las líneas cuyo contenido coincide con el snippet declarado. Entradas: (1) `server/services/loan-accounting.service.ts` comparación `new Date(i.dueDate) < paymentMonthStart`; (2) `server/routers/loans/dashboard.ts` línea XIRR `new Date(inst.dueDate) > now`; (3) `lib/installment-status.ts` la regla canónica. Releer los archivos reales para anclar por contenido (no por número de línea). (1dffbe84)
+- [x] Step 7: Agregar al guardián validación de lista blanca obsoleta: el test debe fallar si una entrada de la lista blanca ya no coincide con ninguna línea de su archivo, o coincide más veces de las declaradas. Cubrir que cualquier otra comparación de instante nueva en esos mismos archivos (en otra línea) sea detectada como violación. (ff9cdadd)
+- [x] Step 8: Ejecutar la prueba de mutación sobre el código real: (a) insertar una comparación de instante nueva en `server/routers/loans/dashboard.ts` y confirmar que el guardián falla; (b) idem en `server/services/loan-accounting.service.ts`; (c) alterar la línea permitida del XIRR y confirmar fallo por lista blanca obsoleta. Revertir cada mutación con `git checkout <sha> -- <archivo>` y `git checkout HEAD -- <archivo>` (nunca con redirección de PowerShell). Documentar resultados en un ADR `docs/adr/F-0099-*.md` con inventario de sitios. (1034aa65)
+- [x] Step 9: Cierre: correr typecheck, lint con cero warnings (`npx eslint . --ext .ts,.tsx --max-warnings 0`) y `npm test` completos, verificando que todo pasa y que el modal es usable a 375px sin scroll horizontal. (1034aa65)
+
+### Decisiones (ADR)
+- ADR-0318 — Estado "datos de otro préstamo" se mapea a 'loading' y no a 'idle' ni a un estado propio [Supuesto del agente] **⚠ REVISAR**
+- ADR-0319 — Modo controlado con estado interno siempre activo (semáforo paralelo) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0320 — Loading y error states en Dialog wrapper, no en fragmento flotante [Supuesto del agente] **⚠ REVISAR**
+- ADR-0321 — Fragment wrapper en return de LoansTableView para montar QuickCollectDialog [Supuesto del agente] **⚠ REVISAR**
+- ADR-0322 — Identificar botones Cobrar por marcador de contenido en lugar de número de línea [Supuesto del agente] **⚠ REVISAR**
+- ADR-0323 — Snippet para lib/installment-status.ts es documentacional (no funcional) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0324 — Semántica de "coincide" en validación de lista blanca: presencia de texto vs. coincidencia con INSTANT_PATTERN [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0099/`
+
+> Revisar con Claude in Chrome para validación de UX.

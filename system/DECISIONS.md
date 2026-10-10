@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0324 · 2026-10-10 · Semántica de "coincide" en validación de lista blanca: presencia de texto vs. coincidencia con INSTANT_PATTERN
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La validación de obsolescencia comprueba que el snippet de texto aparezca en al menos una línea del archivo (búsqueda de string simple), no que esa línea también coincida con un INSTANT_PATTERN.
+**Contexto:** Las entradas de `lib/installment-status.ts` y `loan-accounting.service.ts` tienen snippets cuyas líneas no coinciden con INSTANT_PATTERNS (el primero usa días calendario, el segundo compara contra `paymentMonthStart`). Si la validación requiriera coincidencia con INSTANT_PATTERN, ambas entradas quedarían inmediatamente marcadas como stale y deberían eliminarse, lo cual requeriría una decisión de negocio (¿siguen siendo necesarias como documentación?). El spec no especifica qué se entiende por "coincide".
+**Alternativas descartadas:** Validar que el snippet aparezca en una línea que TAMBIÉN matchee INSTANT_PATTERN; descartado porque requería remover dos entradas de whitelist justificadas por ADRs F-0095/F-0096 sin instrucción explícita del spec.
+**Consecuencias / riesgo residual:** Las entradas de `lib/installment-status.ts` y `loan-accounting.service.ts` documentan exenciones que técnicamente no son necesarias para el escáner actual (esas líneas no dispararían INSTANT_PATTERNS). Si en el futuro se afina `validateWhitelist` para requerir coincidencia con INSTANT_PATTERN, esas dos entradas deberán revisarse.
+
+> Generado por el loop · feature F-0099 · step 7
+
+---
+## ADR-0323 · 2026-10-10 · Snippet para lib/installment-status.ts es documentacional (no funcional)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usó `"if (daysAgo > 0) return 'overdue'"` como snippet para la entrada de `lib/installment-status.ts`, sabiendo que esa línea nunca coincide con INSTANT_PATTERNS y la entrada es inerte.
+**Contexto:** El spec pide incluir `lib/installment-status.ts` como tercera entrada de WHITELIST_LINES ("la regla canónica"), pero ninguna línea de ese archivo coincide con los 4 INSTANT_PATTERNS (usa `daysAgo`, no `.dueDate`). No había un snippet funcionalmente necesario; elegir uno documentacional era el único camino que cumplía el spec.
+**Alternativas descartadas:** Omitir la entrada de installment-status.ts (más limpio, pero incumple el spec); usar el nombre de la función como snippet; usar el patrón `calendarDaysAgoART`.
+**Consecuencias / riesgo residual:** Si en el futuro se agrega una línea en installment-status.ts que compare `.dueDate` directamente pero no contenga el snippet elegido, esa línea NO quedará exenta. El snippet actual solo cubre la línea `if (daysAgo > 0) return 'overdue'`.
+
+> Generado por el loop · feature F-0099 · step 6
+
+---
+## ADR-0322 · 2026-10-10 · Identificar botones Cobrar por marcador de contenido en lugar de número de línea
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los botones Cobrar se ubican dentro de los map bodies extrayendo bloques `<Button>...</Button>` por su contenido identificador ("Cobrar" o `title="Registrar cobro"`), no por número de línea.
+**Contexto:** El spec pide un test FS que verifique el cableado del botón, pero no especifica cómo localizar los botones dentro del árbol JSX. Anclar por número de línea haría el test frágil ante inserciones de código.
+**Alternativas descartadas:** Anclar por línea (como hace el guardián de vencidas para excepciones); regex multilinea sobre el archivo completo sin extraer map bodies.
+**Consecuencias / riesgo residual:** Si se agrega un `<Button>` extra con texto "Cobrar" que NO sea el botón de cobro, el test fallaría. En la práctica improbable dado el dominio; si ocurre, el marcador deberá hacerse más específico (e.g. buscar el bloque `canCollect`).
+
+> Generado por el loop · feature F-0099 · step 5
+
+---
+## ADR-0321 · 2026-10-10 · Fragment wrapper en return de LoansTableView para montar QuickCollectDialog
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se envuelve el return de LoansTableView en un Fragment (`<>`) para poder montar `QuickCollectDialog` como hermano del `<div className="space-y-4">`, sin alterar la estructura DOM existente.
+**Contexto:** El spec pide montar el dialog UNA sola vez fuera del `.map`. El componente devolvía un único `<div>`, y no había contenedor padre disponible dentro del scope del componente sin cambiar el DOM.
+**Alternativas descartadas:** Agregar el dialog dentro del `<div className="space-y-4">` como primer hijo (habría sido igualmente correcto pero mezcla el modal con el contenido de la lista). Usar `React.createPortal` (innecesario, shadcn Dialog ya hace portal internamente).
+**Consecuencias / riesgo residual:** Ninguna: Fragment no genera DOM. Si en el futuro el componente necesita devolver un elemento raíz concreto (ej. para `ref` externo), el Fragment deberá reemplazarse.
+
+> Generado por el loop · feature F-0099 · step 4
+
+---
+## ADR-0320 · 2026-10-10 · Loading y error states en Dialog wrapper, no en fragmento flotante
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los estados `loading` y `error` se muestran dentro de un `<Dialog>` de shadcn/ui, no como UI flotante fuera del flujo modal. El botón "Reintentar" llama `query.refetch()` y no re-setea `loanId` en el padre.
+**Contexto:** El spec pide "muestra estado de carga" y "en error muestra mensaje con botón 'Reintentar' (no abre modal vacío)", pero no especifica el contenedor visual. La alternativa —mostrar un toast o banner fuera del Dialog— implicaría que el usuario tenga que hacer click nuevamente para abrir el modal tras un reintento exitoso.
+**Alternativas descartadas:** Toast/banner fuera del modal (descartado: peor UX, requeriría dos interacciones para reintentar); skeleton dentro de RegisterPaymentDialog (descartado: violaría "no abre modal vacío").
+**Consecuencias / riesgo residual:** Al cerrar el Dialog de loading/error se llama `onOpenChange(false)` que limpia `loanId` en el padre — si el usuario cierra durante la carga, cancela la operación (comportamiento esperado).
+
+> Generado por el loop · feature F-0099 · step 3
+
+---
+## ADR-0319 · 2026-10-10 · Modo controlado con estado interno siempre activo (semáforo paralelo)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se mantiene el `useState(false)` interno y se computa `dialogOpen` como `controlledOpen ?? open`, en lugar de eliminar el estado interno al detectar modo controlado. En `handleOpenChange` y `onSuccess` se llama tanto a `setOpen` como a `onControlledOpenChange?`.
+**Contexto:** El spec pide modo controlado opcional pero no especifica si el estado interno debe desactivarse cuando el padre toma el control. Eliminar el estado interno hubiera requerido reestructurar el orden del hook `useMutation`, que ya captura `setOpen` en su closure de `onSuccess`.
+**Alternativas descartadas:** Alternativa descartada: usar `useRef` para estabilizar el setter y evitar el doble estado. Añade complejidad sin beneficio observable para este alcance.
+**Consecuencias / riesgo residual:** En modo controlado el estado interno espeja el externo (ambos terminan en `false` al cerrar), lo cual es inofensivo. Si en el futuro se necesita `unmount-on-close`, habrá que depurar el estado interno al transicionar a controlado.
+
+> Generado por el loop · feature F-0099 · step 2
+
+---
+## ADR-0318 · 2026-10-10 · Estado "datos de otro préstamo" se mapea a 'loading' y no a 'idle' ni a un estado propio
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando `data` existe pero `data.id !== loanId`, se retorna `'loading'` en lugar de introducir un estado nuevo o retornar `'idle'`, porque la query está retornando datos de un préstamo anterior mientras el nuevo todavía no llegó.
+**Contexto:** La spec dice explícitamente "NO ready" para ese caso pero no especifica a cuál de los otros tres estados mapearlo. El patrón de React Query donde los datos del cache anterior se sirven mientras se recarga (stale-while-revalidate) hace que `isLoading` sea `false` aunque los datos sean de la selección anterior, por lo que `'idle'` sería semánticamente incorrecto.
+**Alternativas descartadas:** Retornar `'idle'` (incorrecto: hay una selección activa); crear un 5.º estado `'stale'` (sobreespecificado para el consumo previsto en el feature).
+**Consecuencias / riesgo residual:** El componente que consuma este estado debe tratar `'loading'` de forma uniforme ya sea por primera carga o por cambio de selección; si en el futuro se necesita distinguir ambos casos habrá que introducir el estado `'stale'`.
+
+> Generado por el loop · feature F-0099 · step 1
+
+---
 ## ADR-0317 · 2026-10-10 · ViewModeHelp usa estado open controlado para soporte táctil
 
 **Estado:** aceptada
