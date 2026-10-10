@@ -2680,3 +2680,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0097/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-10 — F-0098 completado
+
+## Feature F-0098
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar `./lib/**/*.{ts,tsx}` al array `content` de `tailwind.config.ts` para que se generen las clases de color de `lib/ui/category-colors.ts` (`CATEGORY_BADGE_CLASSES`) y `lib/transaction-utils.ts` (`getExpenseTypeColor`: structural, emotional_recurrent, emotional_impulsive). Agregar un test vitest (patrón de `prisma/__tests__/seed.test.ts`, usando `fs`) que verifique que algún glob de `content` cubre esos dos archivos resolviéndolos contra el repo; si compilar el CSS con la API de tailwind dentro de vitest resulta viable, verificar en su lugar que cada clase aparece como selector en el CSS generado. Dejar en el ADR cuál estrategia de test se usó y por qué, más el resultado de la prueba de mutación (quitar la línea de `lib` hace fallar el test). (6a6c242d)
+- [x] Step 2: Reemplazar `text-[10px]` y `text-[9px]` por `text-xs` en chips de categoría/tipo, badges de estado y metadatos de fila de las listas indicadas: `app/dashboard/page.tsx` (L821, L901-904), `app/dashboard/installments/page.tsx` (L98), `app/dashboard/third-party/page.tsx` (L231), `app/dashboard/projections/page.tsx` (L83, L95), `components/analytics/top-expenses-bar.tsx` (L97, L111, L117) y `components/third-party/third-party-detail.tsx` (L108-122). NO tocar: pestañas de la barra inferior móvil (`app/dashboard/layout.tsx` L382/L395), ejes/leyendas de gráficos (`daily-evolution-bar.tsx`, `monthly-evolution-chart.tsx`, `subcategory-donut.tsx`) ni el pie del sidebar. Agregar un test vitest de lectura de archivos que verifique que no queda `text-[10px]` ni `text-[9px]` en `installments/page.tsx`, `third-party/page.tsx`, `third-party-detail.tsx`, `projections/page.tsx` y `top-expenses-bar.tsx`. (158ef445)
+- [x] Step 3: Corregir ortografía con tildes en todo el texto visible de `app/dashboard/budget/page.tsx` (toasts, títulos, encabezados, placeholders y contador: L69, L89, L123, L151, L236-249, L315, L317, L447, L599-626): 'categoría(s)', 'subcategoría(s)', 'límite(s)', 'Categoría', 'Límite'. NO tocar identificadores ni claves de datos. Agregar test vitest de lectura que verifique que no queda `categoria`, `categorias`, `limite` ni `limites` sin tilde (case-insensitive) fuera de identificadores; listar en el ADR las excepciones. (070be8f0)
+- [x] Step 4: Eliminar la duplicación de botones 'Agregar límite' en `app/dashboard/budget/page.tsx`: con límites cargados queda únicamente el botón del encabezado (L128), ocultando el que está sobre la tabla (L306); en estado vacío queda únicamente el del estado vacío (L251) y se oculta el del encabezado. Leer el archivo para confirmar qué combinaciones coexisten hoy y documentar el resultado en el ADR. No agregar columna 'Restante' ni tocar el cálculo de porcentaje. (941ed4ad)
+- [x] Step 5: Quitar controles muertos en `app/dashboard/layout.tsx`: (a) eliminar el enlace 'Settings' del pie del sidebar (L224-227) dejando el nombre de usuario sin enlace; (b) eliminar la campana 'Notificaciones' del header de escritorio (L257-259) y del header móvil (L284-286). Eliminar los imports huérfanos resultantes (`Bell`, `Settings`) y verificar que `UserButton` sigue visible en ambos headers. No implementar panel de alertas. (86d03d38)
+- [x] Step 6: Crear función pura `formatInstallmentCount(n)` en `lib/` (o en un archivo de formato existente adecuado): 0 → '0 CUOTAS', 1 → '1 CUOTA', N ≥ 2 → 'N CUOTAS'. Usarla en `app/dashboard/projections/page.tsx` (L84) y en cualquier otro lugar donde hoy se arme ese texto a mano (hacer grep de `CUOTAS`/`cuotas` en `app` y `components` y dejar la lista en el ADR). Agregar tests vitest con fixtures 0, 1, 2 y 12, incluyendo prueba de mutación que rompa el caso singular. (468cd75f)
+- [x] Step 7: Corregir el corte de texto en los selects de filtros de `app/dashboard/transactions/page.tsx`: período (L449, `w-[170px]`), categoría y los otros dos filtros (L489, L500, L514, `w-[160px]`) y orden (L538, `w-[170px]`). Reemplazar el ancho fijo por `w-auto` con `min-w` y `max-w-full` (o acortar etiquetas visibles sin cambiar valores). No cambiar valores, estado, filtros ni el período por defecto ('Todo'). En 390 px los filtros deben envolver en varias líneas sin desborde horizontal. (46aa1d11)
+- [x] Step 8: Extraer el ícono de ayuda con tooltip Económico/Financiero existente en `app/dashboard/transactions/page.tsx` (L389-431, usa `TooltipProvider`, `Tooltip`, `HelpCircle` y `components/ui/tooltip`) a un componente compartido `components/ui/view-mode-help.tsx` sin cambiar el texto actual. Usarlo en Movimientos y en el selector del Dashboard (`app/dashboard/page.tsx` L205-212), y en Análisis (`app/dashboard/analytics/page.tsx` L106) si aparece el mismo selector. El botón debe tener `aria-label` y ser operable con teclado y toque, no solo hover. (79e87288)
+- [x] Step 9: Corregir el desborde de la barra de progreso del ranking 'Top gastos' en `components/analytics/top-expenses-bar.tsx` (L129): la barra usa `w-full` más `ml-7` y se sale 28 px de la tarjeta. Reemplazar por un contenedor con `pl-7` (o ancho calculado) para que la barra del primer puesto no exceda el ancho de la tarjeta. No cambiar los datos ni el cálculo de `barWidth`. (23f085ae)
+- [x] Step 10: Cierre: ejecutar typecheck (`verifyCmd`), lint (`lintCmd`) y `npm test` (`testCmd`) completos del target según `targets/targets.json` y corregir cualquier fallo residual para que todo pase sin cambiar lógica de negocio, datos ni esquema. (23f085ae)
+
+### Decisiones (ADR)
+- ADR-0313 — Estrategia de test: cobertura por glob con fs + RegExp (no compilación CSS) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0314 — Se corrigió una ocurrencia adicional en top-expenses-bar.tsx fuera de las líneas del spec [Supuesto del agente] **⚠ REVISAR**
+- ADR-0315 — Test de tildes sin excluir líneas de código por regex de contexto [Supuesto del agente] **⚠ REVISAR**
+- ADR-0316 — Condición del botón del encabezado: hasCategories && progressList.length > 0 [Instrucción de Augusto]
+- ADR-0317 — ViewModeHelp usa estado open controlado para soporte táctil [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0098/`
+
+> Revisar con Claude in Chrome para validación de UX.

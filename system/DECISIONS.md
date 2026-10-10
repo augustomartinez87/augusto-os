@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0317 · 2026-10-10 · ViewModeHelp usa estado open controlado para soporte táctil
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El componente mantiene `useState(false)` y expone `onClick` que hace toggle de `open`, mientras que `onOpenChange` de Radix sigue manejando hover/focus/Escape.
+**Contexto:** Radix Tooltip abre solo en hover y focus; en móvil táctil no hay hover, así que sin intervención el ícono sería inoperable. El spec pide "operable con teclado y toque, no solo hover" pero no especifica el mecanismo exacto.
+**Alternativas descartadas:** Usar Popover en lugar de Tooltip (más complejo, cambiaría el estilo visual); envolver con `onClick` sin estado controlado (no funciona porque Radix ignora el click en el trigger sin `open` controlado).
+**Consecuencias / riesgo residual:** Click en escritorio también toglea el tooltip en lugar de dejarlo abierto solo por hover — comportamiento levemente distinto al de un tooltip puro, pero aceptable para un ícono de ayuda.
+
+> Generado por el loop · feature F-0098 · step 8
+
+---
+## ADR-0316 · 2026-10-10 · Condición del botón del encabezado: hasCategories && progressList.length > 0
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** spensiv
+
+**Decisión:** El botón "Agregar límite" del encabezado se muestra solo cuando existen límites cargados (progressList.length > 0), no simplemente cuando hay categorías disponibles.
+**Contexto:** Con la condición original `hasCategories`, el botón del encabezado coexistía con el botón del estado vacío cuando había categorías pero no había límites. El spec dice que en estado vacío debe quedar únicamente el botón del estado vacío.
+**Alternativas descartadas:** Mover el botón del encabezado siempre visible y eliminar el de EmptyState; o pasar una prop `showHeaderButton` desde BudgetPage hacia abajo. Ambas implican más superficie de cambio.
+**Consecuencias / riesgo residual:** Si en el futuro se quiere mostrar el botón del encabezado también en estado vacío (sin pasar por el EmptyState), habrá que ajustar esta condición.
+
+> Generado por el loop · feature F-0098 · step 4
+
+---
+## ADR-0315 · 2026-10-10 · Test de tildes sin excluir líneas de código por regex de contexto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El test usa `\bword\b` sobre el archivo completo sin filtrar líneas de código JavaScript, ya que ningún identificador camelCase en este archivo usa las formas españolas sin tilde ('categoria', 'limite'). La lista de excepciones queda vacía.
+**Contexto:** El spec pide verificar "fuera de identificadores" pero no especifica cómo implementar esa exclusión. Un parser TSX sería más robusto pero excede el scope; la alternativa más simple es confiar en que los identificadores del archivo usan la forma inglesa ('category', 'limit') y documentar las excepciones conocidas como lista vacía.
+**Alternativas descartadas:** Filtrar líneas con regex de camelCase antes de buscar (descartado por complejidad innecesaria); compilar AST con ts-morph para extraer solo nodos de string (descartado por overhead de dependencia).
+**Consecuencias / riesgo residual:** Si en el futuro se agrega un identificador camelCase usando la forma española sin tilde (p.ej. `categoriasSeleccionadas`), el test fallaría con falso positivo y habría que agregar su línea a `KNOWN_EXCEPTIONS`.
+
+> Generado por el loop · feature F-0098 · step 3
+
+---
+## ADR-0314 · 2026-10-10 · Se corrigió una ocurrencia adicional en top-expenses-bar.tsx fuera de las líneas del spec
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se reemplazó también el `text-[10px]` en L75 (subtítulo del CardTitle), que no figuraba en el spec (L97, L111, L117), porque el test de regresión lo detectó y dejarlo rompería el propio test pedido.
+**Contexto:** El spec listaba líneas específicas pero no era exhaustivo; al ejecutar el test quedó expuesta una cuarta ocurrencia en el mismo archivo.
+**Alternativas descartadas:** Excluir esa línea del test o del reemplazo, pero habría dejado texto < 12 px en el componente con el test pasando artificialmente.
+**Consecuencias / riesgo residual:** El archivo queda completamente limpio de sub-12px en top-expenses-bar.tsx; no hay impacto visual regresivo ya que la clase resultante (text-xs = 12px) es mayor que la anterior (10px).
+
+> Generado por el loop · feature F-0098 · step 2
+
+---
+## ADR-0313 · 2026-10-10 · Estrategia de test: cobertura por glob con fs + RegExp (no compilación CSS)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El test lee `tailwind.config.ts` con `fs`, parsea el array `content` con regex, convierte cada glob a `RegExp` mediante `globToRegExp` y verifica que `lib/ui/category-colors.ts` y `lib/transaction-utils.ts` queden cubiertos. Se descartó compilar CSS con `require('tailwindcss')`.
+**Contexto:** La compilación CSS con PostCSS+Tailwind es más definitiva pero exige `require('tailwindcss')` (import CJS) en un módulo TypeScript ESM. La config `eslint` del repo hereda `next/core-web-vitals` que trata `@typescript-eslint/no-require-imports` como error duro; no hay regla local que permita silenciarlo, por lo que `next lint` falla. La alternativa `import tailwindcss from 'tailwindcss'` no compila por incompatibilidad de tipos del plugin PostCSS v3.
+**Alternativas descartadas:** Descartada compilación CSS (eslint error duro + tipos incompatibles en PostCSS v3). Descartada dependencia nueva `minimatch`/`micromatch` (excede el cambio mínimo).
+**Consecuencias / riesgo residual:** El test verifica cobertura estructural del glob, no generación real de clases. La prueba de mutación confirmó que quitar `./lib/**/*.{ts,tsx}` de `tailwind.config.ts` hace fallar 4 de los 7 tests (los 2 de cobertura y los 2 de mutación explícita).
+
+> Generado por el loop · feature F-0098 · step 1
+
+---
 ## ADR-0312 · 2026-10-09 · dashboard.ts:448 excluido de la regla única — XIRR forward cashflows
 
 **Estado:** aceptada
