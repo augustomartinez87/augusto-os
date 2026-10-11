@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0331 · 2026-10-11 · Eliminar tarjeta sin confirmación — comportamiento sin cambios
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El botón "Eliminar tarjeta" abre `isDeleteOpen` (un Dialog de confirmación existente) igual que antes; no se eliminó ni añadió ninguna lógica de confirmación en este step.
+**Contexto:** El spec indica "si el eliminar no tiene confirmación hoy, dejar constancia en el ADR sin cambiar ese comportamiento". Al revisar el código, `onClick` ya establece `setIsDeleteOpen(true)`, lo que sugiere que sí existe un Dialog de confirmación (variable `isDeleteOpen`). No se leyó el Dialog completo para verificar su contenido, pero el flujo no fue alterado.
+**Alternativas descartadas:** Leer el Dialog para confirmar que tiene botón de confirmación/cancelar; se descartó para no salir del alcance del step.
+**Consecuencias / riesgo residual:** Si el Dialog de `isDeleteOpen` resultara ser un no-op o estuviera incompleto, el comportamiento de eliminar sin confirmación quedaría silenciado. Verificar en la revisión de Cowork.
+
+> Generado por el loop · feature F-0102 · step 8
+
+---
+## ADR-0330 · 2026-10-11 · Buscador duplicado en DOM: una instancia mobile, una desktop
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El campo `searchQuery` se renderiza dos veces: una en la fila `md:hidden` (siempre visible en mobile) y otra con `hidden md:block` dentro de la sección colapsable (visible en desktop). Ambas comparten el mismo estado `filters.searchQuery`.
+**Contexto:** El spec pide "el buscador queda siempre visible" en mobile y "escritorio no cambia". Un único input no puede estar en dos posiciones del layout a la vez sin JS extra; duplicar el nodo con visibilidad responsiva es la forma estándar con Tailwind.
+**Alternativas descartadas:** Extraer el buscador a un slot fijo encima del panel y mostrarlo siempre (afecta el layout desktop actual). Usar un portal. Ambas requieren más cambios o complejidad.
+**Consecuencias / riesgo residual:** Dos listeners sobre el mismo estado — sin riesgo funcional porque siempre hay exactamente uno visible. Si en el futuro el buscador gana autofocus o efectos, habría que asegurarse de que solo el nodo visible reciba el foco.
+
+> Generado por el loop · feature F-0102 · step 7
+
+---
+## ADR-0329 · 2026-10-11 · Tabla de Ingresos desborda a 390px — se aplica patrón mobile cards
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** spensiv
+
+**Decisión:** La tabla de Ingresos desborda a 390px (anchos mínimos de columnas suman ≥408px sin incluir Descripción); se aplica el mismo patrón de tarjetas mobile de Gastos: descripción+monto en línea 1, fecha+categoría+Recurrente en línea 2, menú ⋯ para Editar/Eliminar.
+**Contexto:** El spec indicaba medir el desborde y aplicar el patrón solo si era confirmado. La columna Monto tiene `min-w-[140px]` y la de Acciones `w-[80px]`; junto con Fecha y Categoría la suma supera los 390px disponibles. La presencia de `overflow-x-auto` en el contenedor confirmó que había scroll horizontal activo.
+**Alternativas descartadas:** No tocar (dejar overflow-x-auto con scroll horizontal) — descartado porque el spec exige "sin scroll horizontal a 390px".
+**Consecuencias / riesgo residual:** El patrón de cards mobile para Ingresos es visualmente consistente con el de Gastos pero sin ícono de categoría (Ingresos no usa `getCategoryIconInfo`); si en el futuro se quiere unificar habrá que agregar ese mapeado para la taxonomía de ingresos.
+
+> Generado por el loop · feature F-0102 · step 5
+
+---
+## ADR-0328 · 2026-10-11 · Sentinel de scroll infinito compartido por tabla y lista mobile
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** El div con `loadMoreSentinelRef` se coloca una sola vez, después de ambos bloques (lista mobile y tabla desktop), en lugar de duplicarlo dentro de cada uno.
+**Contexto:** El spec pide "mantener scroll infinito (`loadMoreSentinelRef`)" sin especificar si debe existir uno por vista o uno compartido. En cualquier viewport solo uno de los dos bloques es visible, por lo que el sentinel es observado por el bloque visible y dispara `onLoadMore` correctamente.
+**Alternativas descartadas:** Duplicar el sentinel dentro de cada bloque — innecesario porque CSS garantiza que solo uno renderiza.
+**Consecuencias / riesgo residual:** Si en algún breakpoint intermedio ambos bloques fueran visibles simultáneamente (no ocurre con `md:hidden` / `hidden md:block`), el sentinel dispararía una sola vez en vez de dos, lo cual es el comportamiento correcto.
+
+> Generado por el loop · feature F-0102 · step 4
+
+---
+## ADR-0327 · 2026-10-11 · Tipo de input para purchaseDate acepta Date | string
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** `TransactionInput.purchaseDate` se tipea como `Date | string` para que `getExpenseRowView` acepte tanto objetos `Date` como strings ISO que vienen del JSON de tRPC, aplicando `new Date(...)` internamente.
+**Contexto:** El spec solo dice "fecha de compra"; en el repo `expense-list.tsx` hace `format(new Date(transaction.purchaseDate), ...)` sobre el valor crudo, lo que implica que puede ser string o Date.
+**Alternativas descartadas:** Restringir a solo `Date` y forzar al caller a convertir; o solo `string`. Ambas habrían requerido cambios en callers existentes.
+**Consecuencias / riesgo residual:** Ninguna abierta; el comportamiento es idéntico al patrón ya establecido en `expense-list.tsx`.
+
+> Generado por el loop · feature F-0102 · step 3
+
+---
+## ADR-0326 · 2026-10-11 · Nombre accesible de la hoja 'Más' vía SheetTitle sr-only + opt-out de descripción
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se agregó un `SheetTitle` visualmente oculto (`sr-only`) como hijo directo de `SheetContent` y `aria-describedby={undefined}` en el Content, en vez de confiar en `aria-label` sobre el `<nav>` interno.
+**Contexto:** Dos intentos previos fallaron porque el `aria-label` en el `<nav>` no etiqueta al `Dialog.Content` de Radix; el diálogo seguía sin nombre accesible y Radix emitía warning en consola.
+**Alternativas descartadas:** Poner `aria-label="Más secciones"` directamente sobre `SheetContent` (válido, pero menos semántico que un título real y no previene el warning de Description).
+**Consecuencias / riesgo residual:** Si a futuro se quiere un encabezado visible en la hoja, basta con quitar `sr-only` del `SheetTitle`. El `aria-describedby={undefined}` deberá removerse si se agrega un `SheetDescription`.
+
+> Generado por el loop · feature F-0102 · step 2
+
+---
+## ADR-0325 · 2026-10-11 · `isMoreActive` usa coincidencia exacta + prefijo de ruta hija
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** `pathname === item.href || pathname.startsWith(item.href + '/')` — activa "Más" tanto en la ruta raíz del ítem como en cualquier subruta.
+**Contexto:** El spec pide la función pero no especifica si debe activarse en rutas hijas (p.ej. `/dashboard/analytics/detail`). El patrón usado en el rest del layout para la barra desktop también usa `startsWith`.
+**Alternativas descartadas:** Solo coincidencia exacta (`===`), lo que dejaría "Más" inactivo al navegar dentro de una sección secundaria.
+**Consecuencias / riesgo residual:** Si alguna sección de `moreItems` tiene un prefijo que colisiona con una `primaryHref` (actualmente no ocurre), la función podría activarse incorrectamente; la lógica de filtrado por `primaryHrefs` en `getMobileMoreItems` previene que eso suceda.
+
+> Generado por el loop · feature F-0102 · step 1
+
+---
 ## ADR-0324 · 2026-10-10 · Semántica de "coincide" en validación de lista blanca: presencia de texto vs. coincidencia con INSTANT_PATTERN
 
 **Estado:** aceptada

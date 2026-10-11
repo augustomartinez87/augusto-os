@@ -2741,3 +2741,34 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0099/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-11 — F-0102 completado
+
+## Feature F-0102
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `lib/navigation.ts` moviendo SIN cambios de contenido los arrays `navigation` y `mobileNavBase` desde `app/dashboard/layout.tsx` (L45-73) y actualizar el layout para importarlos. Agregar dos funciones puras: `getMobileMoreItems(sections, primaryHrefs, isAdmin)` que devuelve en orden los ítems de `navigation` cuyo `href` NO esté en `primaryHrefs`, omitiendo secciones `adminOnly` cuando `isAdmin` es falso, e `isMoreActive(pathname, moreItems)`. Añadir tests en `lib/__tests__/` con los datos reales (no admin → installments/third-party/projections/analytics; admin → esos cuatro más /dashboard/admin; cards no aparece) y la prueba de mutación (ignorar `isAdmin` rompe el test). (780f1e76)
+- [x] Step 2: En la barra inferior móvil de `app/dashboard/layout.tsx` (L374-410) reemplazar el slot 'Perfil' (UserButton transparente superpuesto, L384-398) por una pestaña 'Más' con ícono de menú que abre una hoja inferior (`components/ui/sheet`, lado inferior) listando los ítems de `getMobileMoreItems`: ícono + nombre, filas ≥48px, texto ≥16px, ruta activa con `aria-current='page'`, cierre al navegar/Escape/tap fuera. La pestaña 'Más' se marca activa con `isMoreActive`. Las 5 pestañas usan `flex-1 min-w-0`, etiquetas `text-xs` (12px) y áreas táctiles ≥44px, sin desborde a 360/390px. Mantener el UserButton solo en el header móvil (L287). La hoja queda con z-index mayor que el botón flotante '+'. (b0c58fcf)
+- [x] Step 3: Crear módulo puro `lib/transaction-row-view.ts` con `getExpenseRowView(transaction)` que devuelve `{ dateLabel, title, categoryName, subcategoryName, isPendingClassification, typeLabel, typeClass, methodLabel, isVoided }` reutilizando los helpers existentes (`getTransactionCategoryLabel`, `isTransactionPendingClassification`, `getExpenseTypeLabel`, `getExpenseTypeColor`, `getPaymentMethodLabel`) y con `paymentMethod` ausente cayendo en `'credit_card'`. Agregar tests con fixtures (a-g: crédito, transferencia, pendiente, anulado, expenseType nulo, paymentMethod ausente, fecha 31 dic con formato `d MMM yy` en español) y prueba de mutación (romper el default de paymentMethod hace fallar el caso f). (06ba5cf1)
+- [x] Step 4: En `components/transactions/expense-list.tsx`: por debajo de `md` ocultar la tabla (`hidden md:block`) y renderizar una lista de tarjetas (`md:hidden`) que lee de `getExpenseRowView`. Cada tarjeta: línea 1 con ícono de categoría, descripción truncada y monto a la derecha en negrita `tabular-nums` usando `PrivateAmount`; línea 2 categoría/subcategoría (o etiqueta de pendiente); línea 3 fecha, chip de tipo (`text-xs`) y método de pago. Movimientos anulados con `opacity-50`, `line-through` y 'ANULADO'. Botón '⋯' ≥44×44px con `aria-label` (descripción del gasto) que abre menú `dropdown-menu` con 'Editar' y 'Eliminar' (destructivo) usando los mismos manejadores/diálogos de la tabla (`startEditingTransaction`, `setTransactionToDelete`). Mantener scroll infinito (`loadMoreSentinelRef`) y la tabla intacta desde `md`. (ec132f66)
+- [x] Step 5: Medir en `components/transactions/income-list.tsx` si a 390px el monto de la tabla de Ingresos queda fuera de pantalla. Si desborda, aplicar el mismo patrón de tarjetas móviles que Gastos (monto a la derecha, fecha y categoría debajo, menú '⋯' con Editar/Eliminar usando los manejadores existentes), conservando 'Recurrente' y el color verde del monto; si no desborda, no tocar el componente. Dejar constancia de la medición en el ADR. (24e49800)
+- [x] Step 6: Crear función pura `countActiveFilters(filters, datePreset)` en `lib/` que cuenta un filtro por cada uno de tarjeta, categoría y tipo con valor, más uno si `datePreset !== 'all'`; el orden y el texto de búsqueda no cuentan. Agregar tests con fixtures (sin filtros → 0; solo tarjeta → 1; los tres filtros + 'this-month' → 4; período 'all' → no suma). (69496dd8)
+- [x] Step 7: En `app/dashboard/transactions/page.tsx` (bloque de filtros L420-520): por debajo de `md` agregar un botón 'Filtros' que muestra la cantidad activa via `countActiveFilters` (ej. 'Filtros (2)') y que pliega/despliega los selects de período, tarjeta, categoría, tipo y orden; el buscador queda siempre visible; estado inicial plegado; plegar no resetea ningún filtro. Desde `md` los filtros se ven como hoy. Mantener el período por defecto 'Todo' y todo el comportamiento de filtrado. (24254d40)
+- [x] Step 8: En `app/dashboard/cards/page.tsx` (L348) cambiar el contenedor de acciones de `opacity-0 group-hover:opacity-100` a `opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 [@media(hover:none)]:opacity-100`. Los botones miden ≥44×44px en móvil (`h-11 w-11 md:h-7 md:w-7`) y cada uno lleva `aria-label` en español ('Configurar calendario', 'Ver ciclos', 'Editar tarjeta', 'Eliminar tarjeta'). Agregar test que lee el archivo y verifica que no queda `opacity-0 group-hover:opacity-100` sin prefijo `md:` y que cada botón de acciones tiene `aria-label`. Si el eliminar no tiene confirmación hoy, dejar constancia en el ADR sin cambiar ese comportamiento. (42bdba7e)
+- [x] Step 9: Cierre de integración: correr typecheck (`verifyCmd`), lint sin warnings (`lintCmd`) y `npm test` completo (`testCmd`) según `targets/targets.json`, verificar que el escritorio (≥768px) no cambia y que no se alteró lógica de negocio, datos, consultas ni período por defecto. Corregir cualquier fallo residual. (42bdba7e)
+
+### Decisiones (ADR)
+- ADR-0325 — `isMoreActive` usa coincidencia exacta + prefijo de ruta hija [Supuesto del agente] **⚠ REVISAR**
+- ADR-0326 — Nombre accesible de la hoja 'Más' vía SheetTitle sr-only + opt-out de descripción [Supuesto del agente] **⚠ REVISAR**
+- ADR-0327 — Tipo de input para purchaseDate acepta Date | string [Supuesto del agente] **⚠ REVISAR**
+- ADR-0328 — Sentinel de scroll infinito compartido por tabla y lista mobile [Supuesto del agente] **⚠ REVISAR**
+- ADR-0329 — Tabla de Ingresos desborda a 390px — se aplica patrón mobile cards [Instrucción de Augusto]
+- ADR-0330 — Buscador duplicado en DOM: una instancia mobile, una desktop [Supuesto del agente] **⚠ REVISAR**
+- ADR-0331 — Eliminar tarjeta sin confirmación — comportamiento sin cambios [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0102/`
+
+> Revisar con Claude in Chrome para validación de UX.
