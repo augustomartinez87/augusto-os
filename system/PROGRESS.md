@@ -2772,3 +2772,32 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0102/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-12 — F-0100 completado
+
+## Feature F-0100
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar en `lib/loan-installment-display.ts` la función pura `deriveRegularInstallment(installments, loanType)` que, a partir de las filas del cronograma (`LoanInstallment.amount`), devuelve la cuota regular: para préstamos amortizados usa la moda (tolerancia 1 centavo) entre las cuotas NO finales, ignorando la última que puede diferir por redondeo; si el spread entre las no finales es >= $1 devuelve `{ fixed: false, min, max }` como `getInstallmentDisplay`; sin cuotas → null. Reusar la coerción de montos (number|string|Decimal) y `roundCents`. No tocar UI. (8284adcf)
+- [x] Step 2: Agregar tests en `tests/` (patrón vitest de F-0093/F-0095) para `deriveRegularInstallment` con fixtures: cuota fija con última distinta por centavos; cuota fija exacta; variable (spread >= $1); 1 sola cuota; sin cuotas; `amount` como string/Decimal; importes con centavos (471222.44). Verificar que los tests existentes de `getInstallmentDisplay` siguen pasando. (85ead60e)
+- [x] Step 3: Crear el script de auditoría de solo lectura `scripts/audit-installment-amount.ts` (Prisma, solo `findMany`/`select`, sin ninguna escritura) que, para cada préstamo activo y pre-aprobado, lista id, persona, capital, `loanType`, `Loan.installmentAmount`, cuota regular derivada (vía `deriveRegularInstallment`), diferencia absoluta, cantidad de cuotas y cuántas pagadas, y clasifica la diferencia en 'redondeo' (< $1), 'chica' ($1 a < 1%), 'grande' (>= 1%) o 'sin cronograma'. Salida legible en consola y JSON opcional. Copiar solo el patrón de conexión Prisma de scripts existentes, nunca sus escrituras. (c26197ba)
+- [x] Step 4: Agregar test de código fuente (con `fs`, patrón de F-0099) que lee `scripts/audit-installment-amount.ts` y falla si detecta `create|update|delete|upsert|executeRaw`, garantizando que la auditoría es solo lectura. (79365da2)
+- [x] Step 5: Exponer la cuota regular en `loans.list` (`server/routers/loans/crud.ts`) con el mínimo cambio: calcular en el servidor y devolver un campo `regularInstallment` (o agregar al `select` solo el importe por cuota necesario), sin consulta por fila y sin migración. Actualizar los tipos inferidos en `components/loans/types.ts` si hace falta. (6465a56e)
+- [x] Step 6: Migrar la visualización de 'Cuota' en `components/loans/loans-table-view.tsx` (celda 'Cuota:/Int. mensual:' ~L579-582) para que salga de la cuota derivada del cronograma en vez de `Number(loan.installmentAmount)`, conservando la etiqueta 'Int. mensual' para interés solo / tasa cero. Dejar `pre-approved-loan-card.tsx` L219 como está (muestra la cuota cotizada por decisión de F-0091). (6fda6ef5)
+- [x] Step 7: Migrar los dos sitios de `app/dashboard/loans/page.tsx` (~L526 y ~L769) que muestran `Number(loan.installmentAmount)` para que usen la cuota derivada del cronograma, manteniendo el fallback coherente cuando no hay cronograma. (5d04aec9)
+- [x] Step 8: Aclarar etiquetas sin ambigüedad en lista y detalle: 'Cuota' = cuota regular del cronograma; 'Próx. cuota' = saldo pendiente de la próxima impaga; cuando 'Próx. cuota' es parcial o difiere por ser la última, mostrar motivo en texto corto ('parcial', 'última cuota') en lugar de dos números sin explicación. Préstamos de interés solo / tasa cero conservan su etiqueta actual. NOTA PARA EL REVISOR (verificada en codigo, 2026-10-11): (1) `row.nextAmount` YA es el saldo pendiente: `server/routers/loans/crud.ts` L235-236 calcula `Math.max(Number(nextInstallment.amount) - Number(nextInstallment.paidAmount ?? 0), 0)`; lista y detalle muestran el mismo numero, no hay que cambiar la tabla. (2) En el detalle la rama 'vencida' imprime solo 'Vencida hace N d' sin monto; el subtexto `parcial · $remaining` es el unico lugar donde aparece el saldo en ese caso, no hay numero duplicado. (3) 'ultima cuota' ya excluye interes solo y tasa cero via `isAmortized`. No reabrir estos tres puntos salvo evidencia nueva. (0657f713)
+- [x] Step 9: Escribir la ADR `docs/adr/F-0100-*.md` con el inventario de sitios que leen `installmentAmount` (migrados vs. justificados, p. ej. el contrato que deriva su propia cuota), la sección 'REVISAR' con hipótesis marcadas como inferencia no verificada (edición de TNA, refinanciación, renovación, alta sin redondeo) solo con ids (sin nombres), y la nota de que la corrida contra prod la hace Cowork tras el merge. CORRECCION PENDIENTE (verificada 2026-10-12): al inventario de la seccion 3.2 'Justificados' del ADR agregar los dos sitios de display de la consola AP que leen el campo persistido: `app/dashboard/ap/page.tsx` L396 (`formatCurrency(preview.installmentAmount, ...)`, rotulo 'Cuota (sin cambios)') y L430 (`const installment = Number(pa.installmentAmount)`, cuota de un pre-aprobado). Justificacion: igual que `pre-approved-loan-card.tsx` L219, son pre-aprobados sin cronograma y muestran la cuota COTIZADA que por decision de F-0091 no cambia. Ademas barrer con `git grep -n installmentAmount -- app components lib server` para confirmar que no falta ningun otro sitio de display y que el inventario declare su fecha y commit. Es solo documentacion: no tocar codigo. (29b73919)
+
+### Decisiones (ADR)
+- ADR-0332 — `deriveRegularInstallment` excluye la última cuota solo para `amortized` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0333 — Referencia del 1% para categoría "chica" = cuota guardada (storedInstallment) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0334 — Usar `deriveRegularInstallment` en lugar de `getInstallmentDisplay` para el campo `regularInstallment` [Supuesto del agente] **⚠ REVISAR**
+- ADR-0335 — Formato de cuota variable en la celda Cuota/Int. mensual [Supuesto del agente] **⚠ REVISAR**
+- ADR-0336 — L526 ya estaba migrado; cambio real solo en L769 [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0100/`
+
+> Revisar con Claude in Chrome para validación de UX.

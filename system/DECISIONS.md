@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0336 · 2026-10-11 · L526 ya estaba migrado; cambio real solo en L769
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** No se modificó L526 porque ya tenía el patrón correcto (`instDisplay ? ... : installmentAmount`). El único cambio fue en L769, que era la única instancia que leía `installmentAmount` sin pasar por `instDisplay`.
+**Contexto:** El spec mencionaba ambas líneas (~L526 y ~L769) como candidatas a migrar. Al leer el código actual, L526 ya tenía el guard de `instDisplay` implementado (probablemente en un step anterior), por lo que solo era la referencia de "fallback coherente" y no requería cambio.
+**Alternativas descartadas:** Modificar también L526 para cambiar el fallback o reemplazar `getInstallmentDisplay` por `deriveRegularInstallment` en L420 — descartado porque el spec dice cambio mínimo y no hay inconsistencia en L526.
+**Consecuencias / riesgo residual:** Si en algún step anterior L526 se migró de forma diferente a lo esperado, esta decisión podría dejar una inconsistencia. Queda abierto evaluar si `getInstallmentDisplay` debe reemplazarse por `deriveRegularInstallment` en L420 para consistencia con la lista (que usa `regularInstallment` del router).
+
+> Generado por el loop · feature F-0100 · step 7
+
+---
+## ADR-0335 · 2026-10-11 · Formato de cuota variable en la celda Cuota/Int. mensual
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando `regularInstallment.fixed === false`, se muestra el rango como `"${min} – ${max}"` con guión largo (–) como separador.
+**Contexto:** El spec de F-0100 no especifica el formato para el caso variable en la lista. El tipo `InstallmentDisplay` soporta `{ fixed: false; min; max }` y la celda necesita renderizar algo legible cuando el cronograma tiene cuotas no uniformes.
+**Alternativas descartadas:** Mostrar solo `min` (más simple pero impreciso), mostrar solo `max`, o omitir la celda en el caso variable (rompe la expectativa del usuario de ver la cuota).
+**Consecuencias / riesgo residual:** Si en el futuro se define un formato oficial para cuotas variables en lista (por ejemplo "Desde $X"), habrá que actualizar esta línea.
+
+> Generado por el loop · feature F-0100 · step 6
+
+---
+## ADR-0334 · 2026-10-11 · Usar `deriveRegularInstallment` en lugar de `getInstallmentDisplay` para el campo `regularInstallment`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usó `deriveRegularInstallment` (que ya existía en lib/loan-installment-display.ts) en vez de `getInstallmentDisplay`, porque excluye la última cuota del cronograma amortizado para reflejar la cuota "regular" sin el ajuste de redondeo final.
+**Contexto:** El spec pedía exponer la "cuota regular" derivada del cronograma real. Ambos helpers devuelven `InstallmentDisplay | null`, pero `deriveRegularInstallment` tiene semántica específica de "cuota tipo" (mode sin last installment), mientras que `getInstallmentDisplay` usa el min de todas las cuotas. La elección afecta el valor mostrado en préstamos amortizados donde la última cuota puede ser centavos diferente.
+**Alternativas descartadas:** Usar `getInstallmentDisplay` (más simple, toma min de todas); usar `Number(loan.installmentAmount)` directamente (stale tras ediciones manuales, documentado como antipatrón en el JSDoc del helper).
+**Consecuencias / riesgo residual:** Los consumidores del campo `regularInstallment` en el cliente deben renderizar `InstallmentDisplay` (unión `{ fixed, amount } | { fixed:false, min, max } | null`), no un número crudo. Los steps de UI que consuman este campo deben usar el helper de formateo adecuado.
+
+> Generado por el loop · feature F-0100 · step 5
+
+---
+## ADR-0333 · 2026-10-11 · Referencia del 1% para categoría "chica" = cuota guardada (storedInstallment)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La diferencia "chica" se mide como diff < 1% del valor `Loan.installmentAmount` guardado (no del capital ni de la cuota derivada).
+**Contexto:** El spec dice "$1 a < 1%" sin especificar el denominador. Las opciones razonables eran capital, cuota guardada o cuota derivada. La cuota guardada es el valor que se está auditando (punto de referencia natural del porcentaje de desviación), y es siempre no-nulo a diferencia de la derivada en casos edge.
+**Alternativas descartadas:** Usar capital como denominador (más estable pero unidad diferente a la que se compara); usar cuota derivada (circula si la derivada es la fuente de verdad, y puede ser undefined).
+**Consecuencias / riesgo residual:** Si Augusto prefiere otro denominador, cambiar la condición `diffAbs < stored * 0.01` en la línea correspondiente. Queda como decisión a confirmar con datos reales.
+
+> Generado por el loop · feature F-0100 · step 3
+
+---
+## ADR-0332 · 2026-10-11 · `deriveRegularInstallment` excluye la última cuota solo para `amortized`
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Para loanType `amortized` se excluye la última cuota al calcular la cuota regular; para otros tipos (`interest_only`) se usan todas las cuotas sin excluir ninguna.
+**Contexto:** El spec especifica el comportamiento solo para préstamos amortizados ("ignoring the last que puede diferir por redondeo"). Para `interest_only` el spec no indica qué hacer. Un préstamo interest-only tiene cuotas de interés iguales excepto la última que incluye el capital, por lo que con todas las cuotas el spread sería >= $1 y devolvería `{ fixed: false }`, lo cual no representa correctamente la cuota regular. Sin embargo, el spec no autoriza explícitamente extender la lógica de exclusión a otros tipos.
+**Alternativas descartadas:** Aplicar la exclusión de la última cuota a todos los loanTypes (también más correcto para interest_only); o agregar un tercer branch específico para interest_only. Se descartó por ausencia de datos reales de interest_only y para no sobrepasar el alcance del step.
+**Consecuencias / riesgo residual:** Si en producción existen préstamos `interest_only` activos, `deriveRegularInstallment` les devolverá `{ fixed: false, min, max }` donde min es la cuota de interés y max es la cuota final (capital+interés). Requiere revisión en un step posterior cuando se migre la UI de loans-table-view.tsx.
+
+> Generado por el loop · feature F-0100 · step 1
+
+---
 ## ADR-0331 · 2026-10-11 · Eliminar tarjeta sin confirmación — comportamiento sin cambios
 
 **Estado:** aceptada
