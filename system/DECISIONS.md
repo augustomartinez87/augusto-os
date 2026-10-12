@@ -27,6 +27,90 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0342 · 2026-10-12 · Umbrales de color en mobile-categories-card cambian al unificar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Al redirigir `mobile-categories-card.tsx` a `getCategoryBudgetStatus`, los umbrales de color del semáforo cambiaron de 90%/70% a >100% (over) / >=80% (warning), que son los umbrales canónicos de `budget-status.ts`.
+**Contexto:** El componente tenía umbrales propios (90/70) que diferían de los del helper canónico (80/over). La tarea pide unificar el cálculo usando `getCategoryBudgetStatus`, lo que implícitamente unifica los umbrales también.
+**Alternativas descartadas:** Mantener los umbrales originales del componente usando solo `pct` del helper e ignorando `level`; pero eso habría dejado la duplicación semántica que la tarea busca eliminar.
+**Consecuencias / riesgo residual:** El mobile card ahora colorea ámbar a partir del 80% en lugar del 70%, y rojo solo cuando excede el 100% en lugar del 90%. Si el dueño prefería la sensibilidad mayor (70%/90%), habría que ajustar `BUDGET_HIGH_EXPENSE_PCT` en `lib/constants/thresholds.ts`.
+
+> Generado por el loop · feature F-0103 · step 9
+
+---
+## ADR-0341 · 2026-10-12 · Colores rojo/ámbar diferenciados según level en el insight-banner
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Cuando `level === 'over'` el aviso usa rojo (`border-l-red-500`, `bg-red-500/10`, `text-red-400`); cuando `level === 'approaching'` mantiene ámbar.
+**Contexto:** El spec pedía cambiar el texto pero no especificó si el color debía cambiar. El codebase ya usa rojo para porcentaje >100 en la tabla de presupuesto, por lo que aplicar la misma convención en el banner es coherente.
+**Alternativas descartadas:** Dejar ámbar para ambos casos (más conservador, menor diff).
+**Consecuencias / riesgo residual:** Si Augusto prefiere ámbar uniforme, se revierte cambiando los tres campos de color a las variantes amber originales.
+
+> Generado por el loop · feature F-0103 · step 8
+
+---
+## ADR-0340 · 2026-10-12 · Umbrales de color del widget alineados con thresholds canónicos (80/100) en lugar de los locales (70/90)
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se eliminó `toneFromPercentage` con umbrales 70/90 y se delegó en `getCategoryBudgetStatus`, que usa `BUDGET_HIGH_EXPENSE_PCT` (80%) y `level === 'over'` (>100%) como única fuente de verdad.
+**Contexto:** El widget tenía umbrales ad-hoc (70/90) distintos a los del helper centralizado (80/100). El spec dice "usar `pct`/`level` del helper para texto y color" sin especificar si el cambio de umbrales era intencional o un bug previo.
+**Alternativas descartadas:** Mantener `toneFromPercentage` con 70/90 y solo delegar `pct`/`displayPct` al helper — habría conservado el comportamiento visual anterior pero contradiría el objetivo de unificar la lógica de estado.
+**Consecuencias / riesgo residual:** El widget ahora cambia a ámbar a 80% (antes a 70%) y a rojo cuando supera el límite (antes a 90%). Cualquier test visual o snapshot que hubiera fijado los colores con los umbrales viejos fallaría.
+
+> Generado por el loop · feature F-0103 · step 7
+
+---
+## ADR-0339 · 2026-10-12 · Pasar totalStatus como prop a BudgetTable en vez de recomputar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se pasa `totalStatus` (resultado de `getCategoryBudgetStatus`) como prop desde `BudgetPage` a `BudgetTable`, eliminando la llamada duplicada dentro del componente hijo.
+**Contexto:** El spec de step 4 mencionaba `totalPercentage` a L116, pero step 3 ya reemplazó esa variable por `totalStatus` en `BudgetPage`. El único recálculo local residual era la re-invocación de `getCategoryBudgetStatus` en `BudgetTable` para el tfoot, con los mismos argumentos que el padre ya había procesado.
+**Alternativas descartadas:** Mantener la doble llamada (sin efecto observable, pero viola "fuente única") o importar `CategoryBudgetStatus` como tipo explícito del prop (equivalente a `ReturnType<typeof getCategoryBudgetStatus>`).
+**Consecuencias / riesgo residual:** El tipo del prop usa `ReturnType<typeof getCategoryBudgetStatus>`; si la firma del helper cambia, el prop se actualiza automáticamente sin tocar la declaración de `BudgetTable`.
+
+> Generado por el loop · feature F-0103 · step 4
+
+---
+## ADR-0338 · 2026-10-12 · Fuente única de verdad para color por nivel de presupuesto
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se migró la tarjeta "% uso global" a `getCategoryBudgetStatus` y se centralizó el mapeo `level → color` en dos `Record<CategoryBudgetLevel, string>` a nivel de módulo, reemplazando los ternarios inline duplicados en las 5 vistas (tabla, móvil, totales, tarjeta).
+**Contexto:** Los intentos previos fallaron de forma repetida porque la tarjeta del padre seguía calculando porcentaje/color por su cuenta, divergiendo de la fila de totales que mostraba el mismo dato vía el helper.
+**Alternativas descartadas:** Dejar los ternarios inline migrando solo la tarjeta (se descartó: mantiene 5 copias del mapeo con riesgo de divergencia futura, justo lo que el reviewer venía marcando).
+**Consecuencias / riesgo residual:** El ancho de la barra de progreso sigue usando `item.percentage` crudo clamped a 100 (es relleno visual, no el % mostrado), por lo que queda una diferencia sub-entera menor respecto a `status.pct`; se dejó fuera por estar fuera del alcance (porcentaje/nivel/color), no afecta el número ni el color mostrados.
+
+> Generado por el loop · feature F-0103 · step 3
+
+---
+## ADR-0337 · 2026-10-12 · Umbral warning via constante BUDGET_HIGH_EXPENSE_PCT
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** spensiv
+
+**Decisión:** Se usa `BUDGET_HIGH_EXPENSE_PCT` (valor 80) del módulo de constantes en lugar de hardcodear el literal `80` para el nivel `'warning'`.
+**Contexto:** El spec especifica literalmente `pct >= 80`, pero la codebase ya tiene `BUDGET_HIGH_EXPENSE_PCT = 80` exactamente para ese propósito en `lib/constants/thresholds.ts`.
+**Alternativas descartadas:** Usar el literal `80` directamente, como indica el spec textual.
+**Consecuencias / riesgo residual:** Si `BUDGET_HIGH_EXPENSE_PCT` cambia en el futuro, el nivel `'warning'` de este helper cambiará automáticamente — puede ser deseable o no según la semántica futura del umbral.
+
+> Generado por el loop · feature F-0103 · step 1
+
+---
 ## ADR-0336 · 2026-10-11 · L526 ya estaba migrado; cambio real solo en L769
 
 **Estado:** aceptada

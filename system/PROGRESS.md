@@ -2801,3 +2801,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0100/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-12 — F-0103 completado
+
+## Feature F-0103
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear `lib/budget-status.ts` exportando la función pura `getCategoryBudgetStatus(spent, limit)` que devuelve `{ pct, remaining, level }` con `level: 'none' | 'ok' | 'warning' | 'over'`. Reglas exactas: `limit <= 0` → `{ pct: 0, remaining: 0, level: 'none' }`; `spent < limit` → `pct = Math.min(99, Math.floor(spent / limit * 100))`; `spent >= limit` → `pct = Math.max(100, Math.round(spent / limit * 100))`; `remaining = limit - spent`; `level`: `'over'` si `spent > limit`, `'warning'` si `pct >= 80` y `spent <= limit`, `'ok'` en otro caso. Reusar `calculateBudgetPercentage` de `lib/budget-analytics.ts` como base del cálculo crudo donde aplique sin alterar su semántica. (51509c48)
+- [x] Step 2: Crear `lib/__tests__/budget-status.test.ts` (patrón de `lib/__tests__/transaction-row-view.test.ts`) con todos los fixtures: (385168,386000)→pct 99, remaining 832, warning; (386000,386000)→pct 100, remaining 0, warning; (400000,386000)→pct 104, remaining -14000, over; (100,1000)→pct 10, ok; (800,1000)→pct 80, warning; (0,0) y (50,0)→none; (999,1000)→pct 99. Verificar que pasa con la implementación actual (el test de mutación a `Math.round` que rompe (385168,386000) se documenta en el PR). (67052a42)
+- [x] Step 3: Refactorizar `app/dashboard/budget/page.tsx` para que la fila de tabla, la tarjeta móvil y el total usen `getCategoryBudgetStatus` para porcentaje, nivel y color. Eliminar los `Math.round(item.percentage)` (L389, L450, L556) y los umbrales 80/100 inline (L322-324, L382-384, L461-463, L549-551); mapear `level` a colores unificados (`ok` verde, `warning` ámbar, `over` rojo). Mantener tildes correctas (test `budget-page-tildes`). (1f7c66e5)
+- [x] Step 4: En `app/dashboard/budget/page.tsx`, hacer que el porcentaje del total del encabezado (`totalPercentage`, L116) use `getCategoryBudgetStatus` con los totales agregados (`totalSpent`, `totalLimit`) en vez de recálculo local, aplicando el mismo nivel/color. (02149172)
+- [x] Step 5: Agregar la columna `Restante` en la tabla de `app/dashboard/budget/page.tsx` entre `Límite` y `%`: nuevo `<th>` con header tildado correctamente, celda con `remaining` formateado con `formatCurrency` existente (negativo en rojo con signo menos real es-AR), y recalcular el `colSpan` del `<tfoot>` (hoy L437-455) para alinear totales. Extender el tipo `BudgetProgressItem` o derivar `remaining` del helper en el render sin tocar `server/routers/budget.ts`. (ccd47c53)
+- [x] Step 6: Agregar la línea de saldo en la tarjeta móvil de `app/dashboard/budget/page.tsx`: mostrar `Restante $ X` cuando `remaining >= 0` o `Excedido por $ X` cuando es negativo, usando `getCategoryBudgetStatus` y `formatCurrency`, consistente con la columna desktop. (16227ead)
+- [x] Step 7: Refactorizar `components/dashboard/budget-widget-card.tsx` para usar `getCategoryBudgetStatus` (recibiendo los importes ya convertidos `limitConverted`/`spentConverted`). Eliminar `toneFromPercentage` con umbrales 70/90 (L31-35) y `displayPct` con `Math.min(99, Math.floor(...))` (L132-135); usar `pct`/`level` del helper para texto y color. Si el test `no-tiny-text` lo exige, subir el `text-[11px]` (L203) a `text-xs`. (478c68e2)
+- [x] Step 8: Refactorizar `components/dashboard/insight-banner.tsx` (L43-52) para usar `getCategoryBudgetStatus`: si `level` es `over` el aviso dice que la categoría superó su límite; si no, dice 'va por el N % de su límite' con el `pct` del helper (nunca 'superó el 100 %' cuando queda saldo). Mantener el disparo del aviso con `pct >= 90`. (ff2b86b2)
+- [x] Step 9: Buscar con grep otros lugares que formateen el porcentaje de presupuesto (`percentage` en `app`/`components`); si existen consumidores adicionales, redirigirlos a `getCategoryBudgetStatus` para unificar el cálculo. Luego ejecutar `npx tsc --noEmit`, `npm run lint` (0 warnings) y `npm test` completos verificando verde. (ea28bab0)
+
+### Decisiones (ADR)
+- ADR-0337 — Umbral warning via constante BUDGET_HIGH_EXPENSE_PCT [Supuesto del agente] **⚠ REVISAR**
+- ADR-0338 — Fuente única de verdad para color por nivel de presupuesto [Supuesto del agente] **⚠ REVISAR**
+- ADR-0339 — Pasar totalStatus como prop a BudgetTable en vez de recomputar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0340 — Umbrales de color del widget alineados con thresholds canónicos (80/100) en lugar de los locales (70/90) [Supuesto del agente] **⚠ REVISAR**
+- ADR-0341 — Colores rojo/ámbar diferenciados según level en el insight-banner [Supuesto del agente] **⚠ REVISAR**
+- ADR-0342 — Umbrales de color en mobile-categories-card cambian al unificar [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0103/`
+
+> Revisar con Claude in Chrome para validación de UX.
