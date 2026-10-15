@@ -2831,3 +2831,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0103/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-15 — F-0104 completado
+
+## Feature F-0104
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el helper puro `lib/format-percent.ts` con `formatPercentEsAR(percent, decimals)` (recibe puntos porcentuales, usa `toLocaleString('es-AR', { minimumFractionDigits, maximumFractionDigits })` + '%' pegado, maneja NaN/Infinity/null/undefined → '—', mismo criterio de signo que formatCurrency) y `formatRatioEsAR(ratio, decimals)` (multiplica por 100). Agregar tests Vitest con las fixtures del spec ((12.5,1)→'12,5%', (0,1)→'0,0%', (99.78,2)→'99,78%', (1234.5,1)→'1.234,5%', (-5,1), bordes NaN/Infinity/null) más los bordes de redondeo 1.005 y 0.045, dejando el resultado real comentado tras ejecutarlos. (ad4f69dd)
+- [x] Step 2: Migrar los ~82 sitios de porcentaje visible en `app/` y `components/` (21 archivos del inventario REUSAR) a `formatPercentEsAR`/`formatRatioEsAR`, conservando la cantidad de decimales de cada sitio y sin tocar `width: ${x}%`, valores de inputs ni textos ya formateados por otro helper. Agregar un guardián de código fuente con `fs` (`tests/percent-guard.test.ts`) que falle si reaparece `toFixed(<n>)}%` o `.toFixed(<n>) %` en esos directorios, con lista blanca por línea que falla si queda obsoleta. (b3be6019)
+- [x] Step 3: En `lib/contexts/privacy-context.tsx`: hacer que el marcador respete la moneda ('$ •••••' para ARS, 'US$ •••••' para USD), migrar la clave de localStorage de `spensiv-privacy-mode` a `kredy-privacy-mode` leyendo la anterior como respaldo (dentro de try/catch), exponer un hook `useFormatCurrency()` que devuelve `(amount, currency) => string` respetando `isPrivate`, y corregir la lectura inicial de localStorage para evitar el parpadeo/desajuste de hidratación (o documentar la limitación). Mantener tipos y API existentes. (ab9ec584)
+- [x] Step 4: Enmascarar montos con `PrivateAmount` (nodos JSX) y `useFormatCurrency()` (strings/`title=`/`aria-label`/plantillas) en la tabla/tarjetas `components/loans/loans-table-view.tsx` (incluidos totales de pie y versión móvil) y en el calendario `components/loans/installment-calendar.tsx` (total del mes, montos de cada celda, lista del día, SIN filtrar monto por `title` ~L141 ni `aria-label`). (1b9540e1)
+- [x] Step 5: Enmascarar montos en el detalle `app/dashboard/loans/page.tsx` (resumen superior, tarjetas capital/cobrado/cuota/saldo, cronograma y detalle de cuotas, historial) y en los componentes de la misma pantalla que hoy muestran montos sin máscara: `upcoming-installments-gadget.tsx`, `collection-reminders-panel.tsx`, `pre-approved-loan-card.tsx`, `monthly-accruals-table.tsx`, `payment-history-section.tsx`, `debts-dashboard-summary.tsx`, `collector-view.tsx`. Dejar explícitamente visibles los diálogos de operar (cobro, cobro rápido, refinanciar, renovar, crear, y los inline ~L1587-1650), portapapeles, PDF y contrato. (4d741918)
+- [x] Step 6: Agregar un guardián de código fuente con `fs` (`tests/private-amount-guard.test.ts`) que falle si en los archivos enmascarados del paso anterior aparece `formatCurrency(` fuera de `PrivateAmount`/`useFormatCurrency`, con lista blanca por línea para los diálogos de operar que deben quedar visibles, y que falle si la lista blanca queda obsoleta. (d894b27e)
+- [x] Step 7: Subir tamaños de fuente por debajo de 12px en las pantallas de prioridad móvil: reemplazar `text-[9px]`/`text-[10px]`/`text-[11px]` sin prefijo por `text-xs` (o `text-xs md:text-[10px]` si hace falta conservar densidad en escritorio) en `register-payment-dialog.tsx`, `quick-collect-dialog.tsx`, `loans-table-view.tsx`, `loans-compact-stats.tsx`, `upcoming-installments-gadget.tsx`, `app/dashboard/loans/page.tsx`, `installment-calendar.tsx`, `app/dashboard/simulator/page.tsx`, `app/simular/page.tsx`, `app/dashboard/consulta-360/[id]/page.tsx` y `components/consulta-360/*`. Revisar y ajustar contenedores de altura fija que se rompan (barra `h-12` de loans-compact-stats, badges `px-1 py-0`, celdas del calendario `h-20`/`md:h-24`, grid-cols-7). Agregar guardián de código fuente con `fs` que falle ante esas clases sin prefijo de breakpoint en esos archivos, con lista blanca por línea que falla si queda obsoleta. (03816517)
+- [x] Step 8: Escribir la ADR `docs/adr/F-0104-*.md` con el inventario de porcentajes migrados, qué queda sin máscara y por qué (porcentajes, diálogos de operar, portapapeles, PDF, contrato), la decisión del parpadeo de hidratación, y los ~140 usos de fuente restantes como pasada posterior. (c4e162ca)
+
+### Decisiones (ADR)
+- ADR-0343 — No normalizar `-0` en formatPercentEsAR; delegar el signo a Intl como formatCurrency [Supuesto del agente] **⚠ REVISAR**
+- ADR-0344 — Null-guards inline eliminados donde formatRatioEsAR cubre el caso [Supuesto del agente] **⚠ REVISAR**
+- ADR-0345 — Hidratación: useEffect en lugar de lazy initializer con typeof window [Supuesto del agente] **⚠ REVISAR**
+- ADR-0346 — title= del calendario queda sin enmascarar [Instrucción de Augusto]
+- ADR-0347 — Enmascarar monto en rama de ternario con porcentaje hermano [Supuesto del agente] **⚠ REVISAR**
+- ADR-0348 — Incluir en la lista blanca el atributo title= del calendario y el builder de WhatsApp [Supuesto del agente] **⚠ REVISAR**
+- ADR-0349 — text-xs md:text-[Npx] solo para celdas de calendario y headers de heatmap rotados [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0104/`
+
+> Revisar con Claude in Chrome para validación de UX.

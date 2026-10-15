@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0349 · 2026-10-12 · text-xs md:text-[Npx] solo para celdas de calendario y headers de heatmap rotados
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se usó `text-xs md:text-[10px]` en los botones de cuota del calendario y `text-xs md:text-[9px]` en el "+N más" y en los th rotatados del heatmap. El resto recibió directamente `text-xs`.
+**Contexto:** El spec dice "o `text-xs md:text-[10px]` si hace falta conservar densidad en escritorio" sin enumerar los casos concretos. En el calendario las 7 columnas de celda en desktop tienen contenido que se beneficia del texto más chico; en el heatmap el header se rota -60° y el ancho proyectado depende del font-size.
+**Alternativas descartadas:** Aplicar `text-xs md:text-[10px]` a todos los cambios (más conservador); o aplicar solo `text-xs` sin variante md en todos (más uniforme pero pierde densidad en desktop).
+**Consecuencias / riesgo residual:** Los demás componentes (compact-stats, table-view, simulators, consulta-360) usan `text-xs` uniformemente en todos los breakpoints.
+
+> Generado por el loop · feature F-0104 · step 7
+
+---
+## ADR-0348 · 2026-10-12 · Incluir en la lista blanca el atributo title= del calendario y el builder de WhatsApp
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se whitelistean con justificación explícita el atributo `title=` del calendario (tooltip) y `const monto = formatCurrency(...)` en `collection-reminders-panel.tsx` (texto plano al deudor), que no son diálogos de operar pero tampoco son errores.
+**Contexto:** El spec pide lista blanca "para los diálogos de operar que deben quedar visibles", pero el guardián fallaría inmediatamente si esas dos líneas —existentes desde el paso anterior— no se whitelistean. No están en los diálogos de operar, pero su uso es intencional.
+**Alternativas descartadas:** (a) Considerar ambos como violaciones a corregir en este mismo step (fix el title= con condicional, eliminar monto del mensaje WhatsApp); (b) dejarlos como violaciones y que el guardián falle hasta ser corregidos.
+**Consecuencias / riesgo residual:** El atributo `title=` del calendario sigue siendo una fuga de privacidad menor en hover de desktop. Queda abierto corregirlo en un step futuro (reemplazar `formatCurrency` por un marcador cuando isPrivate).
+
+> Generado por el loop · feature F-0104 · step 6
+
+---
+## ADR-0347 · 2026-10-12 · Enmascarar monto en rama de ternario con porcentaje hermano
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En `pre-approved-loan-card.tsx` se convirtió la rama `Cuota:` del ternario (que retornaba string) a un fragmento JSX con `<PrivateAmount>` envolviendo solo el importe, dejando el string de la rama TEM y el span TNA/TEA sin tocar.
+**Contexto:** El importe de cuota compartía un `<span>` y un ternario con porcentajes que deben permanecer visibles; esto hizo que dos builders previos evitaran la línea y la dejaran filtrando en modo privacidad.
+**Alternativas descartadas:** Usar el hook `fmtCur` (useFormatCurrency) en template literal; se descartó para no introducir un segundo patrón de enmascarado en un archivo que ya usa `PrivateAmount` de forma uniforme.
+**Consecuencias / riesgo residual:** La rama ahora mezcla string (TEM) y JSX (Cuota) en el mismo ternario; React lo renderiza sin problema y typecheck pasa. Ninguna otra consecuencia abierta.
+
+> Generado por el loop · feature F-0104 · step 5
+
+---
+## ADR-0346 · 2026-10-12 · title= del calendario queda sin enmascarar
+
+**Estado:** aceptada
+**Origen:** Instrucción de Augusto
+**Target:** kredy
+
+**Decisión:** El atributo `title` del botón de celda (línea ~141) conserva `formatCurrency` sin `PrivateAmount` ni `useFormatCurrency()`, exponiendo el monto en el tooltip nativo del browser en modo privacidad.
+**Contexto:** El spec indica explícitamente "SIN filtrar monto por `title` ~L141 ni `aria-label`" para el calendario, por lo que enmascararlo estaría fuera del alcance de este step.
+**Alternativas descartadas:** Reemplazar `title=` con `useFormatCurrency()` para que el tooltip también quede enmascarado; o eliminar el atributo `title` cuando `isPrivate` es true.
+**Consecuencias / riesgo residual:** En modo privacidad, hacer hover sobre una celda del calendario muestra el monto real en el tooltip nativo del sistema operativo. Queda abierto para un step posterior si se decide cubrir ese canal.
+
+> Generado por el loop · feature F-0104 · step 4
+
+---
+## ADR-0345 · 2026-10-12 · Hidratación: useEffect en lugar de lazy initializer con typeof window
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se reemplazó el lazy initializer de useState (que leía localStorage condicionando a typeof window !== 'undefined') por useState(false) + useEffect para sincronizar después del mount.
+**Contexto:** El spec pedía "corregir la lectura inicial de localStorage para evitar el parpadeo/desajuste de hidratación (o documentar la limitación)". El patron anterior provoca hydration mismatch en Next.js App Router porque el server renderiza false pero el cliente hidrataría con el valor real, causando un warning de React. La alternativa (useEffect) elimina el mismatch a cambio de un one-frame flicker si el usuario tenía privacidad activa.
+**Alternativas descartadas:** suppressHydrationWarning en el elemento raíz (intrusivo, afecta a hijos); leer la cookie en el server y pasarla como initialValue al Provider (requiere cambiar el árbol de llamada y el layout); mantener el lazy initializer y documentar el warning (no resuelve el problema).
+**Consecuencias / riesgo residual:** Queda un one-frame flicker perceptible si privacy=true al cargar la página; documentado en comentario en el código. Si en el futuro se adopta middleware de Next.js para leer cookies, se puede eliminar el flicker sin cambios breaking en la API del contexto.
+
+> Generado por el loop · feature F-0104 · step 3
+
+---
+## ADR-0344 · 2026-10-12 · Null-guards inline eliminados donde formatRatioEsAR cubre el caso
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En los ternarios `metrics.realizedTNA != null ? \`${...}%\` : '—'` se eliminó el ternario y se pasó el valor directamente a `formatRatioEsAR`, que ya devuelve `'—'` para `null | undefined | !isFinite`.
+**Contexto:** El spec solo dice "migrar a formatPercentEsAR/formatRatioEsAR"; no aclara si la simplificación del ternario está incluida. El helper fue diseñado explícitamente para manejar null (step 1), lo que hace el ternario redundante.
+**Alternativas descartadas:** Mantener el ternario y solo cambiar la rama verdadera: más verboso pero idéntico en comportamiento.
+**Consecuencias / riesgo residual:** Si el tipo de `metrics.realizedTNA` cambia de `number | null` a `number` en el futuro, el cambio es inocuo (formatRatioEsAR con un number finito nunca devuelve `'—'`). Si alguien espera `'—'` específicamente para null, ese comportamiento sigue siendo correcto.
+
+> Generado por el loop · feature F-0104 · step 2
+
+---
+## ADR-0343 · 2026-10-12 · No normalizar `-0` en formatPercentEsAR; delegar el signo a Intl como formatCurrency
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se mantiene el signo delegado a `toLocaleString`/Intl sin normalizar `-0`, porque se verificó que produce el mismo resultado que `formatCurrency` (ambos emiten el signo para `-0`), cumpliendo "mismo criterio de signo".
+**Contexto:** El review del intento 1 marcó que el helper no verificaba que el criterio de signo (caso `-0`) coincidiera con `formatCurrency`.
+**Alternativas descartadas:** Añadir una rama que convierta `-0` a `0` antes de formatear (descartada: divergiría del comportamiento de `formatCurrency`, que sí muestra `-$ 0,00`).
+**Consecuencias / riesgo residual:** Si en el futuro se decide suprimir el signo de los ceros negativos, habría que cambiar `formatCurrency` y este helper en conjunto para no divergir.
+
+> Generado por el loop · feature F-0104 · step 1
+
+---
 ## ADR-0342 · 2026-10-12 · Umbrales de color en mobile-categories-card cambian al unificar
 
 **Estado:** aceptada
