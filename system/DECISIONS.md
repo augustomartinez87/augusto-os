@@ -27,6 +27,48 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0359 · 2026-10-16 · Portal propio en Sidebar en lugar de reutilizar el primitivo Tooltip.jsx
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** Se implementó el portal de tooltip directamente en Sidebar.jsx en vez de adaptar el primitivo existente `src/components/ui/Tooltip.jsx`.
+**Contexto:** El primitivo Tooltip posiciona el contenido *arriba* del trigger (centered, translateY(-100%)) y envuelve al hijo en un `<span tabIndex={0}>`, lo que crearía un elemento focusable adicional alrededor de cada `<Link>` y cambiaría la semántica de foco del menú. El tooltip del riel necesita posición *a la derecha* y debe dispararse desde el `<Link>` ya existente.
+**Alternativas descartadas:** Agregar una prop `placement="right"` al primitivo Tooltip y hacer que no envuelva si el hijo ya es interactivo; fue descartado por requerir cambios en el primitivo que escapan al alcance de este step y que podrían romper otros usos del componente.
+**Consecuencias / riesgo residual:** La lógica de portal está inline en Sidebar.jsx. Si se necesita un tooltip-derecha reutilizable en otro lugar, el patrón de este step puede elevarse al primitivo en un step posterior.
+
+> Generado por el loop · feature F-0107 · step 7
+
+---
+## ADR-0358 · 2026-10-16 · Ubicación del botón "Expandir" en modo colapsado: primera fila del nav vs. fila independiente
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El botón de expandir se coloca como primer hijo del `<nav>` (dentro del `py-3` del propio nav), no como un `div` hermano entre el header y el nav.
+**Contexto:** El spec dice "primera fila del riel debajo del logo" pero no especifica si es parte del `<nav>` o un bloque propio. Usar el `<nav>` existente simplifica el DOM y aprovecha el `py-3` ya presente para el espaciado visual.
+**Alternativas descartadas:** Agregar un `div` hermano entre el header y el nav, con su propio padding. Daría control más fino del espaciado pero fragmenta el DOM sin necesidad.
+**Consecuencias / riesgo residual:** Si F-0108 agrega un item de precarga al inicio del nav (hover sobre Explorador), debe colocarse después del toggle o condicionar su posición a `!isExpanded`.
+
+> Generado por el loop · feature F-0107 · step 4
+
+---
+## ADR-0357 · 2026-10-16 · mobile-body-offset movido de wrapper a main
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** El `mobile-body-offset` (margin-top: 88px en mobile) se aplica directamente sobre `<main>` en lugar de sobre un `<div>` envolvente que ya no existe en la nueva estructura de columna derecha.
+**Contexto:** Al eliminar el wrapper `div.flex.flex-1.min-h-0.mobile-body-offset` para reestructurar el layout en fila, había que decidir dónde anclar el offset del MobileHeader fijo. Las alternativas eran (a) ponerlo en la columna derecha entera o (b) en `main`. En la columna entera, el `margin-top` empujaría todo el `flex-col` hacia abajo incluyendo el Topbar de desktop, resultando en un hueco visible en desktop. En `main` el offset es una propiedad inerte en desktop (computa a 0 por la media query) y funciona correctamente en mobile.
+**Alternativas descartadas:** Aplicar `mobile-body-offset` en la columna derecha (roto en desktop), o crear un nuevo div wrapper solo en mobile (más markup para el mismo efecto).
+**Consecuencias / riesgo residual:** Si algún futuro step cambia la altura del MobileHeader (hoy 88px fijo en el CSS), hay que actualizar el valor en `src/index.css` en un único lugar; no queda duplicado.
+
+> Generado por el loop · feature F-0107 · step 3
+
+---
 ## ADR-0356 · 2026-10-16 · Tests de paridad como verificación algorítmica, no de componentes React
 
 **Estado:** aceptada

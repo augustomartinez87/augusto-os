@@ -2891,3 +2891,29 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0106/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-16 — F-0107 completado
+
+## Feature F-0107
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Agregar una función pura exportada `shouldToggleSidebarOnKey(event)` (en `src/hooks/useSidebarState.js` o un util junto a él) que devuelva true solo para la tecla `[` cuando el target no es input/textarea/select/contenteditable y no hay ctrlKey/metaKey/altKey. Crear su test en `src/hooks/__tests__/` con fixtures (`[` sobre body -> true; sobre input/textarea/select/contenteditable -> false; con ctrl/meta/alt -> false; `]` -> false). No tocar `getInitialSidebarExpanded` ni la clave `sidebarExpanded`. (4228f763)
+- [x] Step 2: Agregar tests de estructura con `fs` en `src/components/layout/__tests__/`: (a) `Topbar.jsx` ya no importa `@/assets/logo.png`; (b) en `Sidebar.jsx` el bloque del botón de plegar aparece en el JSX antes del `<nav>` y no después. Pueden quedar en rojo hasta que los pasos de refactor los satisfagan. (3fdcbaf3)
+- [x] Step 3: Reestructurar `src/components/layout/AppLayout.jsx` para que el `Sidebar` ocupe el alto completo de la ventana y a su derecha quede una columna con `Topbar` arriba y `main` debajo. Conservar los mismos anchos/márgenes responsive (`md:ml-60` / `md:ml-14` o equivalente) sincronizados con el ancho del sidebar, el alto útil de `main` en 100dvh menos 48px y la clase `.sidebar-transition`. No cambiar nada de mobile (`MobileHeader`/`MobileNav`). (a7c73651)
+- [x] Step 4: En `src/components/layout/Sidebar.jsx` mover el logo (link a `/portfolio/overview`) y el botón de plegar a una fila superior de 48px con borde inferior de 0,5px alineado con el de la `Topbar`. Expandido: logo + `ARGOS CAPITAL` a la izquierda y botón `Colapsar menú lateral` a la derecha en la misma fila. Colapsado: isotipo centrado y botón `Expandir menú lateral` como primera fila del riel debajo del logo. Eliminar el bloque del toggle inferior (L118-137). El botón debe medir ≥32×32px, quedar en los primeros 100px de alto, exponer `aria-expanded`, conservar `aria-label` y tener `title` que mencione el atajo `[`. Reusar íconos `PanelLeftClose`/`PanelLeftOpen`. (058c02b1)
+- [x] Step 5: En `src/components/layout/Topbar.jsx` quitar el logo y el texto `ARGOS CAPITAL` en escritorio (L44-49) y hacer que la barra arranque donde termina el sidebar (borde izquierdo coincidente en ambos estados, acompañando la transición). Conservar sin cambios selector de portfolio, toggle ARS/USD, indicador de mercado, ojo de saldos y campana, con mismos handlers y alturas. Eliminar el import del asset de logo. (9d076723)
+- [x] Step 6: Fluidez del plegado: mantener etiquetas de ítems, títulos de sección y bloque de usuario siempre montados, animando `opacity` con `overflow-hidden`/`whitespace-nowrap` mientras el ancho transiciona (sin aparición/desaparición de golpe ni saltos de línea). Ajustar `.sidebar-transition` en `src/index.css` si hace falta y evitar re-layout cuadro a cuadro del contenido de `main` (p. ej. `contain: layout` en `main` o no animar su contenido interno). Respetar `prefers-reduced-motion: reduce` sin animación. (3a6ab54a)
+- [x] Step 7: Arreglar los tooltips del riel colapsado en `Sidebar.jsx` para que el rótulo aparezca completo y sin recorte al hover o focus por teclado, dibujándolo fuera del `<nav>` con scroll (posición fija calculada con `getBoundingClientRect` o portal con el primitivo `src/components/ui/Tooltip.jsx`), resolviendo el stacking frente al Topbar. En estado colapsado no dejar `title` nativo duplicado sobre el tooltip propio, conservando `aria-label`. Sin dependencias nuevas. (257e34c6)
+- [x] Step 8: Cablear el atajo de teclado `[` que alterna el sidebar usando `shouldToggleSidebarOnKey` (listener en `AppLayout.jsx` o `Sidebar.jsx`), conectado al `setIsExpanded` de `useSidebarState`. Verificar que `npm test`, el typecheck y `npm run build` pasan. (648cf7ce)
+
+### Decisiones (ADR)
+- ADR-0357 — mobile-body-offset movido de wrapper a main [Supuesto del agente] **⚠ REVISAR**
+- ADR-0358 — Ubicación del botón "Expandir" en modo colapsado: primera fila del nav vs. fila independiente [Supuesto del agente] **⚠ REVISAR**
+- ADR-0359 — Portal propio en Sidebar en lugar de reutilizar el primitivo Tooltip.jsx [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0107/`
+
+> Revisar con Claude in Chrome para validación de UX.
