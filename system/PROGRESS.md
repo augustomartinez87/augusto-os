@@ -2861,3 +2861,33 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0104/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-16 — F-0106 completado
+
+## Feature F-0106
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Crear el módulo puro `lib/duration-adjustment.ts` con `effectiveTermMonths({ termMonths, startDate, firstDueDate })` (= termMonths + max(0, mesesCalendarioEntre(startDate, firstDueDate) - 1), con componentes LOCALES de fecha, sin UTC), `pickDurationAdjustment(adjustments, months)` (tramo con mayor minMonths tal que minMonths <= months && maxMonths >= months; 0 si no calza) y `suggestedTna(baseTna, adjustments, months)`. Sin imports de Prisma ni escrituras. Agregar tests con los fixtures de la spec (inicio 2026-10-02 plazo 3 -> efectivo 4 -> 105; plazo 2 automático -> 90; plazo 2 con 2026-12 -> 105; plazo 5 con 2027-01 -> 120; bordes 3/6/9/12; efectivo > máx -> 0; lista vacía -> 0; tramos desordenados; cierre de mes/año 2026-12-31 -> 2027-02 -> efectivo plazo+1). (2d633cf0)
+- [x] Step 2: Exportar `resolveFirstDueDate({ startDate, smartDueDate, firstInstallmentMonth })` desde `lib/loan-calculator.ts` reusando `getSmartFirstDueDate` y `getNthBusinessDay` de `lib/business-days.ts`, SIN modificar `resolveDueDates` ni `generateSmartSchedule`: con `firstInstallmentMonth` devuelve el 2.º día hábil de ese mes; con `smartDueDate` sin mes devuelve `getSmartFirstDueDate(startDate)`; sin ninguno devuelve inicio + 1 mes. Tests contra las fechas reales de `getNthBusinessDay`. (bf6ff8e3)
+- [x] Step 3: Unificar el criterio de tramo en el alta de préstamo (`components/loans/create-loan-dialog.tsx`): reemplazar el borde estricto `minMonths < term` (L77) por `pickDurationAdjustment` con plazo efectivo (usando `resolveFirstDueDate` + `effectiveTermMonths`), y agregar fecha de inicio, `smartDueDate` y `firstInstallmentMonth` a las dependencias del efecto que fija la TNA sugerida (L84-93) para que cambiar el mes de la primera cuota recalcule la tasa. Respetar que si se define por cuota (`customInstallment`/TNA implícita) la tasa NO se pisa con la sugerida. Mostrar etiqueta corta 'Plazo efectivo: N meses (M de diferimiento)' cuando el efectivo difiera del plazo elegido. (a298e41f)
+- [x] Step 4: Aplicar el mismo criterio con plazo efectivo en el simulador del dashboard (`app/dashboard/simulator/page.tsx` `getSuggestedTnaForTerm` L90-96), incluido el modo de comparar plazos (cada plazo con su propio plazo efectivo derivado de `firstInstallmentMonth`/`smartDueDate`), usando `effectiveTermMonths`/`pickDurationAdjustment`/`suggestedTna` de `lib/duration-adjustment.ts`. Mostrar la leyenda de plazo efectivo para quien opera. (a16ea7bb)
+- [x] Step 5: Aplicar el criterio unificado con plazo efectivo en el simulador público (`server/routers/public-simulator.ts` `simulate` L50, inicio = hoy, vencimiento inteligente) sin exponer TNA/tasa al prestatario, y en el portal del AP (`app/ap/page.tsx` `getTermAdjustment` L418-424 extendiendo la leyenda existente 'base X% + Y% por plazo'). Confirmar si `server/routers/ap.ts` `getEffectiveTna` (L71) está en uso y, de estarlo, migrarlo al mismo criterio; si no, dejarlo asentado para el ADR. Verificar que `approvePreApproval` NO recalcula el tramo al aprobar (F-0091). (58085796)
+- [x] Step 6: Agregar tests de paridad entre pantallas (misma entrada base/tramos/inicio/plazo/mes de primera cuota -> misma TNA sugerida en alta, simulador, simulador público y portal AP) y las pruebas de mutación contra el código real: (1) `effectiveTermMonths` ignorando el diferimiento rompe el caso de 4 meses; (2) restaurar `minMonths < term` en el alta rompe el test de paridad; (3) quitar `firstInstallmentMonth` de las dependencias del efecto rompe el test que lo vigila. (4625eb6c)
+- [x] Step 7: Agregar guardián de código fuente con `fs` (patrón de `tests/private-amount-guard.test.ts`) que verifique que `server/routers/loans/crud.ts`, `loans/operations.ts` y `loans/renewal.ts` NO importan `lib/duration-adjustment`, y que `lib/duration-adjustment.ts` no importa Prisma ni realiza escrituras. (051d0b02)
+- [x] Step 8: Escribir la ADR `docs/adr/F-0106-*.md` (sin nombres de personas, solo ids o importes) con el criterio de bordes (tramo que empieza en el valor, redondeo a favor), el inventario de sitios migrados o justificados (incluida la resolución sobre `getEffectiveTna`), la nota sobre el salto automático de 25 días que suma diferimiento, y que la verificación en vivo la hace Cowork tras el merge. (da40393e)
+
+### Decisiones (ADR)
+- ADR-0350 — mesesCalendarioEntre usa diferencia de año*12+mes, no días [Supuesto del agente] **⚠ REVISAR**
+- ADR-0351 — Fallback "sin ninguno" usa `new Date(y, m+1, d)` sin validar día de mes [Supuesto del agente] **⚠ REVISAR**
+- ADR-0352 — Guard `customInstallment` en useEffect sin agregarlo como dep [Supuesto del agente] **⚠ REVISAR**
+- ADR-0353 — La leyenda de plazo efectivo se deriva de la fecha real del resultado, no del estado del formulario [Supuesto del agente] **⚠ REVISAR**
+- ADR-0354 — getEffectiveTna en ap.ts es código muerto — se preserva sin migrar [Supuesto del agente] **⚠ REVISAR**
+- ADR-0355 — firstDueDate se calcula con new Date() client-side en el portal AP [Supuesto del agente] **⚠ REVISAR**
+- ADR-0356 — Tests de paridad como verificación algorítmica, no de componentes React [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0106/`
+
+> Revisar con Claude in Chrome para validación de UX.

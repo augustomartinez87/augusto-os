@@ -27,6 +27,104 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0356 · 2026-10-16 · Tests de paridad como verificación algorítmica, no de componentes React
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Los "tests de paridad entre pantallas" se implementaron como funciones puras que modelan el path de cada call site, sin montar los componentes React. Los invariantes que dependen del código del componente (import correcto, uso de pickDurationAdjustment, deps del useEffect) se guardan con source-code guards (readFileSync).
+**Contexto:** Los 4 call sites usan las mismas funciones puras de lib/duration-adjustment, lo que hace que las funciones modelo sean deterministas y testeables en vitest/node sin React. La alternativa de montar componentes con Testing Library hubiera requerido mocks de tRPC, Prisma y Clerk, aumentando fragilidad sin agregar cobertura real sobre la lógica de negocio.
+**Alternativas descartadas:** Usar @testing-library/react para montar CreateLoanDialog y verificar que cambiando firstInstallmentMonth actualiza la TNA. Se descartó por la complejidad de mocks (trpc, clerk, prisma) y porque el spec no indica ese nivel de integración para el step 6.
+**Consecuencias / riesgo residual:** Los guards de source-code son frágiles a cambios de formato (espacios en la línea de deps). Si el componente se refactoriza (ej. separando el cálculo en un hook), los guards deben actualizarse manualmente.
+
+> Generado por el loop · feature F-0106 · step 6
+
+---
+## ADR-0355 · 2026-10-16 · firstDueDate se calcula con new Date() client-side en el portal AP
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En `app/ap/page.tsx`, `getTermAdjustment` usa `new Date()` (hora local del browser) para derivar `firstDueDate`. No se usa `todayArt()` porque ese helper es server-side (usa `Intl.DateTimeFormat` con zona ART).
+**Contexto:** `getTermAdjustment` corre en el cliente. El portal AP es una herramienta interna usada por agentes en Argentina; la probabilidad de desfase de zona horaria es prácticamente nula. Además, el propio `ap.simulate` ya usa `new Date()` en el servidor (no `todayArt()`), por lo que el comportamiento es consistente.
+**Alternativas descartadas:** Pasar `startDate` como prop desde el servidor, o exponer un helper `todayDateArt(): Date` desde `lib/date-utils.ts`. Se descartó para no agregar complejidad fuera del alcance del step.
+**Consecuencias / riesgo residual:** Si el portal se usa desde fuera de ART (UTC-3), el tramo podría calcularse con la fecha del día anterior/siguiente en el borde de medianoche. Queda abierto como mejora futura si la app expande su público.
+
+> Generado por el loop · feature F-0106 · step 5
+
+---
+## ADR-0354 · 2026-10-16 · getEffectiveTna en ap.ts es código muerto — se preserva sin migrar
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** La función `getEffectiveTna` (server/routers/ap.ts L71) se deja intacta porque ningún call site la invoca; el procedimiento `simulate` del router AP recibe `grossTna` del cliente y no llama a esta función en ninguna rama.
+**Contexto:** La tarea pedía confirmar si estaba en uso y migrarla al criterio de plazo efectivo si lo estaba. El grep del repositorio sólo devuelve su definición, sin ningún invocador.
+**Alternativas descartadas:** Borrarla directamente (puede hacerse sin riesgo), o migrarla de todos modos a modo defensivo. Se descartó tocarla en este step para respetar el principio de cambio mínimo necesario.
+**Consecuencias / riesgo residual:** La función quedará como deuda de limpieza. En el próximo cleanup puede eliminarse o, si en el futuro se invoca, deberá migrarse al mismo criterio de `effectiveTermMonths` + `pickDurationAdjustment`.
+
+> Generado por el loop · feature F-0106 · step 5
+
+---
+## ADR-0353 · 2026-10-16 · La leyenda de plazo efectivo se deriva de la fecha real del resultado, no del estado del formulario
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** En ResultCardContent, el `effectiveTerm` se computa desde `result.amortizationTable[0].date` (fecha real que devolvió la simulación) junto con `startDate` del formulario, en vez de llamar `resolveFirstDueDate` desde dentro del componente presentacional.
+**Contexto:** ResultCardContent no tiene acceso a `smartDueDate` ni `firstInstallmentMonth` del formulario. La alternativa era pasar esos dos estados adicionales, o pasarlos como prop `effectiveTerm` precomputado. Se eligió derivarlo desde la fecha real del resultado + `startDate` porque es la fuente más fiel (lo que realmente simuló el backend), y `startDate` ya era necesario para parsear la fecha en local time.
+**Alternativas descartadas:** Pasar `effectiveTerm` como número precomputado desde el componente padre; pasar `smartDueDate` y `firstInstallmentMonth` a ResultCardContent para llamar `resolveFirstDueDate` ahí.
+**Consecuencias / riesgo residual:** Si el usuario cambia `startDate` sin re-simular, la leyenda mostrará un plazo efectivo inconsistente con los resultados previos (distintos startDate). Impacto bajo: la leyenda desaparece cuando no hay resultados y el usuario debe re-simular de todas formas para ver resultados actualizados.
+
+> Generado por el loop · feature F-0106 · step 4
+
+---
+## ADR-0352 · 2026-10-16 · Guard `customInstallment` en useEffect sin agregarlo como dep
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Se lee `customInstallment` directamente dentro del useEffect sin incluirlo en el array de dependencias, aprovechando el `// eslint-disable-next-line react-hooks/exhaustive-deps` ya existente. El efecto retorna temprano si `customInstallment` tiene valor.
+**Contexto:** Agregar `customInstallment` como dep habría causado que el efecto se disparara cada vez que el usuario teclea en el campo de cuota — incluyendo re-renders de limpieza que podrían pisar la TNA. El codebase ya usaba este patrón (la misma directiva eslint ya deshabilitaba la regla para proteger `suggestedRate`).
+**Alternativas descartadas:** Usar `useRef` para tener el valor fresco sin ser dep (más correcto para React estricto, pero más verboso). Dividir en dos efectos: uno para borrowerType/term (que sí limpia customInstallment) y otro para startDate/smartDueDate/firstInstallmentMonth (que guarda). Descartado por complejidad sin beneficio real dado el volumen de renders.
+**Consecuencias / riesgo residual:** En el caso extremo donde `customInstallment` y `firstInstallmentMonth` cambien en el mismo batch de render, el efecto podría leer un valor stale de `customInstallment`. En la práctica ambos campos no se tocan simultáneamente. Si en el futuro se necesita garantía estricta, migrar a `useRef`.
+
+> Generado por el loop · feature F-0106 · step 3
+
+---
+## ADR-0351 · 2026-10-16 · Fallback "sin ninguno" usa `new Date(y, m+1, d)` sin validar día de mes
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** Cuando no hay `firstInstallmentMonth` ni `smartDueDate`, `resolveFirstDueDate` devuelve `new Date(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate())`, delegando en el overflow nativo de JS (ej. 31-ene → 3-mar).
+**Contexto:** El spec solo dice "devuelve inicio + 1 mes" sin definir qué ocurre con días que no existen en el mes siguiente (28-feb en año no bisiesto, 30-abr para meses de 31 días). Kredy usa fechas locales ART por componentes; el overflow de JS es determinista y ya existe en `addMonthsEOM` de `financial-engine.ts` como patrón del repo.
+**Alternativas descartadas:** Clip al último día del mes (ej. 31-ene → 28-feb), que es el comportamiento de `date-fns/addMonths`. No se eligió porque el fallback sin `smartDueDate` es el camino menos usado y ningún test del repo lo ejercita con fechas de fin de mes.
+**Consecuencias / riesgo residual:** Si un préstamo se origina el 31 de enero y se usa el fallback, la primera cuota cae el 3-mar en lugar del 28-feb. Si es necesario el comportamiento clip, reemplazar la expresión por `addMonthsEOM` de `financial-engine`.
+
+> Generado por el loop · feature F-0106 · step 2
+
+---
+## ADR-0350 · 2026-10-16 · mesesCalendarioEntre usa diferencia de año*12+mes, no días
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** kredy
+
+**Decisión:** El cómputo de "meses calendario entre startDate y firstDueDate" se implementa como `(dueYear - startYear) * 12 + (dueMonth - startMonth)`, usando los componentes locales `getFullYear()` / `getMonth()`. No se cuenta el día del mes ni se redondea.
+**Contexto:** El spec pide "componentes LOCALES de fecha, sin UTC" pero no especifica si el día del mes debe influir (p.ej. si startDate es el 28 y firstDueDate el 3 del mes siguiente, ¿es 1 mes o 0?). La fórmula elegida solo usa año y mes, por lo que el resultado es idéntico independientemente del día del mes dentro de cada mes.
+**Alternativas descartadas:** Contar días y dividir por 30/30.5 (fraccional); comparar con la misma fecha del mes siguiente (si aún no llegó, restar 1). Ambas añaden complejidad innecesaria y no están en el spec.
+**Consecuencias / riesgo residual:** Si en el futuro el diferimiento parcial dentro de un mes debe contar (p.ej. startDate=oct-28, firstDue=nov-3 se considera 0 meses en lugar de 1), habría que revisar esta función; el cambio es local a effectiveTermMonths.
+
+> Generado por el loop · feature F-0106 · step 1
+
+---
 ## ADR-0349 · 2026-10-12 · text-xs md:text-[Npx] solo para celdas de calendario y headers de heatmap rotados
 
 **Estado:** aceptada
