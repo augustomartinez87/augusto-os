@@ -2917,3 +2917,31 @@ Implementado automáticamente por el orquestador Tier 1.
 Screenshots en `orchestrator/qa-artifacts/F-0107/`
 
 > Revisar con Claude in Chrome para validación de UX.
+
+## 2026-10-17 — F-0108 completado
+
+## Feature F-0108
+
+Implementado automáticamente por el orquestador Tier 1.
+
+### Pasos
+- [x] Step 1: Memoizar mercadoService.getLatestUniverseDate con una promesa en vuelo y caché TTL de 5 minutos (reutilizar memoizeAsync/dedupeInFlight de src/lib/dedupeInFlight.ts): deduplica llamadas concurrentes, NO cachea errores, y exporta una función para reiniciar la caché usable en tests. getFondosPage/getFondosStats/getFondosCountByCategoria/getRankingCategoria y la ficha siguen con la misma firma. Agregar test: 3 llamadas concurrentes = 1 request a Supabase, una tras el TTL genera otra, un error no queda cacheado. (4a10545f)
+- [x] Step 2: Unificar getFondosStats y getFondosCountByCategoria en UNA sola consulta agrupada por clasificacion_cod (n:id.count(), nTna:tna.count(), prom:tna.avg(), mejor:tna.max()) respetando filtros de moneda, gestora, búsqueda y universo (sin filtrar por categoría), derivando chips (n por categoría) y KPIs (total=suma n; TNA prom=suma(prom*nTna)/suma(nTna) ignorando nTna 0; mejor=max de mejor ignorando nulos). Tests de equivalencia con tolerancia 1e-9 y fixtures: fila de categoría nula, categoría sin TNA, filtro de categoría. Si no se garantiza equivalencia, mantener las dos funciones separadas compartiendo la fecha y documentarlo en un ADR. (26fef966)
+- [x] Step 3: Extraer la orquestación de loadPage a una función pura fetchExploradorData(params, deps) con dependencias inyectadas que invoca el callback de filas (página+KPIs+conteos en paralelo) ANTES de resolver getPricesBatch, y que no falla si getPricesBatch rechaza. Test: el callback de filas se llama antes de las sparklines y la función sigue OK ante un rechazo de getPricesBatch. (13a9b694)
+- [x] Step 4: Migrar FciExplorador.jsx a useQuery de TanStack Query para página de fondos, agregados, administradoras (staleTime 1h), última caución (staleTime 5min) y fecha del universo, con claves que incluyen todos los filtros, orden, página, groupByFund y excludeStale (y que NO cambian ante estado de UI ajeno como filas expandidas/comparador). Configuración por consulta sin tocar los defaultOptions globales de App.jsx. placeholderData conserva el resultado previo (tabla anterior visible atenuada al cambiar filtro/orden/página). Test de las claves de consulta. Nada se persiste en localStorage. (bd2dfb3a)
+- [x] Step 5: Desacoplar las sparklines del flag loading: la tabla se muestra apenas llegan página+KPIs+conteos y getPricesBatch se pide después sin bloquear; cada celda de tendencia muestra un placeholder neutro hasta que llega su serie, sin borrar las series ya visibles (no resetear sparklinesData a {}). Si falla la carga de sparklines, la tabla queda visible sin ellas y sin error bloqueante. (fad82b4e)
+- [x] Step 6: Agregar esqueletos de carga: 10 filas esqueleto con la misma grilla de columnas (reutilizar el patrón de esqueleto de @/components/ui / KpiCard si existe antes de crear uno nuevo); los chips de categoría muestran solo el nombre sin (0) hasta tener los conteos; el texto de resultados no muestra 0 fondos ni parpadea entre Cargando… y el total. (220b978d)
+- [x] Step 7: Precarga en el ítem Explorador del sidebar (Sidebar.jsx, sobre la versión vigente tras F-0107): al hover o focus por teclado disparar el import() del chunk de FciExplorador y el prefetchQuery de la fecha del universo y de la página inicial con filtros por defecto; en pantallas táctiles/mobile no disparar nada extra. (3b435b0a)
+- [x] Step 8: Adaptar los tests existentes de mercadoService (getFondosPage, getFondosStats, getFondosCountByCategoria, getRankingCategoria) sin debilitar aserciones, llamando a la función de reinicio de caché del universo en beforeEach; agregar test de mutación que revierte cada cambio de comportamiento (dedupe, orden de carga, equivalencia de agregados) confirmando que los tests nuevos fallan; dejar pasando npm test, typecheck y npm run build. (12527f35)
+
+### Decisiones (ADR)
+- ADR-0360 — _fetchUniverseDate lanza error; getLatestUniverseDate lo absorbe [Supuesto del agente] **⚠ REVISAR**
+- ADR-0361 — `fetchExploradorData` vive en `mercadoService.js`, no en un archivo separado [Supuesto del agente] **⚠ REVISAR**
+- ADR-0362 — page + stats combinados en una sola entrada de caché [Supuesto del agente] **⚠ REVISAR**
+- ADR-0363 — Prefetch en `onMouseEnter`/`onFocus` sin debounce [Supuesto del agente] **⚠ REVISAR**
+- ADR-0364 — Guards de mutación en archivo separado, no inline en tests existentes [Supuesto del agente] **⚠ REVISAR**
+
+### QA
+Screenshots en `orchestrator/qa-artifacts/F-0108/`
+
+> Revisar con Claude in Chrome para validación de UX.

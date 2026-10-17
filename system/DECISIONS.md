@@ -27,6 +27,76 @@ El objetivo de este archivo es doble: (1) documentar el *por qué* detrás de ca
 
 ---
 
+## ADR-0364 · 2026-10-17 · Guards de mutación en archivo separado, no inline en tests existentes
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos — mercadoService mutations test
+
+**Decisión:** Se creó `mercadoService.mutations.test.js` como archivo propio en lugar de agregar los guards dentro de los archivos de test ya existentes.
+**Contexto:** Los guards solapan semánticamente con tests ya presentes en memoize.test.js, getFondosStatsGrouped.test.js y fetchExploradorData.test.js. El spec no especificó si deben ir inline o en un archivo nuevo.
+**Alternativas descartadas:** Agregar los guards como nuevos describe blocks al final de los archivos existentes. Habría mezclado tests de contrato con tests de regresión de comportamiento.
+**Consecuencias / riesgo residual:** El archivo separado es más fácil de encontrar y su propósito es explícito; si algún guard ya estaba cubierto en otro archivo, hay cobertura doble (inofensiva).
+
+> Generado por el loop · feature F-0108 · step 8
+
+---
+## ADR-0363 · 2026-10-17 · Prefetch en `onMouseEnter`/`onFocus` sin debounce
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / FciExplorador sidebar prefetch
+
+**Decisión:** Se dispara `prefetchFciExplorador` en cada evento de hover/focus sin debounce, confiando en que `prefetchQuery` es idempotente cuando los datos están dentro del `staleTime`.
+**Contexto:** El spec no especifica si debounce es necesario. Un hover rápido puede entrar y salir varias veces; sin debounce se generan llamadas repetidas a `prefetchQuery`.
+**Alternativas descartadas:** Debounce de ~100-150ms (cancelaría prefetches de hover rápido/accidental); flag de "ya prefetcheado" en closure. Ambas agregan complejidad no pedida.
+**Consecuencias / riesgo residual:** En el caso marginal de muchos hovers rápidos consecutivos sobre el ítem antes de que la primera query termine, React Query deduplicará los in-flight (solo hace una request de red gracias al `dedupeInFlight` del servicio). Sin impacto práctico en uso normal.
+
+> Generado por el loop · feature F-0108 · step 7
+
+---
+## ADR-0362 · 2026-10-17 · page + stats combinados en una sola entrada de caché
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / fci-explorador
+
+**Decisión:** Se combinaron `getFondosPage` y `getFondosStatsGrouped` en un único `useQuery` (clave `fci-explorador/page`) en lugar de dos queries separadas.
+**Contexto:** El spec lista "página de fondos, agregados" como dos ítems, pero ambas queries comparten los mismos filtros, el mismo staleTime, y deben mantenerse cohesivas (si una se re-fetcha, la otra también debe hacerlo para que KPIs y tabla no diverjan). Separar en dos queries requeriría `useQueries` o sincronización manual y no aporta beneficio observable.
+**Alternativas descartadas:** Dos useQuery separadas con las mismas claves de filtro; habría requerido asegurar que ambas se invaliden en sintonía.
+**Consecuencias / riesgo residual:** Si en el futuro se necesita refrescar solo los KPIs (sin re-fetchear la tabla), habrá que partirlo. Por ahora es la opción más simple y segura.
+
+> Generado por el loop · feature F-0108 · step 4
+
+---
+## ADR-0361 · 2026-10-17 · `fetchExploradorData` vive en `mercadoService.js`, no en un archivo separado
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos
+
+**Decisión:** La función se exporta desde el mismo archivo `mercadoService.js` en lugar de un nuevo `exploradorOrchestrator.js`.
+**Contexto:** La función llama a `subtractDays(35)` internamente, que es un helper definido en ese mismo módulo. Moverla a un archivo separado implicaría re-exportar el helper o duplicarlo, sin ganancia real de cohesión.
+**Alternativas descartadas:** Crear `src/features/fci/services/exploradorOrchestrator.js` e importar `subtractDays` desde `mercadoService.js`. Descartado: agrega un módulo extra sin que el spec lo pida.
+**Consecuencias / riesgo residual:** Si en el futuro `fetchExploradorData` crece (ej. soporte de cancelación, caché), puede migrar a su propio módulo. Por ahora la co-ubicación es suficiente.
+
+> Generado por el loop · feature F-0108 · step 3
+
+---
+## ADR-0360 · 2026-10-16 · _fetchUniverseDate lanza error; getLatestUniverseDate lo absorbe
+
+**Estado:** aceptada
+**Origen:** Supuesto del agente
+**Target:** argos / mercadoService
+
+**Decisión:** La función privada `_fetchUniverseDate` lanza la excepción de Supabase para que `memoizeAsync` no la cachee. El método público `getLatestUniverseDate` envuelve la llamada en try/catch y devuelve `null`, preservando el contrato existente.
+**Contexto:** `memoizeAsync` distingue "no cachear" solo mediante rechazo de la promesa. Si `_fetchUniverseDate` silenciara el error devolviendo `null`, ese `null` quedaría cacheado 5 min y desactivaría el filtro stale ante fallos transitorios de red.
+**Alternativas descartadas:** Hacer que `getLatestUniverseDate` también lanzara el error (propagaría a todos los callers de getFondosPage/Stats/Count); o crear una variante de `memoizeAsync` que recibiera un predicado de "no cachear" para valores específicos como `null`.
+**Consecuencias / riesgo residual:** Los errores de Supabase en `getLatestUniverseDate` siguen siendo silenciosos desde el punto de vista del caller (retornan `null`), lo que es el comportamiento preexistente. El TTL de `null` (tabla vacía) sí se cachea, lo que es aceptable.
+
+> Generado por el loop · feature F-0108 · step 1
+
+---
 ## ADR-0359 · 2026-10-16 · Portal propio en Sidebar en lugar de reutilizar el primitivo Tooltip.jsx
 
 **Estado:** aceptada
